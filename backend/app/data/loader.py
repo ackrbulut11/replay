@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import threading
 from datetime import datetime
 from .providers.binance import BinanceProvider
 from .providers.nasdaq import NasdaqProvider
@@ -7,6 +8,7 @@ from .providers.bist import BistProvider
 
 class DataLoader:
     def __init__(self):
+        self._lock = threading.Lock()
         # Resolve project root path
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = current_dir
@@ -78,81 +80,83 @@ class DataLoader:
                     print(f"Warning: Failed to save resampled 4h cache: {e}")
             return df_4h
             
-        cache_path = self._get_cache_path(provider_name, symbol, timeframe)
-        provider = self.get_provider(provider_name)
-        
-        df = None
-        if os.path.exists(cache_path):
-            try:
-                df = pd.read_parquet(cache_path)
-                # Ensure correct types and sorting
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
-                df.sort_values('timestamp', inplace=True)
-                df.reset_index(drop=True, inplace=True)
-            except Exception as e:
-                print(f"Warning: Failed to load parquet cache at {cache_path}: {e}. Fetching from API.")
-                df = None
-                
-        if df is None or df.empty:
-            # Cache does not exist or is empty: fetch all and save
-            print(f"Cache miss for {provider_name}:{symbol} ({timeframe}). Fetching from API...")
-            df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
+        # Use thread lock to prevent race conditions during concurrent cache reads/writes
+        with self._lock:
+            cache_path = self._get_cache_path(provider_name, symbol, timeframe)
+            provider = self.get_provider(provider_name)
             
-            if not df.empty:
+            df = None
+            if os.path.exists(cache_path):
+                try:
+                    df = pd.read_parquet(cache_path)
+                    # Ensure correct types and sorting
+                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    df.sort_values('timestamp', inplace=True)
+                    df.reset_index(drop=True, inplace=True)
+                except Exception as e:
+                    print(f"Warning: Failed to load parquet cache at {cache_path}: {e}. Fetching from API.")
+                    df = None
+                    
+            if df is None or df.empty:
+                # Cache does not exist or is empty: fetch all and save
+                print(f"Cache miss for {provider_name}:{symbol} ({timeframe}). Fetching from API...")
+                df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
+                
+                if not df.empty:
+                    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                    df.to_parquet(cache_path, index=False)
+                return df
+                
+            # Cache exists: check if it covers the requested range
+            cached_start = df['timestamp'].min()
+            cached_end = df['timestamp'].max()
+            
+            needed_start = start_time
+            needed_end = end_time
+            
+            # If requested range is completely within cached range, just filter and return
+            if needed_start >= cached_start and needed_end <= cached_end:
+                return df[(df['timestamp'] >= needed_start) & (df['timestamp'] <= needed_end)].reset_index(drop=True)
+                
+            # We need to fetch missing data
+            df_before = pd.DataFrame()
+            df_after = pd.DataFrame()
+            
+            # Fetch prefix if needed
+            if needed_start < cached_start:
+                print(f"Fetching prefix data from API for {provider_name}:{symbol} ({timeframe}) from {needed_start} to {cached_start}...")
+                try:
+                    df_before = provider.fetch_ohlcv(symbol, timeframe, needed_start, cached_start)
+                except Exception as e:
+                    print(f"Warning: Failed to fetch prefix data: {e}")
+                    
+            # Fetch suffix if needed
+            if needed_end > cached_end:
+                print(f"Fetching suffix data from API for {provider_name}:{symbol} ({timeframe}) from {cached_end} to {needed_end}...")
+                try:
+                    df_after = provider.fetch_ohlcv(symbol, timeframe, cached_end, needed_end)
+                except Exception as e:
+                    print(f"Warning: Failed to fetch suffix data: {e}")
+                    
+            # Combine all parts
+            dfs_to_concat = []
+            if not df_before.empty:
+                dfs_to_concat.append(df_before)
+            dfs_to_concat.append(df)
+            if not df_after.empty:
+                dfs_to_concat.append(df_after)
+                
+            df_combined = pd.concat(dfs_to_concat, ignore_index=True)
+            df_combined.drop_duplicates(subset=['timestamp'], inplace=True)
+            df_combined.sort_values('timestamp', inplace=True)
+            df_combined.reset_index(drop=True, inplace=True)
+            
+            # Write back to cache
+            try:
                 os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-                df.to_parquet(cache_path, index=False)
-            return df
-            
-        # Cache exists: check if it covers the requested range
-        cached_start = df['timestamp'].min()
-        cached_end = df['timestamp'].max()
-        
-        needed_start = start_time
-        needed_end = end_time
-        
-        # If requested range is completely within cached range, just filter and return
-        if needed_start >= cached_start and needed_end <= cached_end:
-            return df[(df['timestamp'] >= needed_start) & (df['timestamp'] <= needed_end)].reset_index(drop=True)
-            
-        # We need to fetch missing data
-        df_before = pd.DataFrame()
-        df_after = pd.DataFrame()
-        
-        # Fetch prefix if needed
-        if needed_start < cached_start:
-            print(f"Fetching prefix data from API for {provider_name}:{symbol} ({timeframe}) from {needed_start} to {cached_start}...")
-            try:
-                df_before = provider.fetch_ohlcv(symbol, timeframe, needed_start, cached_start)
+                df_combined.to_parquet(cache_path, index=False)
             except Exception as e:
-                print(f"Warning: Failed to fetch prefix data: {e}")
+                print(f"Warning: Failed to save merged data to cache: {e}")
                 
-        # Fetch suffix if needed
-        if needed_end > cached_end:
-            print(f"Fetching suffix data from API for {provider_name}:{symbol} ({timeframe}) from {cached_end} to {needed_end}...")
-            try:
-                df_after = provider.fetch_ohlcv(symbol, timeframe, cached_end, needed_end)
-            except Exception as e:
-                print(f"Warning: Failed to fetch suffix data: {e}")
-                
-        # Combine all parts
-        dfs_to_concat = []
-        if not df_before.empty:
-            dfs_to_concat.append(df_before)
-        dfs_to_concat.append(df)
-        if not df_after.empty:
-            dfs_to_concat.append(df_after)
-            
-        df_combined = pd.concat(dfs_to_concat, ignore_index=True)
-        df_combined.drop_duplicates(subset=['timestamp'], inplace=True)
-        df_combined.sort_values('timestamp', inplace=True)
-        df_combined.reset_index(drop=True, inplace=True)
-        
-        # Write back to cache
-        try:
-            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-            df_combined.to_parquet(cache_path, index=False)
-        except Exception as e:
-            print(f"Warning: Failed to save merged data to cache: {e}")
-            
-        # Return only the requested range
-        return df_combined[(df_combined['timestamp'] >= needed_start) & (df_combined['timestamp'] <= needed_end)].reset_index(drop=True)
+            # Return only the requested range
+            return df_combined[(df_combined['timestamp'] >= needed_start) & (df_combined['timestamp'] <= needed_end)].reset_index(drop=True)

@@ -1,0 +1,1 @@
+# Websocket connections manager

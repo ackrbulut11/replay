@@ -1,0 +1,12 @@
+[tool.poetry]
+name = "trading-research-platform-backend"
+version = "0.1.0"
+description = "FastAPI Backend for Trading Research Platform"
+authors = ["Antigravity"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

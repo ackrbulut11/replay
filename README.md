@@ -2,7 +2,7 @@
 
 Market replay, manuel backtest, strateji araştırmaları ve teknik analiz odaklı modüler bir masaüstü platformu.
 
-## Teknoloji Yığını (Tech Stack)
+## Tech Stack
 
 - **Frontend:** React + TypeScript + TailwindCSS + Tauri (Grafik kütüphanesi: `lightweight-charts`)
 - **Backend:** Python + FastAPI (Tauri sidecar olarak çalışır, WebSocket üzerinden veri sağlar)
@@ -16,7 +16,7 @@ Market replay, manuel backtest, strateji araştırmaları ve teknik analiz odakl
 ├── backend/            # Python FastAPI backend modülü
 ├── storage/            # Mum verileri, stratejiler ve yerel veritabanı
 ├── scripts/            # Veri indirme, güncelleme ve derleme betikleri
-└── .gitignore          # Git yoksayma kuralları
+└── .gitignore          
 ```
 
 ## Kurulum ve Çalıştırma

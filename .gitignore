@@ -1,0 +1,75 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Directory for instrument library metadata
+.pnp
+.pnp.js
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript v1.x command line compiler precache
+typings/
+
+# Optional npm cache directory
+.npm
+
+# Output directory of TypeScript compiler
+dist/
+dist-ssr/
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Rust/Tauri
+target/
+src-tauri/target/
+
+# Python virtual environment and cache
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Environment configurations / secrets
+.env
+.env.local
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Storage
+storage/market_data/*
+!storage/market_data/.gitkeep
+storage/parquet/*
+!storage/parquet/.gitkeep
+storage/database/*.db
+storage/strategies/*
+!storage/strategies/.gitkeep

@@ -46,7 +46,11 @@ def get_market_data(
     else:
         # Smart default based on timeframe
         from datetime import timedelta
-        if timeframe == "1d":
+        if timeframe == "1mo":
+            start_dt = end_dt - timedelta(days=20*365)
+        elif timeframe == "1w":
+            start_dt = end_dt - timedelta(days=10*365)
+        elif timeframe == "1d":
             start_dt = end_dt - timedelta(days=5*365)
         elif timeframe in ["4h", "1h"]:
             start_dt = end_dt - timedelta(days=180)

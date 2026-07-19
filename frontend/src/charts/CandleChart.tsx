@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, PriceScaleMode } from 'lightweight-charts';
 
 interface CandleData {
   time: number; // Unix timestamp in seconds
@@ -12,9 +12,10 @@ interface CandleData {
 
 interface CandleChartProps {
   data: CandleData[];
+  logScale?: boolean;
 }
 
-export default function CandleChart({ data }: CandleChartProps) {
+export default function CandleChart({ data, logScale = false }: CandleChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function CandleChart({ data }: CandleChartProps) {
       rightPriceScale: {
         borderColor: '#1e293b',
         autoScale: true,
+        mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
       },
       timeScale: {
         borderColor: '#1e293b',
@@ -130,7 +132,7 @@ export default function CandleChart({ data }: CandleChartProps) {
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [data]);
+  }, [data, logScale]);
 
   return (
     <div className="relative w-full h-[500px] border border-slate-800 rounded-xl overflow-hidden bg-[#090d16] p-2">

@@ -36,6 +36,8 @@ function App() {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   
+  const [logScale, setLogScale] = useState(false);
+  
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +216,20 @@ function App() {
                 className="bg-[#070b13] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
               />
             </div>
+
+            {/* Log Scale Toggle */}
+            <div className="flex items-center gap-2 h-[32px] px-3 bg-[#070b13] border border-slate-800 rounded-xl">
+              <input
+                type="checkbox"
+                id="logScale"
+                checked={logScale}
+                onChange={(e) => setLogScale(e.target.checked)}
+                className="w-3.5 h-3.5 accent-indigo-500 rounded cursor-pointer"
+              />
+              <label htmlFor="logScale" className="text-xs text-slate-300 font-medium select-none cursor-pointer">
+                Log Scale
+              </label>
+            </div>
           </div>
         </div>
 
@@ -255,7 +271,7 @@ function App() {
 
             {!error && chartData.length > 0 && (
               <div className="w-full h-full">
-                <CandleChart data={chartData} />
+                <CandleChart data={chartData} logScale={logScale} />
               </div>
             )}
           </div>

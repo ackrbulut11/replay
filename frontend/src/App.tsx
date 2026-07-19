@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
-import { Search, Loader2, AlertCircle, BarChart3, TrendingUp, Calendar, Coins } from 'lucide-react';
+import { Loader2, AlertCircle, BarChart3, Calendar, Coins } from 'lucide-react';
 
 interface CandleData {
   time: number;
@@ -11,23 +11,6 @@ interface CandleData {
   close: number;
   volume: number;
 }
-
-const getTodayStr = () => {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-};
-
-const getPastDateStr = (daysAgo: number) => {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-};
 
 function App() {
   const [provider, setProvider] = useState('binance');
@@ -94,7 +77,6 @@ function App() {
   const getStats = () => {
     if (chartData.length === 0) return null;
     
-    const closes = chartData.map(c => c.close);
     const highs = chartData.map(c => c.high);
     const lows = chartData.map(c => c.low);
     const volumes = chartData.map(c => c.volume);

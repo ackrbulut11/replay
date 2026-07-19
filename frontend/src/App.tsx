@@ -188,6 +188,8 @@ function App() {
                 <option value="1h">1 Hour</option>
                 <option value="4h">4 Hours</option>
                 <option value="1d">1 Day</option>
+                <option value="1w">1 Week</option>
+                <option value="1mo">1 Month</option>
               </select>
             </div>
 

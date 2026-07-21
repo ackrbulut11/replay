@@ -777,7 +777,7 @@ export default function CandleChart({
       });
 
       // Sub-pane area starts exactly where main chart ends
-      const subTop = 1 - subPaneRatio;
+      const subTop = 1 -subPaneRatio;
 
       if (subPanesCount === 1) {
         if (rsiActive) {
@@ -812,7 +812,8 @@ export default function CandleChart({
             visible: true,
             autoScale: true,
             borderColor: '#1e293b',
-            scaleMargins: { top: mid, bottom: 0.02 },
+            // Adds a small top gap to prevent touching the divider, capped at 0.95 to prevent crashes
+            scaleMargins: { top: Math.min(mid + 0.025, 0.95), bottom: 0.02 },
           });
         }
       }

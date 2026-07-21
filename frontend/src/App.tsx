@@ -3,6 +3,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
 import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
 import { BarChart3, ChevronUp, ChevronDown } from 'lucide-react';
+import { useReplayStore } from './store/replayStore';
 
 interface CandleData {
   time: number;
@@ -27,6 +28,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+
+  const [replayState] = useReplayStore();
 
   const handleToggleIndicator = (key: keyof IndicatorsState) => {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -91,14 +94,20 @@ function App() {
   const getStats = () => {
     if (chartData.length === 0) return null;
     
-    const highs = chartData.map(c => c.high);
-    const lows = chartData.map(c => c.low);
-    const volumes = chartData.map(c => c.volume);
+    let activeData = chartData;
+    if (replayState.isReplayActive && replayState.currentIndex !== null) {
+      activeData = chartData.slice(0, Math.min(replayState.currentIndex + 1, chartData.length));
+    }
+    if (activeData.length === 0) return null;
+    
+    const highs = activeData.map(c => c.high);
+    const lows = activeData.map(c => c.low);
+    const volumes = activeData.map(c => c.volume);
     
     const highest = Math.max(...highs);
     const lowest = Math.min(...lows);
-    const firstPrice = chartData[0].open;
-    const lastPrice = chartData[chartData.length - 1].close;
+    const firstPrice = activeData[0].open;
+    const lastPrice = activeData[activeData.length - 1].close;
     const changePercent = ((lastPrice - firstPrice) / firstPrice) * 100;
     const totalVolume = volumes.reduce((sum, v) => sum + v, 0);
     
@@ -106,8 +115,8 @@ function App() {
       highest: highest.toLocaleString(undefined, { maximumFractionDigits: 2 }),
       lowest: lowest.toLocaleString(undefined, { maximumFractionDigits: 2 }),
       change: changePercent.toFixed(2),
-      avgVolume: (totalVolume / chartData.length).toLocaleString(undefined, { maximumFractionDigits: 2 }),
-      count: chartData.length
+      avgVolume: (totalVolume / activeData.length).toLocaleString(undefined, { maximumFractionDigits: 2 }),
+      count: activeData.length
     };
   };
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createChart, ColorType, PriceScaleMode, CrosshairMode } from 'lightweight-charts';
 import type { Time } from 'lightweight-charts';
 import DrawingToolbar from './drawings/DrawingToolbar';
@@ -11,7 +11,9 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3 } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors } from 'lucide-react';
+import { useReplayStore, replayStore } from '../store/replayStore';
+import ReplayControls from '../replay/ReplayControls';
 
 interface CandleData {
   time: number;
@@ -125,6 +127,94 @@ export default function CandleChart({
   const [chartHeight, setChartHeight] = useState(600);
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
   const [isDatesOpen, setIsDatesOpen] = useState(false);
+
+  // --- REPLAY ENGINE STATE & HANDLERS ---
+  const [replayState, setReplayState] = useReplayStore();
+
+  const isSelectingCutoffRef = useRef(false);
+  isSelectingCutoffRef.current = replayState.isSelectingCutoff;
+
+  const fullDataRef = useRef<CandleData[]>(data);
+  fullDataRef.current = data;
+
+  const prevVisibleLengthRef = useRef<number>(0);
+
+  const visibleData = useMemo(() => {
+    if (!replayState.isReplayActive || replayState.currentIndex === null) {
+      return data;
+    }
+    const maxIdx = Math.min(replayState.currentIndex, data.length - 1);
+    return data.slice(0, Math.max(0, maxIdx + 1));
+  }, [data, replayState.isReplayActive, replayState.currentIndex]);
+
+  // Replay playback timer effect
+  useEffect(() => {
+    if (!replayState.isReplayActive || !replayState.isPlaying) return;
+
+    const timer = setInterval(() => {
+      setReplayState((prev) => {
+        if (prev.currentIndex === null) return { isPlaying: false };
+        const nextIdx = prev.currentIndex + 1;
+        if (nextIdx >= data.length) {
+          return { isPlaying: false, currentIndex: data.length - 1 };
+        }
+        return { currentIndex: nextIdx };
+      });
+    }, replayState.speedMs);
+
+    return () => clearInterval(timer);
+  }, [replayState.isReplayActive, replayState.isPlaying, replayState.speedMs, data.length, setReplayState]);
+
+  const handleStepForward = useCallback(() => {
+    setReplayState((prev) => {
+      if (prev.currentIndex === null) return {};
+      const nextIdx = Math.min(prev.currentIndex + 1, data.length - 1);
+      return { currentIndex: nextIdx };
+    });
+  }, [data.length, setReplayState]);
+
+  const handleTogglePlay = useCallback(() => {
+    setReplayState((prev) => {
+      if (prev.currentIndex !== null && prev.currentIndex >= data.length - 1) {
+        return { isPlaying: true, currentIndex: prev.cutoffIndex ?? 0 };
+      }
+      return { isPlaying: !prev.isPlaying };
+    });
+  }, [data.length, setReplayState]);
+
+  const handleStartSelection = useCallback(() => {
+    setReplayState({ isSelectingCutoff: true, isPlaying: false });
+  }, [setReplayState]);
+
+  const handleToggleReplayMode = useCallback(() => {
+    setReplayState((prev) => {
+      if (prev.isReplayActive) {
+        return {
+          isReplayActive: false,
+          isSelectingCutoff: false,
+          isPlaying: false,
+          cutoffIndex: null,
+          currentIndex: null,
+        };
+      } else {
+        const lastIdx = data.length > 0 ? data.length - 1 : null;
+        return {
+          isReplayActive: true,
+          isSelectingCutoff: true,
+          isPlaying: false,
+          cutoffIndex: lastIdx,
+          currentIndex: lastIdx,
+        };
+      }
+    });
+  }, [data.length, setReplayState]);
+
+  const handleResetToCutoff = useCallback(() => {
+    setReplayState((prev) => ({
+      currentIndex: prev.cutoffIndex ?? 0,
+      isPlaying: false,
+    }));
+  }, [setReplayState]);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -447,6 +537,27 @@ export default function CandleChart({
     chart.subscribeClick((param) => {
       if (!param.point) return;
 
+      // Handle Replay candle cutoff selection click
+      if (isSelectingCutoffRef.current) {
+        const logical = chart.timeScale().coordinateToLogical(param.point.x);
+        if (logical !== null) {
+          let barIdx = Math.round(logical);
+          const total = fullDataRef.current.length;
+          if (total > 0) {
+            if (barIdx < 0) barIdx = 0;
+            if (barIdx >= total) barIdx = total - 1;
+
+            replayStore.setState({
+              cutoffIndex: barIdx,
+              currentIndex: barIdx,
+              isSelectingCutoff: false,
+              isPlaying: false,
+            });
+            return;
+          }
+        }
+      }
+
       if (activeToolRef.current === 'pointer') {
         if (dragStateRef.current) {
           const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current);
@@ -644,16 +755,22 @@ export default function CandleChart({
   useEffect(() => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) return;
 
-    if (data && data.length > 0) {
-      // Çakışan zaman damgalarını temizle (lightweight-charts hata vermesini önlemek için)
-      const uniqueData: typeof data = [];
+    if (visibleData && visibleData.length > 0) {
+      // Çakışan zaman damgalarını temizle
+      const uniqueData: typeof visibleData = [];
       const seenTimes = new Set<number>();
-      for (const d of data) {
+      for (const d of visibleData) {
         if (!seenTimes.has(d.time)) {
           seenTimes.add(d.time);
           uniqueData.push(d);
         }
       }
+
+      const chart = chartRef.current;
+      const currentRange = chart ? chart.timeScale().getVisibleLogicalRange() : null;
+      const prevLen = prevVisibleLengthRef.current;
+      const currentLen = uniqueData.length;
+      prevVisibleLengthRef.current = currentLen;
 
       candleSeriesRef.current.setData(
         uniqueData.map((d) => ({ time: d.time as Time, open: d.open, high: d.high, low: d.low, close: d.close }))
@@ -666,33 +783,34 @@ export default function CandleChart({
         }))
       );
       
-      // Render işlemi sonrasında ölçeklemenin doğru çalışması ve yeni hissenin fiyatına odaklanılması için ayarlar yapıldı
-      const chart = chartRef.current;
-      setTimeout(() => {
-        if (chart) {
-          // Fiyat eksenini otomatik ölçeklendirmeye (autoscale) zorla
-          chart.priceScale('right').applyOptions({
-            autoScale: true,
-          });
-
-          // Grafik zaman eksenini son 150 mum görünecek şekilde ayarla ve sağdan boşluk bırak
-          const totalBars = uniqueData.length;
+      if (chart) {
+        if (replayState.isReplayActive && currentRange && prevLen > 0 && currentLen === prevLen + 1) {
+          // Replay sırasında yeni mum eklendiğinde ve ekran sağ kenarda ise pürüzsüz 1 birim sağa kaydır
+          if (currentRange.to >= prevLen - 3) {
+            chart.timeScale().setVisibleLogicalRange({
+              from: (currentRange.from + 1) as any,
+              to: (currentRange.to + 1) as any,
+            });
+          }
+        } else if (!currentRange || Math.abs(currentLen - prevLen) > 3) {
+          // Sembol değişimi, ilk yükleme veya kesim seçimi yapıldığında görünüm eksenini hizala
+          chart.priceScale('right').applyOptions({ autoScale: true });
           chart.timeScale().setVisibleLogicalRange({
-            from: Math.max(0, totalBars - 150) as any,
-            to: (totalBars + 5) as any,
+            from: Math.max(0, currentLen - 150) as any,
+            to: (currentLen + 5) as any,
           });
         }
-      }, 50);
+      }
     } else {
       candleSeriesRef.current.setData([]);
       volumeSeriesRef.current.setData([]);
     }
-  }, [data]);
+  }, [visibleData, replayState.isReplayActive]);
 
   // Gösterge Hesaplamaları ve Seri Güncellemeleri (serileri oluşturur/kaldırır, verileri ayarlar)
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart || !data || data.length === 0) return;
+    if (!chart || !visibleData || visibleData.length === 0) return;
 
     // --- SERİLERİ OLUŞTUR / KALDIR ---
 
@@ -707,7 +825,7 @@ export default function CandleChart({
           title: '',
         });
       }
-      const ema20 = calculateEMA(data, 20);
+      const ema20 = calculateEMA(visibleData, 20);
       ema20Ref.current.setData(ema20.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema20Ref.current) {
       chart.removeSeries(ema20Ref.current);
@@ -725,7 +843,7 @@ export default function CandleChart({
           title: '',
         });
       }
-      const ema50 = calculateEMA(data, 50);
+      const ema50 = calculateEMA(visibleData, 50);
       ema50Ref.current.setData(ema50.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema50Ref.current) {
       chart.removeSeries(ema50Ref.current);
@@ -743,7 +861,7 @@ export default function CandleChart({
           title: '',
         });
       }
-      const ema100 = calculateEMA(data, 100);
+      const ema100 = calculateEMA(visibleData, 100);
       ema100Ref.current.setData(ema100.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema100Ref.current) {
       chart.removeSeries(ema100Ref.current);
@@ -761,7 +879,7 @@ export default function CandleChart({
           title: '',
         });
       }
-      const ema200 = calculateEMA(data, 200);
+      const ema200 = calculateEMA(visibleData, 200);
       ema200Ref.current.setData(ema200.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema200Ref.current) {
       chart.removeSeries(ema200Ref.current);
@@ -778,39 +896,17 @@ export default function CandleChart({
           title: '',
           lastValueVisible: false,
           priceLineVisible: false,
-          // Kesin 0-100 aralığını zorla — otomatik padding boşluğu olmasın
           autoscaleInfoProvider: () => ({
             priceRange: { minValue: 0, maxValue: 100 },
             margins: { above: 2, below: 2 },
           }),
         });
 
-        rsiRef.current.createPriceLine({
-          price: 70,
-          color: 'rgba(239, 68, 68, 0.7)',
-          lineWidth: 1,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: '',
-        });
-        rsiRef.current.createPriceLine({
-          price: 50,
-          color: 'rgba(148, 163, 184, 0.4)',
-          lineWidth: 1,
-          lineStyle: 3,
-          axisLabelVisible: true,
-          title: '',
-        });
-        rsiRef.current.createPriceLine({
-          price: 30,
-          color: 'rgba(16, 185, 129, 0.7)',
-          lineWidth: 1,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: '',
-        });
+        rsiRef.current.createPriceLine({ price: 70, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+        rsiRef.current.createPriceLine({ price: 50, color: 'rgba(148, 163, 184, 0.4)', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '' });
+        rsiRef.current.createPriceLine({ price: 30, color: 'rgba(16, 185, 129, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
       }
-      const rsi = calculateRSI(data, 14);
+      const rsi = calculateRSI(visibleData, 14);
       rsiRef.current.setData(rsi.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (rsiRef.current) {
       chart.removeSeries(rsiRef.current);
@@ -820,30 +916,11 @@ export default function CandleChart({
     // MACD (Alt panel)
     if (indicators.macd) {
       if (!macdHistRef.current || !macdLineRef.current || !macdSignalRef.current) {
-        macdHistRef.current = chart.addHistogramSeries({
-          priceScaleId: 'macd',
-          title: '',
-          lastValueVisible: false,
-          priceLineVisible: false,
-        });
-        macdLineRef.current = chart.addLineSeries({
-          color: '#3b82f6',
-          lineWidth: 2,
-          priceScaleId: 'macd',
-          title: '',
-          lastValueVisible: false,
-          priceLineVisible: false,
-        });
-        macdSignalRef.current = chart.addLineSeries({
-          color: '#f59e0b',
-          lineWidth: 1,
-          priceScaleId: 'macd',
-          title: '',
-          lastValueVisible: false,
-          priceLineVisible: false,
-        });
+        macdHistRef.current = chart.addHistogramSeries({ priceScaleId: 'macd', title: '', lastValueVisible: false, priceLineVisible: false });
+        macdLineRef.current = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceScaleId: 'macd', title: '', lastValueVisible: false, priceLineVisible: false });
+        macdSignalRef.current = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceScaleId: 'macd', title: '', lastValueVisible: false, priceLineVisible: false });
       }
-      const macd = calculateMACD(data, 12, 26, 9);
+      const macd = calculateMACD(visibleData, 12, 26, 9);
       macdHistRef.current.setData(macd.histogram.map(d => ({ time: d.time as Time, value: d.value, color: d.color })));
       macdLineRef.current.setData(macd.macd.map(d => ({ time: d.time as Time, value: d.value })));
       macdSignalRef.current.setData(macd.signal.map(d => ({ time: d.time as Time, value: d.value })));
@@ -852,7 +929,7 @@ export default function CandleChart({
       if (macdLineRef.current) { chart.removeSeries(macdLineRef.current); macdLineRef.current = null; }
       if (macdSignalRef.current) { chart.removeSeries(macdSignalRef.current); macdSignalRef.current = null; }
     }
-  }, [data, indicators]);
+  }, [visibleData, indicators]);
 
   // --- MARJ YERLEŞİM ETKİSİ (serileri yeniden oluşturmadan subPaneRatio sürüklemesine yanıt vermesi için ayrıldı) ---
   useEffect(() => {
@@ -1075,6 +1152,20 @@ export default function CandleChart({
               <option value="1mo" className="bg-[#070b13] text-slate-100">1mo</option>
             </select>
           </div>
+
+          {/* Replay Modu Butonu */}
+          <button
+            onClick={handleToggleReplayMode}
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border transition-all select-none ${
+              replayState.isReplayActive
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md shadow-amber-500/10'
+                : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-slate-100'
+            }`}
+            title="Replay Motorunu Aç/Kapat"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${replayState.isReplayActive ? 'text-amber-400' : 'text-indigo-400'}`} />
+            <span>Replay</span>
+          </button>
         </div>
 
         {/* Sağ Taraf: Göstergeler popover, Tarih aralığı popover, Log scale, Loading spinner */}
@@ -1269,6 +1360,28 @@ export default function CandleChart({
               Select data provider, symbol, and timeframe from the floating control panel above.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Yüzen Replay Araç Çubuğu Kontrolleri */}
+      {replayState.isReplayActive && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30">
+          <ReplayControls
+            totalBars={data.length}
+            onStepForward={handleStepForward}
+            onTogglePlay={handleTogglePlay}
+            onStartSelection={handleStartSelection}
+            onExitReplay={handleToggleReplayMode}
+            onResetToCutoff={handleResetToCutoff}
+          />
+        </div>
+      )}
+
+      {/* Mum Seçim İpucu Banner */}
+      {replayState.isReplayActive && replayState.isSelectingCutoff && (
+        <div className="absolute top-28 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-full shadow-lg border border-amber-300/50 backdrop-blur-md animate-bounce flex items-center gap-2 select-none pointer-events-none">
+          <Scissors className="w-4 h-4" />
+          <span>Grafikte kestirmek istediğiniz muma tıklayın!</span>
         </div>
       )}
 

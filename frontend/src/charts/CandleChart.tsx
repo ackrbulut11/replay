@@ -839,22 +839,20 @@ export default function CandleChart({
     which: 'main' | 'sub',
     highlight: boolean,
   ) => (
+    // Outer container: positioned entirely above pixelY (sub-pane boundary) to avoid overlaps
     <div
       key={which}
       style={{
         position: 'absolute',
         left: 0,
         right: 0,
-        top: `${pixelY - 7}px`,
-        height: '14px',
+        top: `${pixelY - 16}px`,  // Starts 16px above the line
+        height: '18px',            // Bottom edge is at pixelY + 2px
         zIndex: 10,
         pointerEvents: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
       }}
     >
-      {/* Grab strip: 14px centered grab zone, pointer-events enabled */}
+      {/* Grab strip: 15px tall grab zone above the line */}
       <div
         onMouseDown={(e) => handleDividerMouseDown(e, which)}
         onMouseEnter={() => setDividerHovered(which)}
@@ -864,28 +862,15 @@ export default function CandleChart({
           left: 0,
           right: 0,
           top: 0,
-          height: '14px',
+          height: '15px',
           cursor: 'ns-resize',
           pointerEvents: 'auto',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-end',
           justifyContent: 'center',
+          paddingBottom: '2px',
         }}
       >
-        {/* Visible line */}
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: '6px',
-            height: highlight ? '3px' : '2px',
-            background: highlight ? '#3b82f6' : '#475569',
-            transition: 'all 0.12s ease',
-            boxShadow: highlight ? '0 0 6px rgba(59,130,246,0.5)' : 'none',
-            pointerEvents: 'none',
-          }}
-        />
         {/* Handle dots */}
         <div
           style={{
@@ -894,7 +879,6 @@ export default function CandleChart({
             opacity: highlight ? 1 : 0.5,
             transition: 'opacity 0.12s ease',
             pointerEvents: 'none',
-            transform: 'translateY(-1px)',
           }}
         >
           <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
@@ -902,6 +886,21 @@ export default function CandleChart({
           <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
         </div>
       </div>
+
+      {/* Visible separator line: anchored to the bottom edge of the container (pixelY) */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: highlight ? '3px' : '2px',
+          background: highlight ? '#3b82f6' : '#475569',
+          transition: 'all 0.12s ease',
+          boxShadow: highlight ? '0 0 6px rgba(59,130,246,0.5)' : 'none',
+          pointerEvents: 'none',
+        }}
+      />
     </div>
   );
 

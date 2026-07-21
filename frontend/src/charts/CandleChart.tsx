@@ -69,7 +69,7 @@ export default function CandleChart({
   subPaneRatioRef.current = subPaneRatio; // keep ref in sync for mousemove closure
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('pointer');
-  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<Drawing | null>(null);
   const [editOptions, setEditOptions] = useState<DrawingEditOptions>({
     color: DEFAULT_DRAWING_COLOR,
@@ -78,7 +78,7 @@ export default function CandleChart({
   });
 
   const activeToolRef = useRef<DrawingTool>('pointer');
-  const snapEnabledRef = useRef(true);
+  const snapEnabledRef = useRef(false);
   const drawingsRef = useRef<Drawing[]>([]);
   const currentPointsRef = useRef<DrawingPoint[]>([]);
   const selectedDrawingRef = useRef<Drawing | null>(null);

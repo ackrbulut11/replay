@@ -216,6 +216,62 @@ export default function CandleChart({
     }));
   }, [setReplayState]);
 
+  // Replay Kısayol Tuşları Dinleyicisi
+  useEffect(() => {
+    if (!replayState.isReplayActive) return;
+
+    const handleReplayKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      if (e.code === 'Space' || key === ' ') {
+        e.preventDefault();
+        handleStepForward();
+      } else if (key === 'p') {
+        e.preventDefault();
+        handleTogglePlay();
+      } else if (key === 'c') {
+        e.preventDefault();
+        handleStartSelection();
+      } else if (key === 'r') {
+        e.preventDefault();
+        handleResetToCutoff();
+      } else if (key === 'x') {
+        e.preventDefault();
+        handleToggleReplayMode();
+      } else if (key === '1') {
+        setReplayState({ speedMs: 200 });
+      } else if (key === '2') {
+        setReplayState({ speedMs: 500 });
+      } else if (key === '3') {
+        setReplayState({ speedMs: 1000 });
+      } else if (key === '4') {
+        setReplayState({ speedMs: 2000 });
+      }
+    };
+
+    window.addEventListener('keydown', handleReplayKeyDown);
+    return () => window.removeEventListener('keydown', handleReplayKeyDown);
+  }, [
+    replayState.isReplayActive,
+    handleStepForward,
+    handleTogglePlay,
+    handleStartSelection,
+    handleResetToCutoff,
+    handleToggleReplayMode,
+    setReplayState,
+  ]);
+
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -1161,7 +1217,7 @@ export default function CandleChart({
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md shadow-amber-500/10'
                 : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-slate-100'
             }`}
-            title="Replay Motorunu Aç/Kapat"
+            title="Replay Motorunu Aç/Kapat (Kısayol: X)"
           >
             <RotateCcw className={`w-3.5 h-3.5 ${replayState.isReplayActive ? 'text-amber-400' : 'text-indigo-400'}`} />
             <span>Replay</span>

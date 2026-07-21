@@ -1,1 +1,1 @@
-# Momentum indicators (RSI, MACD, etc.)
+# Momentum göstergeleri (RSI, MACD vb.)

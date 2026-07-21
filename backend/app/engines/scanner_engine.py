@@ -1,1 +1,1 @@
-# Scanning engine
+# Tarayıcı (scanning) motoru

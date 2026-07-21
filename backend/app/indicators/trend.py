@@ -1,1 +1,1 @@
-# Trend indicators (SMA, EMA, etc.)
+# Trend göstergeleri (SMA, EMA vb.)

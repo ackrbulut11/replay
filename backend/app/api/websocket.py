@@ -1,1 +1,1 @@
-# Websocket connections manager
+# Websocket bağlantı yöneticisi

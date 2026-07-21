@@ -46,7 +46,7 @@ export default function CandleChart({
   const volumeSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
   const primitiveRef = useRef<DrawingsPrimitive | null>(null);
 
-  // Indicator Series References
+  // Gösterge Serisi Referansları
   const ema20Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const ema50Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const ema100Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
@@ -58,15 +58,15 @@ export default function CandleChart({
   const macdSignalRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const macdHistRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
 
-  // Sub-pane resize state
+  // Alt panel boyutlandırma durumu
   const [subPaneRatio, setSubPaneRatio] = useState(0.28);
-  const [rsiMacdSplit, setRsiMacdSplit] = useState(0.5); // 0-1: fraction of sub-pane area for RSI (top)
+  const [rsiMacdSplit, setRsiMacdSplit] = useState(0.5); // 0-1: RSI için alt panel alanının oranı (üst)
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
   const [dividerHovered, setDividerHovered] = useState<'main' | 'sub' | null>(null);
   const isDraggingDividerRef = useRef(false);
   const activeDividerRef = useRef<'main' | 'sub' | null>(null);
   const subPaneRatioRef = useRef(0.28);
-  subPaneRatioRef.current = subPaneRatio; // keep ref in sync for mousemove closure
+  subPaneRatioRef.current = subPaneRatio; // mousemove closure'ı için referansı senkronize tut
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('pointer');
   const [snapEnabled, setSnapEnabled] = useState(false);
@@ -84,7 +84,7 @@ export default function CandleChart({
   const selectedDrawingRef = useRef<Drawing | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
 
-  // --- Divider drag handler ---
+  // --- Ayırıcı sürükleme yöneticisi ---
   const handleDividerMouseDown = useCallback((e: React.MouseEvent, which: 'main' | 'sub') => {
     isDraggingDividerRef.current = true;
     activeDividerRef.current = which;
@@ -95,7 +95,7 @@ export default function CandleChart({
     e.stopPropagation();
   }, []);
 
-  // Window-level mouse listeners for divider drag
+  // Ayırıcı sürükleme için pencere düzeyinde fare dinleyicileri
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDraggingDividerRef.current || !chartContainerRef.current || !activeDividerRef.current) return;
@@ -106,7 +106,7 @@ export default function CandleChart({
         const newRatio = 1 - relativeY / rect.height;
         setSubPaneRatio(Math.max(0.10, Math.min(0.80, newRatio)));
       } else {
-        // Sub-divider: position within the sub-pane area
+        // Alt ayırıcı: alt panel alanındaki konum
         const curRatio = subPaneRatioRef.current;
         const subAreaStartPx = rect.height * (1 - curRatio);
         const subAreaHeightPx = rect.height * curRatio;
@@ -523,7 +523,7 @@ export default function CandleChart({
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', handleKeyDown);
 
-      // Clean up series refs
+      // Seri referanslarını temizle
       ema20Ref.current = null;
       ema50Ref.current = null;
       ema100Ref.current = null;
@@ -577,12 +577,12 @@ export default function CandleChart({
     }
   }, [data]);
 
-  // Indicator Calculations & Series Updates (creates/removes series, sets data)
+  // Gösterge Hesaplamaları ve Seri Güncellemeleri (serileri oluşturur/kaldırır, verileri ayarlar)
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !data || data.length === 0) return;
 
-    // --- CREATE / REMOVE SERIES ---
+    // --- SERİLERİ OLUŞTUR / KALDIR ---
 
     // EMA 20
     if (indicators.ema20) {
@@ -656,7 +656,7 @@ export default function CandleChart({
       ema200Ref.current = null;
     }
 
-    // RSI (Sub-pane)
+    // RSI (Alt panel)
     if (indicators.rsi) {
       if (!rsiRef.current) {
         rsiRef.current = chart.addLineSeries({
@@ -666,7 +666,7 @@ export default function CandleChart({
           title: '',
           lastValueVisible: false,
           priceLineVisible: false,
-          // Force strict 0-100 range — no auto-padding boşluğu
+          // Kesin 0-100 aralığını zorla — otomatik padding boşluğu olmasın
           autoscaleInfoProvider: () => ({
             priceRange: { minValue: 0, maxValue: 100 },
             margins: { above: 2, below: 2 },
@@ -705,7 +705,7 @@ export default function CandleChart({
       rsiRef.current = null;
     }
 
-    // MACD (Sub-pane)
+    // MACD (Alt panel)
     if (indicators.macd) {
       if (!macdHistRef.current || !macdLineRef.current || !macdSignalRef.current) {
         macdHistRef.current = chart.addHistogramSeries({
@@ -742,7 +742,7 @@ export default function CandleChart({
     }
   }, [data, indicators]);
 
-  // --- MARGIN LAYOUT EFFECT (separate so it responds to subPaneRatio drag without recreating series) ---
+  // --- MARJ YERLEŞİM ETKİSİ (serileri yeniden oluşturmadan subPaneRatio sürüklemesine yanıt vermesi için ayrıldı) ---
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -752,7 +752,7 @@ export default function CandleChart({
     const subPanesCount = (rsiActive ? 1 : 0) + (macdActive ? 1 : 0);
 
     if (subPanesCount === 0) {
-      // No sub-panes — main chart uses full area (leaving small room for time axis label visibility)
+      // Alt panel yok — ana grafik tüm alanı kullanır (zaman ekseni etiketinin görünürlüğü için küçük bir alan bırakır)
       chart.priceScale('right').applyOptions({
         visible: true,
         borderColor: '#1e293b',
@@ -762,22 +762,22 @@ export default function CandleChart({
         scaleMargins: { top: 0.82, bottom: 0.02 },
       });
     } else {
-      // Main chart bottom margin is exactly subPaneRatio
+      // Ana grafiğin alt marjı tam olarak subPaneRatio kadardır
       chart.priceScale('right').applyOptions({
         visible: true,
         borderColor: '#1e293b',
         scaleMargins: { top: 0.02, bottom: subPaneRatio },
       });
 
-      // Volume occupies the bottom 15% of the main chart area.
-      // Proportional top margin prevents top + bottom >= 1.0 crash.
+      // Hacim, ana grafik alanının alt %15'ini kaplar.
+      // Orantılı üst marj, top + bottom >= 1.0 çökmesini önler.
       const volumeTop = (1 - subPaneRatio) * 0.85;
       chart.priceScale('volume').applyOptions({
         scaleMargins: { top: volumeTop, bottom: subPaneRatio },
       });
 
-      // Sub-pane area starts exactly where main chart ends
-      const subTop = 1 -subPaneRatio;
+      // Alt panel alanı tam olarak ana grafiğin bittiği yerde başlar
+      const subTop = 1 - subPaneRatio;
 
       if (subPanesCount === 1) {
         if (rsiActive) {
@@ -797,7 +797,7 @@ export default function CandleChart({
           });
         }
       } else {
-        // 2 sub-panes — split using rsiMacdSplit fraction of the subPaneRatio height
+        // 2 alt panel — subPaneRatio yüksekliğinin rsiMacdSplit oranını kullanarak böl
         const mid = subTop + subPaneRatio * rsiMacdSplit;
         if (rsiActive) {
           chart.priceScale('rsi').applyOptions({
@@ -812,7 +812,7 @@ export default function CandleChart({
             visible: true,
             autoScale: true,
             borderColor: '#1e293b',
-            // Adds a small top gap to prevent touching the divider, capped at 0.95 to prevent crashes
+            // Ayırıcıya değmesini önlemek için üstte küçük bir boşluk bırakır, çökmeleri önlemek için 0.95 ile sınırlanmıştır
             scaleMargins: { top: Math.min(mid + 0.025, 0.95), bottom: 0.02 },
           });
         }
@@ -820,7 +820,7 @@ export default function CandleChart({
     }
   }, [subPaneRatio, rsiMacdSplit, indicators]);
 
-  // Compute divider positions — mirrors margin layout formula exactly (zero gaps)
+  // Ayırıcı konumlarını hesapla — marj yerleşim formülünü birebir yansıtır (sıfır boşluk)
   const hasSubPane = indicators.rsi || indicators.macd;
   const hasBothSubPanes = indicators.rsi && indicators.macd;
 
@@ -834,26 +834,26 @@ export default function CandleChart({
   const mainHighlight = isDraggingDivider && activeDividerRef.current === 'main' || dividerHovered === 'main';
   const subHighlight = isDraggingDivider && activeDividerRef.current === 'sub' || dividerHovered === 'sub';
 
-  // Shared divider renderer
+  // Ortak ayırıcı oluşturucu (renderer)
   const renderDivider = (
     pixelY: number,
     which: 'main' | 'sub',
     highlight: boolean,
   ) => (
-    // Outer container: positioned entirely above pixelY (sub-pane boundary) to avoid overlaps
+    // Dış konteyner: çakışmaları önlemek için tamamen pixelY (alt panel sınırı) üzerinde konumlandırılmıştır
     <div
       key={which}
       style={{
         position: 'absolute',
         left: 0,
         right: 0,
-        top: `${pixelY - 16}px`,  // Starts 16px above the line
-        height: '18px',            // Bottom edge is at pixelY + 2px
+        top: `${pixelY - 16}px`,  // Çizginin 16px üzerinden başlar
+        height: '18px',            // Alt kenar pixelY + 2px konumundadır
         zIndex: 10,
         pointerEvents: 'none',
       }}
     >
-      {/* Grab strip: 15px tall grab zone above the line */}
+      {/* Tutma şeridi: çizginin üstünde 15px yüksekliğinde tutma alanı */}
       <div
         onMouseDown={(e) => handleDividerMouseDown(e, which)}
         onMouseEnter={() => setDividerHovered(which)}
@@ -872,7 +872,7 @@ export default function CandleChart({
           paddingBottom: '2px',
         }}
       >
-        {/* Handle dots */}
+        {/* Tutamak noktaları */}
         <div
           style={{
             display: 'flex',
@@ -888,7 +888,7 @@ export default function CandleChart({
         </div>
       </div>
 
-      {/* Visible separator line: anchored to the bottom edge of the container (pixelY) */}
+      {/* Görünür ayırıcı çizgi: konteynerin alt kenarına sabitlenmiştir (pixelY) */}
       <div
         style={{
           position: 'absolute',
@@ -926,10 +926,10 @@ export default function CandleChart({
         )}
       </div>
 
-      {/* Main divider: between price chart and sub-panes */}
+      {/* Ana ayırıcı: fiyat grafiği ve alt paneller arasında */}
       {hasSubPane && renderDivider(mainDividerY, 'main', mainHighlight)}
 
-      {/* Sub divider: between RSI and MACD (only when both active) */}
+      {/* Alt ayırıcı: RSI ve MACD arasında (yalnızca ikisi de aktifken) */}
       {hasBothSubPanes && renderDivider(subDividerY, 'sub', subHighlight)}
 
       <div ref={chartContainerRef} className="w-full h-full" />

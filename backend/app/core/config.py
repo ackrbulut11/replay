@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     RELOAD: bool = True
     DATABASE_URL: str = "sqlite:///storage/database/app.db"
     
-    # Data Retention Limits (Default bar counts)
+    # Veri Saklama Limitleri (Varsayılan bar sayıları)
     RETENTION_1M: int = 100000  # son birkaç ay
     RETENTION_1H: int = 20000   # son 1-2 yıl
     RETENTION_1D: int = 5000    # son 5-10 yıl

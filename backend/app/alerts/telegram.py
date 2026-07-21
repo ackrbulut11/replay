@@ -1,1 +1,1 @@
-# Telegram notification gateway
+# Telegram bildirim geçidi

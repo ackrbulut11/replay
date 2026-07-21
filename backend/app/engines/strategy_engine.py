@@ -1,1 +1,1 @@
-# Strategy evaluation engine
+# Strateji değerlendirme motoru

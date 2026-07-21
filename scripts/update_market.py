@@ -1,1 +1,1 @@
-# Script to update market and prune old data
+# Market verilerini güncelleme ve eski verileri temizleme betiği

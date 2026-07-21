@@ -1,1 +1,1 @@
-# AI analyst suggestions engine
+# Yapay zeka analist öneri motoru

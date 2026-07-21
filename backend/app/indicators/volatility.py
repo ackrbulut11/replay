@@ -1,1 +1,1 @@
-# Volatility indicators (ATR, Bollinger, etc.)
+# Oynaklık (volatility) göstergeleri (ATR, Bollinger vb.)

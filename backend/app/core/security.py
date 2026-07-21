@@ -1,1 +1,1 @@
-# Security utilities
+# Güvenlik yardımcı araçları

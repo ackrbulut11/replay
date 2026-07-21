@@ -9,7 +9,7 @@ from .providers.bist import BistProvider
 class DataLoader:
     def __init__(self):
         self._lock = threading.Lock()
-        # Resolve project root path
+        # Proje kök dizin yolunu çözümlüyor
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = current_dir
         while project_root and not os.path.exists(os.path.join(project_root, "storage")):
@@ -58,7 +58,7 @@ class DataLoader:
             "close": "last",
             "volume": "sum"
         })
-        # Remove periods with no trade volume or price data
+        # İşlem hacmi veya fiyat verisi olmayan dönemleri kaldır
         resampled.dropna(subset=["open"], inplace=True)
         return resampled.reset_index()
 
@@ -66,9 +66,9 @@ class DataLoader:
         provider_name = provider_name.lower()
         symbol = symbol.upper()
         
-        # Resample logic for stock timeframes not supported directly (e.g., 4h for stocks)
+        # Doğrudan desteklenmeyen hisse senedi zaman dilimleri için yeniden örnekleme mantığı (örneğin hisse senetleri için 4h)
         if provider_name in ["nasdaq", "bist"] and timeframe == "4h":
-            # Load 1h data and resample it to 4h
+            # 1h veriyi yükle ve 4h olarak yeniden örnekle
             df_1h = self.load_data(provider_name, symbol, "1h", start_time, end_time)
             df_4h = self.resample_ohlcv(df_1h, "4h")
             if not df_4h.empty:
@@ -80,7 +80,7 @@ class DataLoader:
                     print(f"Warning: Failed to save resampled 4h cache: {e}")
             return df_4h
             
-        # Use thread lock to prevent race conditions during concurrent cache reads/writes
+        # Eşzamanlı önbellek okuma/yazma işlemleri sırasında yarış durumlarını (race condition) önlemek için thread lock kullan
         with self._lock:
             cache_path = self._get_cache_path(provider_name, symbol, timeframe)
             provider = self.get_provider(provider_name)
@@ -89,7 +89,7 @@ class DataLoader:
             if os.path.exists(cache_path):
                 try:
                     df = pd.read_parquet(cache_path)
-                    # Ensure correct types and sorting
+                    # Doğru tipleri ve sıralamayı garanti et
                     df['timestamp'] = pd.to_datetime(df['timestamp'])
                     df.sort_values('timestamp', inplace=True)
                     df.reset_index(drop=True, inplace=True)
@@ -98,7 +98,7 @@ class DataLoader:
                     df = None
                     
             if df is None or df.empty:
-                # Cache does not exist or is empty: fetch all and save
+                # Önbellek yok veya boş: hepsini getir ve kaydet
                 print(f"Cache miss for {provider_name}:{symbol} ({timeframe}). Fetching from API...")
                 df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
                 
@@ -107,22 +107,22 @@ class DataLoader:
                     df.to_parquet(cache_path, index=False)
                 return df
                 
-            # Cache exists: check if it covers the requested range
+            # Önbellek var: talep edilen aralığı kapsayıp kapsamadığını kontrol et
             cached_start = df['timestamp'].min()
             cached_end = df['timestamp'].max()
             
             needed_start = start_time
             needed_end = end_time
             
-            # If requested range is completely within cached range, just filter and return
+            # Talep edilen aralık tamamen önbelleğe alınmış aralıktaysa, sadece filtrele ve döndür
             if needed_start >= cached_start and needed_end <= cached_end:
                 return df[(df['timestamp'] >= needed_start) & (df['timestamp'] <= needed_end)].reset_index(drop=True)
                 
-            # We need to fetch missing data
+            # Eksik verileri getirmemiz gerekiyor
             df_before = pd.DataFrame()
             df_after = pd.DataFrame()
             
-            # Fetch prefix if needed
+            # Gerekirse ön eki (prefix) getir
             if needed_start < cached_start:
                 print(f"Fetching prefix data from API for {provider_name}:{symbol} ({timeframe}) from {needed_start} to {cached_start}...")
                 try:
@@ -130,7 +130,7 @@ class DataLoader:
                 except Exception as e:
                     print(f"Warning: Failed to fetch prefix data: {e}")
                     
-            # Fetch suffix if needed
+            # Gerekirse son eki (suffix) getir
             if needed_end > cached_end:
                 print(f"Fetching suffix data from API for {provider_name}:{symbol} ({timeframe}) from {cached_end} to {needed_end}...")
                 try:
@@ -138,7 +138,7 @@ class DataLoader:
                 except Exception as e:
                     print(f"Warning: Failed to fetch suffix data: {e}")
                     
-            # Combine all parts
+            # Tüm parçaları birleştir
             dfs_to_concat = []
             if not df_before.empty:
                 dfs_to_concat.append(df_before)
@@ -151,12 +151,12 @@ class DataLoader:
             df_combined.sort_values('timestamp', inplace=True)
             df_combined.reset_index(drop=True, inplace=True)
             
-            # Write back to cache
+            # Önbelleğe geri yaz
             try:
                 os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                 df_combined.to_parquet(cache_path, index=False)
             except Exception as e:
                 print(f"Warning: Failed to save merged data to cache: {e}")
                 
-            # Return only the requested range
+            # Yalnızca talep edilen aralığı döndür
             return df_combined[(df_combined['timestamp'] >= needed_start) & (df_combined['timestamp'] <= needed_end)].reset_index(drop=True)

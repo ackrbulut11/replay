@@ -1,1 +1,1 @@
-# Script to build python sidecar executable
+# Python sidecar çalıştırılabilir dosyasını derleme betiği

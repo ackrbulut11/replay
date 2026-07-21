@@ -1,1 +1,1 @@
-# Operators (>, <, cross_above, cross_below)
+# Operatörler (>, <, yukarı kesişim, aşağı kesişim)

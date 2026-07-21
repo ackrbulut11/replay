@@ -1,1 +1,1 @@
-# Standard notification methods
+# Standart bildirim yöntemleri

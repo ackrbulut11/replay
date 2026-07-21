@@ -1,1 +1,1 @@
-# Rule evaluation helper
+# Kural değerlendirme yardımcısı

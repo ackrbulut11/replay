@@ -1,1 +1,1 @@
-# Base indicator
+# Temel gösterge (indicator)

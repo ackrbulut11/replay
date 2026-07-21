@@ -14,7 +14,7 @@ def get_market_data(
     start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)"),
     end: Optional[str] = Query(None, description="End date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS). Defaults to now.")
 ):
-    # Handle empty strings from client
+    # İstemciden gelen boş dizgileri işle
     start = start if (start and start.strip()) else None
     end = end if (end and end.strip()) else None
 
@@ -44,7 +44,7 @@ def get_market_data(
                     detail="Invalid start date format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS."
                 )
     else:
-        # Smart default based on timeframe
+        # Zaman dilimine (timeframe) göre akıllı varsayılan
         from datetime import timedelta
         if timeframe == "1mo":
             start_dt = end_dt - timedelta(days=20*365)
@@ -68,8 +68,8 @@ def get_market_data(
         if df.empty:
             return []
             
-        # Format for lightweight-charts:
-        # time should be unix timestamp in seconds
+        # lightweight-charts için format:
+        # zaman saniye cinsinden unix zaman damgası olmalıdır
         result = []
         for _, row in df.iterrows():
             result.append({

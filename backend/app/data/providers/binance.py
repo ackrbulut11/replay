@@ -7,7 +7,7 @@ class BinanceProvider(IDataProvider):
     def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
         url = "https://api.binance.com/api/v3/klines"
         
-        # Map timeframes to Binance intervals
+        # Zaman dilimlerini Binance aralıklarına eşle
         tf_map = {
             "1m": "1m",
             "5m": "5m",
@@ -25,7 +25,7 @@ class BinanceProvider(IDataProvider):
             
         symbol = symbol.upper()
         
-        # Convert times to milliseconds
+        # Zamanları milisaniyeye dönüştür
         start_ms = int(start_time.timestamp() * 1000)
         end_ms = int(end_time.timestamp() * 1000)
         
@@ -46,7 +46,7 @@ class BinanceProvider(IDataProvider):
                 response.raise_for_status()
                 data = response.json()
             except Exception as e:
-                # If we have some candles, we can return them, or raise if we got nothing
+                # Elimizde bazı mumlar varsa döndürebiliriz, yoksa hata fırlat
                 if all_candles:
                     break
                 raise RuntimeError(f"Error fetching data from Binance: {str(e)}")
@@ -56,29 +56,29 @@ class BinanceProvider(IDataProvider):
                 
             all_candles.extend(data)
             
-            # If the response has fewer than 1000 entries, we have reached the end of available data
+            # Yanıtta 1000'den az veri varsa, mevcut verilerin sonuna ulaşmışızdır
             if len(data) < 1000:
                 break
                 
-            # Move the window forward: last candle's open time + 1ms
+            # Pencereyi ileri taşı: son mumun açılış zamanı + 1ms
             last_open_time = int(data[-1][0])
             current_start = last_open_time + 1
             
         if not all_candles:
             return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
-        # Parse result into standard DataFrame
+        # Sonucu standart DataFrame olarak ayrıştır
         df = pd.DataFrame(all_candles)
         
-        # Columns definition:
+        # Sütun tanımları:
         # 0: Open time, 1: Open, 2: High, 3: Low, 4: Close, 5: Volume
         df = df[[0, 1, 2, 3, 4, 5]].copy()
         df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         
-        # Convert timestamp to datetime (it's in ms)
+        # Zaman damgasını datetime'a dönüştür (milisaniye cinsinden)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         
-        # Convert values to float
+        # Değerleri float tipine dönüştür
         for col in ['open', 'high', 'low', 'close', 'volume']:
             df[col] = df[col].astype(float)
             

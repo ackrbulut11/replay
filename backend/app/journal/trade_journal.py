@@ -1,1 +1,1 @@
-# Trade logging and notes management
+# İşlem günlükleri ve not yönetimi

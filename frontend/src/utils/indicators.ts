@@ -9,7 +9,7 @@ export interface CandleInput {
 }
 
 /**
- * Exponential Moving Average (EMA)
+ * Üssel Hareketli Ortalama (EMA)
  */
 export function calculateEMA(data: CandleInput[], period: number): TimeValue[] {
   if (data.length < period) return [];
@@ -33,7 +33,7 @@ export function calculateEMA(data: CandleInput[], period: number): TimeValue[] {
 }
 
 /**
- * Relative Strength Index (RSI) - Wilder's Smoothing
+ * Göreceli Güç Endeksi (RSI) - Wilder Yumuşatması
  */
 export function calculateRSI(data: CandleInput[], period = 14): TimeValue[] {
   if (data.length <= period) return [];
@@ -94,7 +94,7 @@ export interface MACDResult {
 }
 
 /**
- * Moving Average Convergence Divergence (MACD)
+ * Hareketli Ortalama Yakınsama Iraksama (MACD)
  */
 export function calculateMACD(
   data: CandleInput[],

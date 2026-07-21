@@ -1,1 +1,1 @@
-# SQLite DB connection
+# SQLite DB bağlantısı

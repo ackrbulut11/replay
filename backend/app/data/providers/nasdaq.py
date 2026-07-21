@@ -5,10 +5,10 @@ from .base import IDataProvider
 
 class NasdaqProvider(IDataProvider):
     def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
-        # Yahoo Finance URL
+        # Yahoo Finance adresi
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.upper()}"
         
-        # Map timeframe to Yahoo Finance interval
+        # Zaman dilimini Yahoo Finance aralığına eşle
         tf_map = {
             "1m": "1m",
             "5m": "5m",
@@ -30,7 +30,7 @@ class NasdaqProvider(IDataProvider):
             "includePrePost": "false"
         }
         
-        # User-Agent is required, otherwise Yahoo Finance returns HTTP 403
+        # User-Agent gereklidir, aksi takdirde Yahoo Finance HTTP 403 döndürür
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
@@ -46,7 +46,7 @@ class NasdaqProvider(IDataProvider):
         result_list = chart.get("result", [])
         
         if not result_list or result_list is None:
-            # Handle potential error message from Yahoo Finance
+            # Yahoo Finance'tan gelebilecek olası hata mesajını işle
             err = chart.get("error", {})
             err_msg = err.get("description", "Unknown error") if err else "No data returned"
             raise RuntimeError(f"Yahoo Finance API error for symbol {symbol}: {err_msg}")
@@ -64,7 +64,7 @@ class NasdaqProvider(IDataProvider):
         closes = quote.get("close", [])
         volumes = quote.get("volume", [])
         
-        # Create DataFrame
+        # DataFrame oluştur
         df = pd.DataFrame({
             "timestamp": timestamps,
             "open": opens,
@@ -74,13 +74,13 @@ class NasdaqProvider(IDataProvider):
             "volume": volumes
         })
         
-        # Convert timestamp
+        # Zaman damgasını dönüştür
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
         
-        # Clean null values (Yahoo returns null for non-trading periods)
+        # Null değerleri temizle (Yahoo işlem yapılmayan dönemler için null döndürür)
         df.dropna(subset=['open', 'high', 'low', 'close'], inplace=True)
         
-        # Fill missing volumes and cast types
+        # Eksik hacimleri doldur ve veri tiplerini dönüştür
         df['volume'] = df['volume'].fillna(0.0).astype(float)
         for col in ['open', 'high', 'low', 'close']:
             df[col] = df[col].astype(float)

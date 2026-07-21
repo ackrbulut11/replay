@@ -1,1 +1,1 @@
-# DB models for journal
+# Günlük (journal) için veritabanı modelleri

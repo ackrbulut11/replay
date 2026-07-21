@@ -1,1 +1,1 @@
-# AI natural language strategies generator
+# Yapay zeka doğal dil stratejileri oluşturucu

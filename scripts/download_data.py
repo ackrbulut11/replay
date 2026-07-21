@@ -3,7 +3,7 @@ import sys
 import argparse
 from datetime import datetime
 
-# Add project root and backend folder to sys.path so we can import app modules easily
+# Uygulama modüllerini kolayca içe aktarabilmek için proje kök dizinini ve backend klasörünü sys.path'e ekle
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 sys.path.insert(0, project_root)
@@ -52,7 +52,7 @@ def main():
         print(f"Start Timestamp: {df['timestamp'].min()}")
         print(f"End Timestamp: {df['timestamp'].max()}")
         
-        # Verify cache path
+        # Önbellek (cache) yolunu doğrula
         cache_path = loader._get_cache_path(args.provider, args.symbol, args.timeframe)
         print(f"Cached Parquet File: {cache_path}")
         print(f"File Size: {os.path.getsize(cache_path) / 1024:.2f} KB")

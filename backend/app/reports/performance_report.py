@@ -1,1 +1,1 @@
-# Performance calculation engine (Sharpe, Drawdown, etc.)
+# Performans hesaplama motoru (Sharpe, Drawdown vb.)

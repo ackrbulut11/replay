@@ -1,1 +1,1 @@
-# Rule engine interpretor
+# Kural motoru yorumlayıcısı (interpreter)

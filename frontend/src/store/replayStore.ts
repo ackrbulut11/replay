@@ -5,6 +5,7 @@ export interface ReplayState {
   isSelectingCutoff: boolean;
   cutoffIndex: number | null;
   currentIndex: number | null;
+  targetTimestamp: number | null;
   isPlaying: boolean;
   speedMs: number; // e.g. 1000ms = 1 sec per candle
 }
@@ -14,6 +15,7 @@ export const INITIAL_REPLAY_STATE: ReplayState = {
   isSelectingCutoff: false,
   cutoffIndex: null,
   currentIndex: null,
+  targetTimestamp: null,
   isPlaying: false,
   speedMs: 1000,
 };

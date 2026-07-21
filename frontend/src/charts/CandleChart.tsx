@@ -49,6 +49,20 @@ interface DragState {
   handleIndex: number;
 }
 
+function findCandleIndexByTimestamp(candles: CandleData[], targetTimestamp: number): number {
+  if (candles.length === 0) return 0;
+  let matchIdx = -1;
+  for (let i = 0; i < candles.length; i++) {
+    if (candles[i].time <= targetTimestamp) {
+      matchIdx = i;
+    } else {
+      break;
+    }
+  }
+  if (matchIdx !== -1) return matchIdx;
+  return 0;
+}
+
 export default function CandleChart({
   data,
   logScale,
@@ -88,13 +102,13 @@ export default function CandleChart({
 
   // Alt panel boyutlandırma durumu
   const [subPaneRatio, setSubPaneRatio] = useState(0.28);
-  const [rsiMacdSplit, setRsiMacdSplit] = useState(0.5); // 0-1: RSI için alt panel alanının oranı (üst)
+  const [rsiMacdSplit, setRsiMacdSplit] = useState(0.5);
   const [isDraggingDivider, setIsDraggingDivider] = useState(false);
   const [dividerHovered, setDividerHovered] = useState<'main' | 'sub' | null>(null);
   const isDraggingDividerRef = useRef(false);
   const activeDividerRef = useRef<'main' | 'sub' | null>(null);
   const subPaneRatioRef = useRef(0.28);
-  subPaneRatioRef.current = subPaneRatio; // mousemove closure'ı için referansı senkronize tut
+  subPaneRatioRef.current = subPaneRatio;
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('pointer');
   const [snapEnabled, setSnapEnabled] = useState(false);
@@ -156,31 +170,46 @@ export default function CandleChart({
         if (prev.currentIndex === null) return { isPlaying: false };
         const nextIdx = prev.currentIndex + 1;
         if (nextIdx >= data.length) {
-          return { isPlaying: false, currentIndex: data.length - 1 };
+          return {
+            isPlaying: false,
+            currentIndex: data.length - 1,
+            targetTimestamp: data[data.length - 1]?.time ?? null,
+          };
         }
-        return { currentIndex: nextIdx };
+        return {
+          currentIndex: nextIdx,
+          targetTimestamp: data[nextIdx]?.time ?? null,
+        };
       });
     }, replayState.speedMs);
 
     return () => clearInterval(timer);
-  }, [replayState.isReplayActive, replayState.isPlaying, replayState.speedMs, data.length, setReplayState]);
+  }, [replayState.isReplayActive, replayState.isPlaying, replayState.speedMs, data, setReplayState]);
 
   const handleStepForward = useCallback(() => {
     setReplayState((prev) => {
       if (prev.currentIndex === null) return {};
       const nextIdx = Math.min(prev.currentIndex + 1, data.length - 1);
-      return { currentIndex: nextIdx };
+      return {
+        currentIndex: nextIdx,
+        targetTimestamp: data[nextIdx]?.time ?? null,
+      };
     });
-  }, [data.length, setReplayState]);
+  }, [data, setReplayState]);
 
   const handleTogglePlay = useCallback(() => {
     setReplayState((prev) => {
       if (prev.currentIndex !== null && prev.currentIndex >= data.length - 1) {
-        return { isPlaying: true, currentIndex: prev.cutoffIndex ?? 0 };
+        const startIdx = prev.cutoffIndex ?? 0;
+        return {
+          isPlaying: true,
+          currentIndex: startIdx,
+          targetTimestamp: data[startIdx]?.time ?? null,
+        };
       }
       return { isPlaying: !prev.isPlaying };
     });
-  }, [data.length, setReplayState]);
+  }, [data, setReplayState]);
 
   const handleStartSelection = useCallback(() => {
     setReplayState({ isSelectingCutoff: true, isPlaying: false });
@@ -195,26 +224,55 @@ export default function CandleChart({
           isPlaying: false,
           cutoffIndex: null,
           currentIndex: null,
+          targetTimestamp: null,
         };
       } else {
         const lastIdx = data.length > 0 ? data.length - 1 : null;
+        const lastTime = lastIdx !== null ? data[lastIdx]?.time : null;
         return {
           isReplayActive: true,
           isSelectingCutoff: true,
           isPlaying: false,
           cutoffIndex: lastIdx,
           currentIndex: lastIdx,
+          targetTimestamp: lastTime,
         };
       }
     });
-  }, [data.length, setReplayState]);
+  }, [data, setReplayState]);
 
   const handleResetToCutoff = useCallback(() => {
-    setReplayState((prev) => ({
-      currentIndex: prev.cutoffIndex ?? 0,
-      isPlaying: false,
-    }));
-  }, [setReplayState]);
+    setReplayState((prev) => {
+      const resetIdx = prev.cutoffIndex ?? 0;
+      return {
+        currentIndex: resetIdx,
+        targetTimestamp: data[resetIdx]?.time ?? null,
+        isPlaying: false,
+      };
+    });
+  }, [data, setReplayState]);
+
+  // Timeframe veya yeni veri yüklendiğinde Replay pozisyonunu koru
+  useEffect(() => {
+    if (!replayState.isReplayActive || !data || data.length === 0) return;
+
+    if (replayState.targetTimestamp !== null) {
+      const matchedIdx = findCandleIndexByTimestamp(data, replayState.targetTimestamp);
+      const matchedTime = data[matchedIdx]?.time ?? null;
+      setReplayState({
+        cutoffIndex: matchedIdx,
+        currentIndex: matchedIdx,
+        targetTimestamp: matchedTime,
+      });
+    } else {
+      const lastIdx = data.length - 1;
+      setReplayState({
+        cutoffIndex: lastIdx,
+        currentIndex: lastIdx,
+        targetTimestamp: data[lastIdx]?.time ?? null,
+      });
+    }
+  }, [data, replayState.isReplayActive]);
 
   // Replay Kısayol Tuşları Dinleyicisi
   useEffect(() => {

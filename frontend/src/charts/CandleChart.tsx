@@ -104,7 +104,7 @@ export default function CandleChart({
 
       if (activeDividerRef.current === 'main') {
         const newRatio = 1 - relativeY / rect.height;
-        setSubPaneRatio(Math.max(0.10, Math.min(0.65, newRatio)));
+        setSubPaneRatio(Math.max(0.10, Math.min(0.80, newRatio)));
       } else {
         // Sub-divider: position within the sub-pane area
         const curRatio = subPaneRatioRef.current;
@@ -769,8 +769,9 @@ export default function CandleChart({
         scaleMargins: { top: 0.02, bottom: subPaneRatio },
       });
 
-      // Volume occupies the bottom 15% of the main chart area
-      const volumeTop = Math.max(0.40, 1 - subPaneRatio - 0.15);
+      // Volume occupies the bottom 15% of the main chart area.
+      // Proportional top margin prevents top + bottom >= 1.0 crash.
+      const volumeTop = (1 - subPaneRatio) * 0.85;
       chart.priceScale('volume').applyOptions({
         scaleMargins: { top: volumeTop, bottom: subPaneRatio },
       });

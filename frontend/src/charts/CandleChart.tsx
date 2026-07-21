@@ -11,7 +11,7 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { DEFAULT_INDICATORS_STATE } from './IndicatorToolbar';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3 } from 'lucide-react';
 
 interface CandleData {
   time: number;
@@ -24,8 +24,22 @@ interface CandleData {
 
 interface CandleChartProps {
   data: CandleData[];
-  logScale?: boolean;
-  indicators?: IndicatorsState;
+  logScale: boolean;
+  setLogScale: (v: boolean) => void;
+  indicators: IndicatorsState;
+  onToggleIndicator: (key: keyof IndicatorsState) => void;
+  provider: string;
+  setProvider: (v: string) => void;
+  symbol: string;
+  setSymbol: (v: string) => void;
+  timeframe: string;
+  setTimeframe: (v: string) => void;
+  start: string;
+  setStart: (v: string) => void;
+  end: string;
+  setEnd: (v: string) => void;
+  loading?: boolean;
+  error?: string | null;
 }
 
 interface DragState {
@@ -33,12 +47,24 @@ interface DragState {
   handleIndex: number;
 }
 
-const CHART_HEIGHT = 600;
-
 export default function CandleChart({
   data,
-  logScale = false,
-  indicators = DEFAULT_INDICATORS_STATE,
+  logScale,
+  setLogScale,
+  indicators,
+  onToggleIndicator,
+  provider,
+  setProvider,
+  symbol,
+  setSymbol,
+  timeframe,
+  setTimeframe,
+  start,
+  setStart,
+  end,
+  setEnd,
+  loading = false,
+  error = null,
 }: CandleChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
@@ -83,6 +109,24 @@ export default function CandleChart({
   const currentPointsRef = useRef<DrawingPoint[]>([]);
   const selectedDrawingRef = useRef<Drawing | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
+
+  const [chartHeight, setChartHeight] = useState(600);
+  const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
+  const [isDatesOpen, setIsDatesOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('#indicators-popover')) {
+        setIsIndicatorsOpen(false);
+      }
+      if (!target.closest('#dates-popover')) {
+        setIsDatesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
   // --- Ayırıcı sürükleme yöneticisi ---
   const handleDividerMouseDown = useCallback((e: React.MouseEvent, which: 'main' | 'sub') => {
@@ -351,7 +395,7 @@ export default function CandleChart({
         },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 600,
+      height: chartContainerRef.current.clientHeight || 600,
     });
 
     const candleSeries = chart.addCandlestickSeries({
@@ -490,12 +534,19 @@ export default function CandleChart({
       });
     });
 
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          chart.resize(width, height);
+          setChartHeight(height);
+        }
       }
-    };
-    window.addEventListener('resize', handleResize);
+    });
+
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -520,7 +571,7 @@ export default function CandleChart({
     volumeSeriesRef.current = volumeSeries;
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       window.removeEventListener('keydown', handleKeyDown);
 
       // Seri referanslarını temizle
@@ -563,17 +614,47 @@ export default function CandleChart({
     if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) return;
 
     if (data && data.length > 0) {
+      // Çakışan zaman damgalarını temizle (lightweight-charts hata vermesini önlemek için)
+      const uniqueData: typeof data = [];
+      const seenTimes = new Set<number>();
+      for (const d of data) {
+        if (!seenTimes.has(d.time)) {
+          seenTimes.add(d.time);
+          uniqueData.push(d);
+        }
+      }
+
       candleSeriesRef.current.setData(
-        data.map((d) => ({ time: d.time as Time, open: d.open, high: d.high, low: d.low, close: d.close }))
+        uniqueData.map((d) => ({ time: d.time as Time, open: d.open, high: d.high, low: d.low, close: d.close }))
       );
       volumeSeriesRef.current.setData(
-        data.map((d) => ({
+        uniqueData.map((d) => ({
           time: d.time as Time,
           value: d.volume,
           color: d.close >= d.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)',
         }))
       );
-      chartRef.current.timeScale().fitContent();
+      
+      // Render işlemi sonrasında ölçeklemenin doğru çalışması ve yeni hissenin fiyatına odaklanılması için ayarlar yapıldı
+      const chart = chartRef.current;
+      setTimeout(() => {
+        if (chart) {
+          // Fiyat eksenini otomatik ölçeklendirmeye (autoscale) zorla
+          chart.priceScale('right').applyOptions({
+            autoScale: true,
+          });
+
+          // Grafik zaman eksenini son 150 mum görünecek şekilde ayarla ve sağdan boşluk bırak
+          const totalBars = uniqueData.length;
+          chart.timeScale().setVisibleLogicalRange({
+            from: Math.max(0, totalBars - 150) as any,
+            to: (totalBars + 5) as any,
+          });
+        }
+      }, 50);
+    } else {
+      candleSeriesRef.current.setData([]);
+      volumeSeriesRef.current.setData([]);
     }
   }, [data]);
 
@@ -824,11 +905,11 @@ export default function CandleChart({
   const hasSubPane = indicators.rsi || indicators.macd;
   const hasBothSubPanes = indicators.rsi && indicators.macd;
 
-  const mainDividerY = CHART_HEIGHT * (1 - subPaneRatio);
+  const mainDividerY = chartHeight * (1 - subPaneRatio);
 
   const subTop = 1 - subPaneRatio;
   const subDividerY = hasBothSubPanes
-    ? CHART_HEIGHT * (subTop + subPaneRatio * rsiMacdSplit)
+    ? chartHeight * (subTop + subPaneRatio * rsiMacdSplit)
     : 0;
 
   const mainHighlight = isDraggingDivider && activeDividerRef.current === 'main' || dividerHovered === 'main';
@@ -907,8 +988,192 @@ export default function CandleChart({
 
 
   return (
-    <div className="relative w-full h-[600px] border border-slate-800 rounded-xl overflow-hidden bg-[#090d16]">
-      <div className="absolute top-2 left-2 z-20 flex flex-col gap-1.5">
+    <div className="relative w-full h-full border border-slate-800 rounded-xl overflow-hidden bg-[#090d16]">
+      {/* Yüzen Kontrol Paneli Araç Çubuğu */}
+      <div className="absolute top-2 left-2 right-2 h-12 z-30 flex items-center justify-between bg-[#0d1321]/95 border border-slate-800/80 rounded-xl px-3.5 shadow-xl backdrop-blur-md">
+        {/* Sol Taraf: Logo & Sembol & Sağlayıcı & Zaman Dilimi */}
+        <div className="flex items-center gap-3">
+          {/* Logo / Başlık */}
+          <div className="flex items-center gap-1.5 border-r border-slate-800/80 pr-3 h-5">
+            <span className="text-xs font-bold bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent tracking-wider font-sans select-none">
+              REPLAY
+            </span>
+          </div>
+
+          {/* Sembol / Ticker Girişi */}
+          <div className="flex items-center gap-1.5 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
+            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Symbol</span>
+            <input
+              type="text"
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase().trim())}
+              placeholder="BTCUSDT"
+              className="bg-transparent border-none outline-none text-xs font-semibold text-slate-100 w-16 uppercase placeholder-slate-600 focus:ring-0"
+            />
+          </div>
+
+          {/* Sağlayıcı Seçimi */}
+          <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
+            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Provider</span>
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className="bg-transparent border-none outline-none text-xs font-medium text-slate-300 cursor-pointer focus:ring-0"
+            >
+              <option value="binance" className="bg-[#070b13] text-slate-100">Binance</option>
+              <option value="nasdaq" className="bg-[#070b13] text-slate-100">Nasdaq</option>
+              <option value="bist" className="bg-[#070b13] text-slate-100">BIST</option>
+            </select>
+          </div>
+
+          {/* Zaman Dilimi Seçimi */}
+          <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
+            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Interval</span>
+            <select
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+              className="bg-transparent border-none outline-none text-xs font-medium text-slate-300 cursor-pointer focus:ring-0"
+            >
+              <option value="1m" className="bg-[#070b13] text-slate-100">1m</option>
+              <option value="5m" className="bg-[#070b13] text-slate-100">5m</option>
+              <option value="15m" className="bg-[#070b13] text-slate-100">15m</option>
+              <option value="1h" className="bg-[#070b13] text-slate-100">1h</option>
+              <option value="4h" className="bg-[#070b13] text-slate-100">4h</option>
+              <option value="1d" className="bg-[#070b13] text-slate-100">1d</option>
+              <option value="1w" className="bg-[#070b13] text-slate-100">1w</option>
+              <option value="1mo" className="bg-[#070b13] text-slate-100">1mo</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Sağ Taraf: Göstergeler popover, Tarih aralığı popover, Log scale, Loading spinner */}
+        <div className="flex items-center gap-2">
+          {/* Göstergeler Popover */}
+          <div className="relative" id="indicators-popover">
+            <button
+              onClick={() => setIsIndicatorsOpen(!isIndicatorsOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all ${
+                isIndicatorsOpen
+                  ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-semibold'
+                  : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+              Indicators
+            </button>
+
+            {isIndicatorsOpen && (
+              <div className="absolute right-0 top-9 mt-1 w-52 bg-[#0d1321]/95 border border-slate-850 rounded-xl p-2 shadow-2xl z-50 backdrop-blur-md space-y-0.5">
+                <div className="text-[9px] text-slate-500 font-bold uppercase px-2 py-1 select-none">
+                  Technical Indicators
+                </div>
+                <div className="w-full h-px bg-slate-800/60 my-1" />
+                {Object.keys(indicators).map((key) => {
+                  const indKey = key as keyof IndicatorsState;
+                  const labels: Record<string, string> = {
+                    ema20: 'EMA 20',
+                    ema50: 'EMA 50',
+                    ema100: 'EMA 100',
+                    ema200: 'EMA 200',
+                    rsi: 'RSI (14)',
+                    macd: 'MACD (12, 26, 9)',
+                  };
+                  const colors: Record<string, string> = {
+                    ema20: 'bg-amber-500',
+                    ema50: 'bg-cyan-500',
+                    ema100: 'bg-purple-500',
+                    ema200: 'bg-pink-500',
+                    rsi: 'bg-slate-300',
+                    macd: 'bg-emerald-500',
+                  };
+                  return (
+                    <label
+                      key={indKey}
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-slate-800/50 cursor-pointer select-none"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${colors[indKey]} ${indicators[indKey] ? 'animate-pulse' : ''}`} />
+                        <span className="text-xs text-slate-200">{labels[indKey]}</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={indicators[indKey]}
+                        onChange={() => onToggleIndicator(indKey)}
+                        className="w-3.5 h-3.5 accent-indigo-500 rounded border-slate-800 cursor-pointer bg-[#070b13]"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Tarih Aralığı Popover */}
+          <div className="relative" id="dates-popover">
+            <button
+              onClick={() => setIsDatesOpen(!isDatesOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all ${
+                isDatesOpen || start || end
+                  ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-semibold'
+                  : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+              {start || end ? `${start || '...'} to ${end || '...'}` : 'Dates'}
+            </button>
+
+            {isDatesOpen && (
+              <div className="absolute right-0 top-9 mt-1 w-60 bg-[#0d1321]/95 border border-slate-850 rounded-xl p-3 shadow-2xl z-50 backdrop-blur-md space-y-3">
+                <div className="text-[9px] text-slate-500 font-bold uppercase pb-1.5 border-b border-slate-800/60 select-none">
+                  Select Date Range
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[9px] text-slate-400 font-semibold uppercase select-none">Start Date</span>
+                    <input
+                      type="date"
+                      value={start}
+                      onChange={(e) => setStart(e.target.value)}
+                      className="bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[9px] text-slate-400 font-semibold uppercase select-none">End Date</span>
+                    <input
+                      type="date"
+                      value={end}
+                      onChange={(e) => setEnd(e.target.value)}
+                      className="bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Log Scale Toggle */}
+          <button
+            onClick={() => setLogScale(!logScale)}
+            className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
+              logScale
+                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                : 'bg-[#070b13]/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+            }`}
+          >
+            LOG
+          </button>
+
+          {/* Loading Spinner */}
+          {loading && (
+            <div className="ml-1 text-indigo-400 animate-spin">
+              <Loader2 className="w-4 h-4" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dikey Çizim Toolbarı - Yüzen Kontrol Paneli Araç Çubuğunun Altında Konumlandırılmıştır */}
+      <div className="absolute top-[62px] left-2 z-20 flex flex-col gap-1.5">
         <DrawingToolbar
           activeTool={activeTool}
           snapEnabled={snapEnabled}
@@ -931,6 +1196,43 @@ export default function CandleChart({
 
       {/* Alt ayırıcı: RSI ve MACD arasında (yalnızca ikisi de aktifken) */}
       {hasBothSubPanes && renderDivider(subDividerY, 'sub', subHighlight)}
+
+      {/* Durum Gösterge Katmanları */}
+      {loading && (
+        <div className="absolute inset-0 bg-[#070b13]/85 backdrop-blur-xs z-25 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-10 h-10 text-indigo-400 animate-spin" />
+          <span className="text-slate-350 text-sm font-medium">Loading market data...</span>
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="absolute inset-0 bg-[#070b13]/95 z-25 flex items-center justify-center p-4">
+          <div className="flex flex-col items-center text-center max-w-md p-6 space-y-3">
+            <div className="p-3 bg-red-950/40 border border-red-900/60 rounded-full text-red-400">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-red-200">Veri Yüklenemedi</h3>
+            <p className="text-slate-400 text-sm leading-relaxed">{error}</p>
+            <p className="text-slate-500 text-xs">
+              İpucu: Komut satırından `python scripts/download_data.py` çalıştırarak bu veriyi indirmiş olduğunuzdan emin olun.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!error && data.length === 0 && !loading && (
+        <div className="absolute inset-0 bg-[#090d16] z-25 flex items-center justify-center p-4">
+          <div className="flex flex-col items-center text-center max-w-sm p-6 space-y-3">
+            <div className="p-3 bg-[#0d1321]/80 border border-slate-800 rounded-full text-slate-400">
+              <BarChart3 className="w-8 h-8 text-indigo-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-200">Chart Ready to Load</h3>
+            <p className="text-slate-450 text-sm leading-relaxed">
+              Select data provider, symbol, and timeframe from the floating control panel above.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div ref={chartContainerRef} className="w-full h-full" />
     </div>

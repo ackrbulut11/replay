@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
-import IndicatorToolbar, { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
-import { Loader2, AlertCircle, BarChart3, Calendar, Coins } from 'lucide-react';
+import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
+import { BarChart3, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface CandleData {
   time: number;
@@ -26,12 +26,14 @@ function App() {
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
 
   const handleToggleIndicator = (key: keyof IndicatorsState) => {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleLoadChart = async () => {
+  const handleLoadChart = useCallback(async () => {
+    console.log("Fetching market data for:", { provider, symbol, timeframe, start, end });
     setLoading(true);
     setError(null);
     try {
@@ -43,6 +45,7 @@ function App() {
         throw new Error(errJson.detail || 'Veriler yüklenirken bir hata oluştu.');
       }
       const data = await response.json();
+      console.log(`Fetched ${data.length} data points.`);
       if (data.length === 0) {
         setError('Belirtilen tarih aralığında veri bulunamadı. Lütfen önce bu veriyi indirdiğinizden emin olun.');
         setChartData([]);
@@ -50,12 +53,13 @@ function App() {
         setChartData(data);
       }
     } catch (err: any) {
+      console.error("Fetch data failed:", err);
       setError(err.message || 'Sunucu bağlantı hatası.');
       setChartData([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [provider, symbol, timeframe, start, end]);
 
   // Sağlayıcı değiştiğinde varsayılan sembolü otomatik olarak değiştir
   useEffect(() => {
@@ -72,12 +76,16 @@ function App() {
   useEffect(() => {
     if (!symbol || symbol.trim().length < 2) return;
 
+    console.log("App inputs changed, setting reload timeout for:", { provider, symbol, timeframe, start, end });
     const timer = setTimeout(() => {
       handleLoadChart();
     }, 300);
 
-    return () => clearTimeout(timer);
-  }, [provider, symbol, timeframe, start, end]);
+    return () => {
+      console.log("App inputs changed again, clearing previous timeout.");
+      clearTimeout(timer);
+    };
+  }, [provider, symbol, timeframe, start, end, handleLoadChart]);
 
   // İstatistikleri hesaplamak için yardımcı fonksiyon
   const getStats = () => {
@@ -107,199 +115,114 @@ function App() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
-        
-        {/* Gradyanlı Başlık */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-900 pb-4">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
-              Trading Research Platform
-            </h1>
-            <p className="text-slate-400 mt-1 text-sm">
-              Manual backtesting and historical market replay analysis tool.
-            </p>
-          </div>
-          
-          {/* Hızlı Bilgi Rozetleri */}
-          {chartData.length > 0 && !loading && (
-            <div className="flex gap-2 flex-wrap">
-              <span className="px-3 py-1.5 bg-slate-900/60 border border-slate-800 text-xs font-semibold rounded-lg text-emerald-400 flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5" />
-                {symbol.toUpperCase()}
-              </span>
-              <span className="px-3 py-1.5 bg-slate-900/60 border border-slate-800 text-xs font-semibold rounded-lg text-blue-400 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" />
-                {timeframe}
-              </span>
-            </div>
-          )}
+      <div className="h-full w-full flex flex-col p-2 space-y-2 overflow-hidden bg-[#070b13]">
+        {/* Grafik Görüntüleme Alanı */}
+        <div className="flex-1 min-h-0 w-full relative">
+          <CandleChart
+            data={chartData}
+            logScale={logScale}
+            setLogScale={setLogScale}
+            indicators={indicators}
+            onToggleIndicator={handleToggleIndicator}
+            provider={provider}
+            setProvider={setProvider}
+            symbol={symbol}
+            setSymbol={setSymbol}
+            timeframe={timeframe}
+            setTimeframe={setTimeframe}
+            start={start}
+            setStart={setStart}
+            end={end}
+            setEnd={setEnd}
+            loading={loading}
+            error={error}
+          />
         </div>
 
-        {/* Yatay Kontrol Paneli Araç Çubuğu */}
-        <div className="bg-[#0d1321]/90 border border-slate-900 rounded-2xl p-4 shadow-xl flex flex-wrap gap-4 items-end justify-between backdrop-blur-md">
-          <div className="flex flex-wrap gap-4 items-end flex-1">
-            {/* Sağlayıcı Seçimi */}
-            <div className="flex flex-col gap-1 min-w-[130px]">
-              <label className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Data Provider</label>
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value)}
-                className="bg-[#070b13] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              >
-                <option value="binance">Binance Spot</option>
-                <option value="nasdaq">Nasdaq Stock</option>
-                <option value="bist">Borsa Istanbul (BIST)</option>
-              </select>
-            </div>
-
-            {/* Sembol Girişi */}
-            <div className="flex flex-col gap-1 min-w-[130px]">
-              <label className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Symbol / Ticker</label>
-              <input
-                type="text"
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value.toUpperCase().trim())}
-                placeholder="e.g. BTCUSDT"
-                className="bg-[#070b13] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition uppercase"
-              />
-            </div>
-
-            {/* Zaman Dilimi Seçimi */}
-            <div className="flex flex-col gap-1 min-w-[120px]">
-              <label className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Timeframe</label>
-              <select
-                value={timeframe}
-                onChange={(e) => setTimeframe(e.target.value)}
-                className="bg-[#070b13] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              >
-                <option value="1m">1 Minute</option>
-                <option value="5m">5 Minutes</option>
-                <option value="15m">15 Minutes</option>
-                <option value="1h">1 Hour</option>
-                <option value="4h">4 Hours</option>
-                <option value="1d">1 Day</option>
-                <option value="1w">1 Week</option>
-                <option value="1mo">1 Month</option>
-              </select>
-            </div>
-
-            {/* Başlangıç Tarihi */}
-            <div className="flex flex-col gap-1 min-w-[135px]">
-              <label className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Start Date</label>
-              <input
-                type="date"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                className="bg-[#070b13] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              />
-            </div>
-
-            {/* Bitiş Tarihi */}
-            <div className="flex flex-col gap-1 min-w-[135px]">
-              <label className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">End Date</label>
-              <input
-                type="date"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                className="bg-[#070b13] border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              />
-            </div>
-
-            {/* Logaritmik Ölçek Seçeneği */}
-            <div className="flex items-center gap-2 h-[32px] px-3 bg-[#070b13] border border-slate-800 rounded-xl">
-              <input
-                type="checkbox"
-                id="logScale"
-                checked={logScale}
-                onChange={(e) => setLogScale(e.target.checked)}
-                className="w-3.5 h-3.5 accent-indigo-500 rounded cursor-pointer"
-              />
-              <label htmlFor="logScale" className="text-xs text-slate-300 font-medium select-none cursor-pointer">
-                Log Scale
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {/* Teknik Göstergeler Seçim Çubuğu */}
-        <IndicatorToolbar state={indicators} onToggle={handleToggleIndicator} />
-
-        {/* Ana İçerik Alanı - Tam Genişlik */}
-        <div className="space-y-6">
-          {/* Grafik Görüntüleme Alanı */}
-          <div className="relative min-h-[560px] flex items-center justify-center bg-[#0d1321]/50 border border-slate-900 rounded-2xl overflow-hidden shadow-2xl p-4">
-            {loading && (
-              <div className="absolute inset-0 bg-[#070b13]/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-10 h-10 text-indigo-400 animate-spin" />
-                <span className="text-slate-300 text-sm font-medium">Loading market data...</span>
-              </div>
-            )}
-
-            {error && !loading && (
-              <div className="flex flex-col items-center text-center max-w-md p-6 space-y-3 z-10">
-                <div className="p-3 bg-red-950/40 border border-red-900/60 rounded-full text-red-400">
-                  <AlertCircle className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-bold text-red-200">Veri Yüklenemedi</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">{error}</p>
-                <p className="text-slate-500 text-xs">
-                  İpucu: Komut satırından `python scripts/download_data.py` çalıştırarak bu veriyi indirmiş olduğunuzdan emin olun.
-                </p>
-              </div>
-            )}
-
-            {!error && chartData.length === 0 && !loading && (
-              <div className="flex flex-col items-center text-center max-w-sm p-6 space-y-3">
-                <div className="p-3 bg-slate-900 border border-slate-800 rounded-full text-slate-400">
-                  <BarChart3 className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-200">Chart Ready to Load</h3>
-                <p className="text-slate-400 text-sm">
-                  Select data provider, symbol, and timeframe from the control panel and click "Load Chart".
-                </p>
-              </div>
-            )}
-
-            {!error && chartData.length > 0 && (
-              <div className="w-full h-full">
-                <CandleChart data={chartData} logScale={logScale} indicators={indicators} />
-              </div>
-            )}
-          </div>
-
-          {/* İstatistik Paneli Bileşenleri */}
-          {stats && !loading && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {/* Bar Sayısı */}
-              <div className="bg-[#0d1321]/60 border border-slate-900 rounded-2xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-slate-500 font-medium">Total Bars</span>
-                <span className="text-lg font-bold text-slate-100">{stats.count}</span>
-              </div>
-              {/* Değişim Yüzdesi */}
-              <div className="bg-[#0d1321]/60 border border-slate-900 rounded-2xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-slate-500 font-medium">Price Change %</span>
-                <span className={`text-lg font-bold ${parseFloat(stats.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {parseFloat(stats.change) >= 0 ? '+' : ''}{stats.change}%
+        {/* İstatistik Paneli Bileşenleri (Açılır-Kapanır Çekmece) */}
+        {stats && !loading && (
+          <div className="bg-[#0d1321]/90 border border-slate-900/60 rounded-xl overflow-hidden shadow-xl transition-all duration-300">
+            {/* Açılır Kapanır Başlık Butonu */}
+            <button
+              onClick={() => setIsStatsOpen(!isStatsOpen)}
+              className="w-full flex items-center justify-between px-4 py-2 hover:bg-slate-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider select-none">
+                  İstatistikler & Veri Analizi
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium font-mono select-none">
+                  ({stats.count} mum verisi)
                 </span>
               </div>
-              {/* En Yüksek Fiyat */}
-              <div className="bg-[#0d1321]/60 border border-slate-900 rounded-2xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-slate-500 font-medium">Highest</span>
-                <span className="text-lg font-bold text-slate-100">{stats.highest}</span>
+              
+              {/* Kapalıyken Gösterilen Hızlı Özet Veriler */}
+              <div className="flex items-center gap-4">
+                {!isStatsOpen && (
+                  <div className="flex items-center gap-4 text-[11px] font-medium text-slate-400 font-sans">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 font-semibold select-none">Fiyat Değişimi:</span>
+                      <span className={`${parseFloat(stats.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {parseFloat(stats.change) >= 0 ? '+' : ''}{stats.change}%
+                      </span>
+                    </div>
+                    <div className="w-px h-3 bg-slate-800" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 font-semibold select-none">En Yüksek:</span>
+                      <span className="text-slate-200 font-mono">{stats.highest}</span>
+                    </div>
+                    <div className="w-px h-3 bg-slate-800" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 font-semibold select-none">En Düşük:</span>
+                      <span className="text-slate-200 font-mono">{stats.lowest}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="p-0.5 rounded hover:bg-slate-800/40">
+                  {isStatsOpen ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  )}
+                </div>
               </div>
-              {/* En Düşük Fiyat */}
-              <div className="bg-[#0d1321]/60 border border-slate-900 rounded-2xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-slate-500 font-medium">Lowest</span>
-                <span className="text-lg font-bold text-slate-100">{stats.lowest}</span>
+            </button>
+
+            {/* Genişletilmiş İstatistik Kartları */}
+            {isStatsOpen && (
+              <div className="px-4 pb-3 grid grid-cols-2 md:grid-cols-5 gap-3 border-t border-slate-900/60 pt-3 animate-fadeIn">
+                {/* Bar Sayısı */}
+                <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Total Bars</span>
+                  <span className="text-sm font-bold text-slate-100 font-mono">{stats.count}</span>
+                </div>
+                {/* Değişim Yüzdesi */}
+                <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Price Change</span>
+                  <span className={`text-sm font-bold font-mono ${parseFloat(stats.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {parseFloat(stats.change) >= 0 ? '+' : ''}{stats.change}%
+                  </span>
+                </div>
+                {/* En Yüksek Fiyat */}
+                <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Highest Price</span>
+                  <span className="text-sm font-bold text-slate-100 font-mono">{stats.highest}</span>
+                </div>
+                {/* En Düşük Fiyat */}
+                <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Lowest Price</span>
+                  <span className="text-sm font-bold text-slate-100 font-mono">{stats.lowest}</span>
+                </div>
+                {/* Ort. Hacim */}
+                <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5 col-span-2 md:col-span-1">
+                  <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Average Volume</span>
+                  <span className="text-sm font-bold text-slate-100 font-mono">{stats.avgVolume}</span>
+                </div>
               </div>
-              {/* Ort. Hacim */}
-              <div className="bg-[#0d1321]/60 border border-slate-900 rounded-2xl p-4 flex flex-col gap-1 col-span-2 md:col-span-1">
-                <span className="text-xs text-slate-500 font-medium">Average Volume</span>
-                <span className="text-lg font-bold text-slate-100">{stats.avgVolume}</span>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

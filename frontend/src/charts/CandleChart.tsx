@@ -9,6 +9,9 @@ import {
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY,
 } from './drawings/types';
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
+import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
+import type { IndicatorsState } from './IndicatorToolbar';
+import { DEFAULT_INDICATORS_STATE } from './IndicatorToolbar';
 
 interface CandleData {
   time: number;
@@ -22,6 +25,7 @@ interface CandleData {
 interface CandleChartProps {
   data: CandleData[];
   logScale?: boolean;
+  indicators?: IndicatorsState;
 }
 
 interface DragState {
@@ -29,12 +33,40 @@ interface DragState {
   handleIndex: number;
 }
 
-export default function CandleChart({ data, logScale = false }: CandleChartProps) {
+const CHART_HEIGHT = 600;
+
+export default function CandleChart({
+  data,
+  logScale = false,
+  indicators = DEFAULT_INDICATORS_STATE,
+}: CandleChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addCandlestickSeries']> | null>(null);
   const volumeSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
   const primitiveRef = useRef<DrawingsPrimitive | null>(null);
+
+  // Indicator Series References
+  const ema20Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const ema50Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const ema100Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const ema200Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+
+  const rsiRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+
+  const macdLineRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const macdSignalRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const macdHistRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
+
+  // Sub-pane resize state
+  const [subPaneRatio, setSubPaneRatio] = useState(0.28);
+  const [rsiMacdSplit, setRsiMacdSplit] = useState(0.5); // 0-1: fraction of sub-pane area for RSI (top)
+  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
+  const [dividerHovered, setDividerHovered] = useState<'main' | 'sub' | null>(null);
+  const isDraggingDividerRef = useRef(false);
+  const activeDividerRef = useRef<'main' | 'sub' | null>(null);
+  const subPaneRatioRef = useRef(0.28);
+  subPaneRatioRef.current = subPaneRatio; // keep ref in sync for mousemove closure
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('pointer');
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -51,6 +83,57 @@ export default function CandleChart({ data, logScale = false }: CandleChartProps
   const currentPointsRef = useRef<DrawingPoint[]>([]);
   const selectedDrawingRef = useRef<Drawing | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
+
+  // --- Divider drag handler ---
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent, which: 'main' | 'sub') => {
+    isDraggingDividerRef.current = true;
+    activeDividerRef.current = which;
+    setIsDraggingDivider(true);
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  // Window-level mouse listeners for divider drag
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingDividerRef.current || !chartContainerRef.current || !activeDividerRef.current) return;
+      const rect = chartContainerRef.current.getBoundingClientRect();
+      const relativeY = e.clientY - rect.top;
+
+      if (activeDividerRef.current === 'main') {
+        const newRatio = 1 - relativeY / rect.height;
+        setSubPaneRatio(Math.max(0.10, Math.min(0.65, newRatio)));
+      } else {
+        // Sub-divider: position within the sub-pane area
+        const curRatio = subPaneRatioRef.current;
+        const subAreaStartPx = rect.height * (1 - curRatio);
+        const subAreaHeightPx = rect.height * curRatio;
+        if (subAreaHeightPx <= 0) return;
+        const posInSubArea = (relativeY - subAreaStartPx) / subAreaHeightPx;
+        setRsiMacdSplit(Math.max(0.15, Math.min(0.85, posInSubArea)));
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingDividerRef.current) {
+        isDraggingDividerRef.current = false;
+        activeDividerRef.current = null;
+        setIsDraggingDivider(false);
+        setDividerHovered(null);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   const cancelDrawing = useCallback(() => {
     currentPointsRef.current = [];
@@ -268,7 +351,7 @@ export default function CandleChart({ data, logScale = false }: CandleChartProps
         },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 500,
+      height: 600,
     });
 
     const candleSeries = chart.addCandlestickSeries({
@@ -282,11 +365,11 @@ export default function CandleChart({ data, logScale = false }: CandleChartProps
     const volumeSeries = chart.addHistogramSeries({
       color: '#2563eb',
       priceFormat: { type: 'volume' },
-      priceScaleId: '',
+      priceScaleId: 'volume',
     });
 
-    chart.priceScale('').applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0 },
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: { top: 0.8, bottom: 0.02 },
     });
 
     const primitive = new DrawingsPrimitive();
@@ -439,6 +522,17 @@ export default function CandleChart({ data, logScale = false }: CandleChartProps
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', handleKeyDown);
+
+      // Clean up series refs
+      ema20Ref.current = null;
+      ema50Ref.current = null;
+      ema100Ref.current = null;
+      ema200Ref.current = null;
+      rsiRef.current = null;
+      macdLineRef.current = null;
+      macdSignalRef.current = null;
+      macdHistRef.current = null;
+
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -483,8 +577,336 @@ export default function CandleChart({ data, logScale = false }: CandleChartProps
     }
   }, [data]);
 
+  // Indicator Calculations & Series Updates (creates/removes series, sets data)
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !data || data.length === 0) return;
+
+    // --- CREATE / REMOVE SERIES ---
+
+    // EMA 20
+    if (indicators.ema20) {
+      if (!ema20Ref.current) {
+        ema20Ref.current = chart.addLineSeries({
+          color: '#f59e0b',
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '',
+        });
+      }
+      const ema20 = calculateEMA(data, 20);
+      ema20Ref.current.setData(ema20.map(d => ({ time: d.time as Time, value: d.value })));
+    } else if (ema20Ref.current) {
+      chart.removeSeries(ema20Ref.current);
+      ema20Ref.current = null;
+    }
+
+    // EMA 50
+    if (indicators.ema50) {
+      if (!ema50Ref.current) {
+        ema50Ref.current = chart.addLineSeries({
+          color: '#06b6d4',
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '',
+        });
+      }
+      const ema50 = calculateEMA(data, 50);
+      ema50Ref.current.setData(ema50.map(d => ({ time: d.time as Time, value: d.value })));
+    } else if (ema50Ref.current) {
+      chart.removeSeries(ema50Ref.current);
+      ema50Ref.current = null;
+    }
+
+    // EMA 100
+    if (indicators.ema100) {
+      if (!ema100Ref.current) {
+        ema100Ref.current = chart.addLineSeries({
+          color: '#8b5cf6',
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '',
+        });
+      }
+      const ema100 = calculateEMA(data, 100);
+      ema100Ref.current.setData(ema100.map(d => ({ time: d.time as Time, value: d.value })));
+    } else if (ema100Ref.current) {
+      chart.removeSeries(ema100Ref.current);
+      ema100Ref.current = null;
+    }
+
+    // EMA 200
+    if (indicators.ema200) {
+      if (!ema200Ref.current) {
+        ema200Ref.current = chart.addLineSeries({
+          color: '#ec4899',
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '',
+        });
+      }
+      const ema200 = calculateEMA(data, 200);
+      ema200Ref.current.setData(ema200.map(d => ({ time: d.time as Time, value: d.value })));
+    } else if (ema200Ref.current) {
+      chart.removeSeries(ema200Ref.current);
+      ema200Ref.current = null;
+    }
+
+    // RSI (Sub-pane)
+    if (indicators.rsi) {
+      if (!rsiRef.current) {
+        rsiRef.current = chart.addLineSeries({
+          color: '#ffffff',
+          lineWidth: 1,
+          priceScaleId: 'rsi',
+          title: '',
+          lastValueVisible: false,
+          priceLineVisible: false,
+          // Force strict 0-100 range — no auto-padding boşluğu
+          autoscaleInfoProvider: () => ({
+            priceRange: { minValue: 0, maxValue: 100 },
+            margins: { above: 2, below: 2 },
+          }),
+        });
+
+        rsiRef.current.createPriceLine({
+          price: 70,
+          color: 'rgba(239, 68, 68, 0.7)',
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        });
+        rsiRef.current.createPriceLine({
+          price: 50,
+          color: 'rgba(148, 163, 184, 0.4)',
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: true,
+          title: '',
+        });
+        rsiRef.current.createPriceLine({
+          price: 30,
+          color: 'rgba(16, 185, 129, 0.7)',
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        });
+      }
+      const rsi = calculateRSI(data, 14);
+      rsiRef.current.setData(rsi.map(d => ({ time: d.time as Time, value: d.value })));
+    } else if (rsiRef.current) {
+      chart.removeSeries(rsiRef.current);
+      rsiRef.current = null;
+    }
+
+    // MACD (Sub-pane)
+    if (indicators.macd) {
+      if (!macdHistRef.current || !macdLineRef.current || !macdSignalRef.current) {
+        macdHistRef.current = chart.addHistogramSeries({
+          priceScaleId: 'macd',
+          title: '',
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+        macdLineRef.current = chart.addLineSeries({
+          color: '#3b82f6',
+          lineWidth: 2,
+          priceScaleId: 'macd',
+          title: '',
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+        macdSignalRef.current = chart.addLineSeries({
+          color: '#f59e0b',
+          lineWidth: 1,
+          priceScaleId: 'macd',
+          title: '',
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+      }
+      const macd = calculateMACD(data, 12, 26, 9);
+      macdHistRef.current.setData(macd.histogram.map(d => ({ time: d.time as Time, value: d.value, color: d.color })));
+      macdLineRef.current.setData(macd.macd.map(d => ({ time: d.time as Time, value: d.value })));
+      macdSignalRef.current.setData(macd.signal.map(d => ({ time: d.time as Time, value: d.value })));
+    } else {
+      if (macdHistRef.current) { chart.removeSeries(macdHistRef.current); macdHistRef.current = null; }
+      if (macdLineRef.current) { chart.removeSeries(macdLineRef.current); macdLineRef.current = null; }
+      if (macdSignalRef.current) { chart.removeSeries(macdSignalRef.current); macdSignalRef.current = null; }
+    }
+  }, [data, indicators]);
+
+  // --- MARGIN LAYOUT EFFECT (separate so it responds to subPaneRatio drag without recreating series) ---
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const rsiActive = indicators.rsi;
+    const macdActive = indicators.macd;
+    const subPanesCount = (rsiActive ? 1 : 0) + (macdActive ? 1 : 0);
+
+    if (subPanesCount === 0) {
+      // No sub-panes — main chart uses full area (leaving small room for time axis label visibility)
+      chart.priceScale('right').applyOptions({
+        visible: true,
+        borderColor: '#1e293b',
+        scaleMargins: { top: 0.02, bottom: 0.08 },
+      });
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: { top: 0.82, bottom: 0.02 },
+      });
+    } else {
+      // Main chart bottom margin is exactly subPaneRatio
+      chart.priceScale('right').applyOptions({
+        visible: true,
+        borderColor: '#1e293b',
+        scaleMargins: { top: 0.02, bottom: subPaneRatio },
+      });
+
+      // Volume occupies the bottom 15% of the main chart area
+      const volumeTop = Math.max(0.40, 1 - subPaneRatio - 0.15);
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: { top: volumeTop, bottom: subPaneRatio },
+      });
+
+      // Sub-pane area starts exactly where main chart ends
+      const subTop = 1 - subPaneRatio;
+
+      if (subPanesCount === 1) {
+        if (rsiActive) {
+          chart.priceScale('rsi').applyOptions({
+            visible: true,
+            autoScale: true,
+            borderColor: '#1e293b',
+            scaleMargins: { top: subTop, bottom: 0.02 },
+          });
+        }
+        if (macdActive) {
+          chart.priceScale('macd').applyOptions({
+            visible: true,
+            autoScale: true,
+            borderColor: '#1e293b',
+            scaleMargins: { top: subTop, bottom: 0.02 },
+          });
+        }
+      } else {
+        // 2 sub-panes — split using rsiMacdSplit fraction of the subPaneRatio height
+        const mid = subTop + subPaneRatio * rsiMacdSplit;
+        if (rsiActive) {
+          chart.priceScale('rsi').applyOptions({
+            visible: true,
+            autoScale: true,
+            borderColor: '#1e293b',
+            scaleMargins: { top: subTop, bottom: 1 - mid },
+          });
+        }
+        if (macdActive) {
+          chart.priceScale('macd').applyOptions({
+            visible: true,
+            autoScale: true,
+            borderColor: '#1e293b',
+            scaleMargins: { top: mid, bottom: 0.02 },
+          });
+        }
+      }
+    }
+  }, [subPaneRatio, rsiMacdSplit, indicators]);
+
+  // Compute divider positions — mirrors margin layout formula exactly (zero gaps)
+  const hasSubPane = indicators.rsi || indicators.macd;
+  const hasBothSubPanes = indicators.rsi && indicators.macd;
+
+  const mainDividerY = CHART_HEIGHT * (1 - subPaneRatio);
+
+  const subTop = 1 - subPaneRatio;
+  const subDividerY = hasBothSubPanes
+    ? CHART_HEIGHT * (subTop + subPaneRatio * rsiMacdSplit)
+    : 0;
+
+  const mainHighlight = isDraggingDivider && activeDividerRef.current === 'main' || dividerHovered === 'main';
+  const subHighlight = isDraggingDivider && activeDividerRef.current === 'sub' || dividerHovered === 'sub';
+
+  // Shared divider renderer
+  const renderDivider = (
+    pixelY: number,
+    which: 'main' | 'sub',
+    highlight: boolean,
+  ) => (
+    <div
+      key={which}
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: `${pixelY - 7}px`,
+        height: '14px',
+        zIndex: 10,
+        pointerEvents: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {/* Grab strip: 14px centered grab zone, pointer-events enabled */}
+      <div
+        onMouseDown={(e) => handleDividerMouseDown(e, which)}
+        onMouseEnter={() => setDividerHovered(which)}
+        onMouseLeave={() => { if (!isDraggingDividerRef.current) setDividerHovered(null); }}
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          height: '14px',
+          cursor: 'ns-resize',
+          pointerEvents: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {/* Visible line */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: '6px',
+            height: highlight ? '3px' : '2px',
+            background: highlight ? '#3b82f6' : '#475569',
+            transition: 'all 0.12s ease',
+            boxShadow: highlight ? '0 0 6px rgba(59,130,246,0.5)' : 'none',
+            pointerEvents: 'none',
+          }}
+        />
+        {/* Handle dots */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '4px',
+            opacity: highlight ? 1 : 0.5,
+            transition: 'opacity 0.12s ease',
+            pointerEvents: 'none',
+            transform: 'translateY(-1px)',
+          }}
+        >
+          <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
+          <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
+          <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
+        </div>
+      </div>
+    </div>
+  );
+
+
   return (
-    <div className="relative w-full h-[500px] border border-slate-800 rounded-xl overflow-hidden bg-[#090d16]">
+    <div className="relative w-full h-[600px] border border-slate-800 rounded-xl overflow-hidden bg-[#090d16]">
       <div className="absolute top-2 left-2 z-20 flex flex-col gap-1.5">
         <DrawingToolbar
           activeTool={activeTool}
@@ -502,6 +924,13 @@ export default function CandleChart({ data, logScale = false }: CandleChartProps
           />
         )}
       </div>
+
+      {/* Main divider: between price chart and sub-panes */}
+      {hasSubPane && renderDivider(mainDividerY, 'main', mainHighlight)}
+
+      {/* Sub divider: between RSI and MACD (only when both active) */}
+      {hasBothSubPanes && renderDivider(subDividerY, 'sub', subHighlight)}
+
       <div ref={chartContainerRef} className="w-full h-full" />
     </div>
   );

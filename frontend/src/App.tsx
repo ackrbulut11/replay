@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
+import IndicatorToolbar, { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
 import { Loader2, AlertCircle, BarChart3, Calendar, Coins } from 'lucide-react';
 
 interface CandleData {
@@ -20,10 +21,15 @@ function App() {
   const [end, setEnd] = useState('');
   
   const [logScale, setLogScale] = useState(false);
+  const [indicators, setIndicators] = useState<IndicatorsState>(DEFAULT_INDICATORS_STATE);
   
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleToggleIndicator = (key: keyof IndicatorsState) => {
+    setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const handleLoadChart = async () => {
     setLoading(true);
@@ -215,10 +221,13 @@ function App() {
           </div>
         </div>
 
+        {/* Technical Indicators Selection Toolbar */}
+        <IndicatorToolbar state={indicators} onToggle={handleToggleIndicator} />
+
         {/* Main Content Area - Full Width */}
         <div className="space-y-6">
           {/* Chart Display Area */}
-          <div className="relative min-h-[500px] flex items-center justify-center bg-[#0d1321]/50 border border-slate-900 rounded-2xl overflow-hidden shadow-2xl p-4">
+          <div className="relative min-h-[560px] flex items-center justify-center bg-[#0d1321]/50 border border-slate-900 rounded-2xl overflow-hidden shadow-2xl p-4">
             {loading && (
               <div className="absolute inset-0 bg-[#070b13]/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
                 <Loader2 className="w-10 h-10 text-indigo-400 animate-spin" />
@@ -253,7 +262,7 @@ function App() {
 
             {!error && chartData.length > 0 && (
               <div className="w-full h-full">
-                <CandleChart data={chartData} logScale={logScale} />
+                <CandleChart data={chartData} logScale={logScale} indicators={indicators} />
               </div>
             )}
           </div>

@@ -793,7 +793,7 @@ export default function CandleChart({
             visible: true,
             autoScale: true,
             borderColor: '#1e293b',
-            scaleMargins: { top: subTop, bottom: 0.02 },
+            scaleMargins: { top: subTop + 0.04, bottom: 0.02 },
           });
         }
       } else {
@@ -813,7 +813,7 @@ export default function CandleChart({
             autoScale: true,
             borderColor: '#1e293b',
             // Ayırıcıya değmesini önlemek için üstte küçük bir boşluk bırakır, çökmeleri önlemek için 0.95 ile sınırlanmıştır
-            scaleMargins: { top: Math.min(mid + 0.025, 0.95), bottom: 0.02 },
+            scaleMargins: { top: Math.min(mid + 0.04, 0.95), bottom: 0.02 },
           });
         }
       }
@@ -894,7 +894,7 @@ export default function CandleChart({
           position: 'absolute',
           left: 0,
           right: 0,
-          bottom: 0,
+          bottom: '2px',
           height: highlight ? '2px' : '1px',
           background: highlight ? '#3b82f6' : '#475569',
           transition: 'all 0.12s ease',

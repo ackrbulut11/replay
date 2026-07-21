@@ -97,6 +97,18 @@ export default function CandleChart({
   const [activeTool, setActiveTool] = useState<DrawingTool>('pointer');
   const [snapEnabled, setSnapEnabled] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<Drawing | null>(null);
+
+  const [toolSettings, setToolSettings] = useState<Record<DrawingTool, DrawingEditOptions>>({
+    pointer: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
+    trendLine: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
+    horizontalRay: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
+    rectangle: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
+    parallelChannel: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
+  });
+
+  const toolSettingsRef = useRef(toolSettings);
+  toolSettingsRef.current = toolSettings;
+
   const [editOptions, setEditOptions] = useState<DrawingEditOptions>({
     color: DEFAULT_DRAWING_COLOR,
     lineWidth: DEFAULT_LINE_WIDTH,
@@ -191,7 +203,8 @@ export default function CandleChart({
       cancelDrawing();
     } else {
       setSelectedDrawing(null);
-      setEditOptions({ color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY });
+      const settings = toolSettingsRef.current[tool] || { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY };
+      setEditOptions(settings);
     }
   }, [cancelDrawing]);
 
@@ -304,12 +317,23 @@ export default function CandleChart({
   const updateSelectedOptions = useCallback((opts: DrawingEditOptions) => {
     setEditOptions(opts);
     const sel = selectedDrawingRef.current;
-    if (!sel) return;
-    sel.color = opts.color;
-    sel.lineWidth = opts.lineWidth;
-    sel.opacity = opts.opacity;
-    drawingsRef.current = drawingsRef.current.map(d => d.id === sel.id ? sel : d);
-    primitiveRef.current?.setDrawings(drawingsRef.current);
+    if (sel) {
+      sel.color = opts.color;
+      sel.lineWidth = opts.lineWidth;
+      sel.opacity = opts.opacity;
+      drawingsRef.current = drawingsRef.current.map(d => d.id === sel.id ? sel : d);
+      primitiveRef.current?.setDrawings(drawingsRef.current);
+
+      setToolSettings(prev => ({
+        ...prev,
+        [sel.tool]: opts,
+      }));
+    } else if (activeToolRef.current !== 'pointer') {
+      setToolSettings(prev => ({
+        ...prev,
+        [activeToolRef.current]: opts,
+      }));
+    }
   }, []);
 
   const applyDrag = useCallback((drawingId: string, handleIndex: number, newPoint: DrawingPoint): Drawing | null => {
@@ -471,13 +495,19 @@ export default function CandleChart({
       currentPointsRef.current = newPoints;
 
       if (newPoints.length === config.pointsNeeded) {
+        const settings = toolSettingsRef.current[tool] || {
+          color: DEFAULT_DRAWING_COLOR,
+          lineWidth: DEFAULT_LINE_WIDTH,
+          opacity: DEFAULT_OPACITY,
+        };
+
         const drawing: Drawing = {
           id: generateDrawingId(),
           tool,
           points: newPoints,
-          color: DEFAULT_DRAWING_COLOR,
-          lineWidth: DEFAULT_LINE_WIDTH,
-          opacity: DEFAULT_OPACITY,
+          color: settings.color,
+          lineWidth: settings.lineWidth,
+          opacity: settings.opacity,
         };
         drawingsRef.current = [...drawingsRef.current, drawing];
         primitive.setDrawings(drawingsRef.current);
@@ -524,13 +554,14 @@ export default function CandleChart({
       if (!point) return;
 
       const previewPoints = [...currentPointsRef.current, point];
+      const settings = toolSettingsRef.current[activeToolRef.current];
       primitive.setPreview({
         id: 'preview',
         tool: activeToolRef.current,
         points: previewPoints,
-        color: 'rgba(59, 130, 246, 0.5)',
-        lineWidth: DEFAULT_LINE_WIDTH,
-        opacity: 0.6,
+        color: settings ? settings.color : 'rgba(59, 130, 246, 0.5)',
+        lineWidth: settings ? settings.lineWidth : DEFAULT_LINE_WIDTH,
+        opacity: settings ? settings.opacity * 0.7 : 0.6,
       });
     });
 
@@ -1182,13 +1213,20 @@ export default function CandleChart({
           onToggleSnap={toggleSnap}
           onClearAll={clearAll}
         />
-        {selectedDrawing && (
+        {selectedDrawing ? (
           <DrawingEditPanel
+            title={`Düzenle (${TOOL_CONFIG[selectedDrawing.tool]?.label || 'Çizim'}):`}
             options={editOptions}
             onChange={updateSelectedOptions}
             onDelete={deleteSelected}
           />
-        )}
+        ) : activeTool !== 'pointer' ? (
+          <DrawingEditPanel
+            title={`Stil (${TOOL_CONFIG[activeTool]?.label || 'Araç'}):`}
+            options={editOptions}
+            onChange={updateSelectedOptions}
+          />
+        ) : null}
       </div>
 
       {/* Ana ayırıcı: fiyat grafiği ve alt paneller arasında */}

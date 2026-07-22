@@ -11,9 +11,11 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
+import SymbolSearchModal from '../components/SymbolSearchModal';
+
 
 interface CandleData {
   time: number;
@@ -141,6 +143,8 @@ export default function CandleChart({
   const [chartHeight, setChartHeight] = useState(600);
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
   const [isDatesOpen, setIsDatesOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
 
   // --- REPLAY ENGINE STATE & HANDLERS ---
   const [replayState, setReplayState] = useReplayStore();
@@ -1222,17 +1226,21 @@ export default function CandleChart({
             </span>
           </div>
 
-          {/* Sembol / Ticker Girişi */}
-          <div className="flex items-center gap-1.5 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
-            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Symbol</span>
-            <input
-              type="text"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase().trim())}
-              placeholder="BTCUSDT"
-              className="bg-transparent border-none outline-none text-xs font-semibold text-slate-100 w-16 uppercase placeholder-slate-600 focus:ring-0"
-            />
-          </div>
+          {/* Sembol / Ticker Girişi ve Arama Butonu */}
+          <button
+            onClick={() => setIsSearchModalOpen(true)}
+            className="flex items-center gap-2 bg-[#070b13]/80 border border-slate-800 hover:border-indigo-500/50 rounded-lg px-2.5 py-1 transition-all group"
+            title="Sembol Ara (BIST 100, NASDAQ, Crypto)"
+          >
+            <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Symbol:</span>
+              <span className="text-xs font-bold text-slate-100 font-mono tracking-tight group-hover:text-indigo-300">
+                {symbol || 'ARA'}
+              </span>
+            </div>
+          </button>
+
 
           {/* Sağlayıcı Seçimi */}
           <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
@@ -1500,6 +1508,18 @@ export default function CandleChart({
       )}
 
       <div ref={chartContainerRef} className="w-full h-full" />
+
+      {/* Sembol Arama Modal Penceresi */}
+      <SymbolSearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        onSelectSymbol={(newSymbol, newProvider) => {
+          setSymbol(newSymbol);
+          setProvider(newProvider);
+        }}
+        currentProvider={provider}
+      />
     </div>
   );
 }
+

@@ -1,10 +1,27 @@
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 from app.data.loader import DataLoader
+from app.data.symbols import get_symbols, search_symbols
 
 router = APIRouter(prefix="/market", tags=["market"])
 loader = DataLoader()
+
+@router.get("/symbols")
+def list_symbols(
+    provider: Optional[str] = Query(None, description="Optional provider filter (binance, nasdaq, bist)")
+) -> List[Dict[str, str]]:
+    """Returns catalog of stocks/symbols with names and sectors."""
+    return get_symbols(provider)
+
+@router.get("/search")
+def search_market_symbols(
+    q: str = Query("", description="Search query string"),
+    provider: Optional[str] = Query(None, description="Optional provider filter (binance, nasdaq, bist)")
+) -> List[Dict[str, str]]:
+    """Search for symbols across BIST, NASDAQ, and Binance."""
+    return search_symbols(q, provider)
+
 
 @router.get("/data")
 def get_market_data(

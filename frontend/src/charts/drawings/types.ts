@@ -1,4 +1,4 @@
-export type DrawingTool = 'pointer' | 'trendLine' | 'horizontalRay' | 'rectangle' | 'parallelChannel';
+export type DrawingTool = 'pointer' | 'ruler' | 'trendLine' | 'horizontalRay' | 'rectangle' | 'parallelChannel';
 
 export interface DrawingPoint {
   time: number;
@@ -12,12 +12,14 @@ export interface Drawing {
   color: string;
   lineWidth: number;
   opacity: number;
+  fillOpacity?: number;
 }
 
 export interface DrawingEditOptions {
   color: string;
   lineWidth: number;
   opacity: number;
+  fillOpacity?: number;
 }
 
 export const DRAWING_COLORS = [
@@ -34,6 +36,7 @@ export const HIT_THRESHOLD = 8;
 
 export const TOOL_CONFIG: Record<DrawingTool, { label: string; pointsNeeded: number }> = {
   pointer: { label: 'Pointer', pointsNeeded: 0 },
+  ruler: { label: 'Cetvel', pointsNeeded: 2 },
   trendLine: { label: 'Trend Line', pointsNeeded: 2 },
   horizontalRay: { label: 'Horizontal Ray', pointsNeeded: 1 },
   rectangle: { label: 'Rectangle', pointsNeeded: 2 },

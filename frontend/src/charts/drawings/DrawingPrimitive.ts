@@ -10,8 +10,17 @@ import type {
   Time,
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
-import type { Drawing } from './types';
+import type { Drawing, DrawingPoint } from './types';
 import { HIT_THRESHOLD } from './types';
+
+export interface CandleData {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
 
 export interface PixelPoint {
   x: number;
@@ -25,6 +34,8 @@ export interface PixelDrawing {
   color: string;
   lineWidth: number;
   opacity: number;
+  fillOpacity?: number;
+  logicalPoints?: DrawingPoint[];
 }
 
 const HANDLE_RADIUS = 5;
@@ -60,8 +71,127 @@ export function getRectHandlePositions(d: PixelDrawing): PixelPoint[] {
 export const RECT_HANDLE_LABELS = ['tl', 't', 'tr', 'r', 'br', 'b', 'bl', 'l'];
 
 function getHandlePositions(d: PixelDrawing): PixelPoint[] {
-  if (d.tool === 'rectangle') return getRectHandlePositions(d);
+  if (d.tool === 'rectangle' || d.tool === 'ruler') return getRectHandlePositions(d);
   return d.points;
+}
+
+function formatNumberTR(val: number, decimals: number = 2): string {
+  const parts = val.toFixed(decimals).split('.');
+  const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  if (decimals > 0 && parts[1]) {
+    const dec = parts[1].replace(/0+$/, '');
+    if (dec.length > 0) return `${intPart},${dec}`;
+    return intPart;
+  }
+  return intPart;
+}
+
+function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function drawArrowHead(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, toX: number, toY: number, size: number = 8) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(
+    toX - size * Math.cos(angle - Math.PI / 6),
+    toY - size * Math.sin(angle - Math.PI / 6)
+  );
+  ctx.lineTo(
+    toX - size * Math.cos(angle + Math.PI / 6),
+    toY - size * Math.sin(angle + Math.PI / 6)
+  );
+  ctx.closePath();
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.fill();
+  ctx.restore();
+}
+
+function computeRulerStats(p1: DrawingPoint, p2: DrawingPoint, candles: CandleData[]) {
+  const price1 = p1.price;
+  const price2 = p2.price;
+  const priceDiff = price2 - price1;
+  const pricePercent = price1 !== 0 ? (priceDiff / price1) * 100 : 0;
+
+  const absPrice = Math.abs(price1);
+  let tickSize = 0.01;
+  if (absPrice >= 10000) tickSize = 0.1;
+  else if (absPrice >= 100) tickSize = 0.01;
+  else if (absPrice >= 1) tickSize = 0.001;
+  else tickSize = 0.00001;
+
+  const ticks = Math.round(Math.abs(priceDiff) / tickSize);
+
+  const priceDiffFormatted = formatNumberTR(Math.abs(priceDiff), 1);
+  const percentFormatted = formatNumberTR(Math.abs(pricePercent), 2);
+  const ticksFormatted = formatNumberTR(ticks, 0);
+
+  const line1 = `${priceDiff < 0 ? '-' : ''}${priceDiffFormatted} (${pricePercent < 0 ? '-' : ''}${percentFormatted}%) ${ticksFormatted}`;
+
+  const t1 = p1.time;
+  const t2 = p2.time;
+  const minTime = Math.min(t1, t2);
+  const maxTime = Math.max(t1, t2);
+
+  let barCount = 0;
+  let volumeSum = 0;
+
+  if (candles.length > 0) {
+    for (const c of candles) {
+      if (c.time >= minTime && c.time <= maxTime) {
+        barCount++;
+        volumeSum += c.volume || 0;
+      }
+    }
+  }
+
+  if (barCount === 0) barCount = 1;
+
+  const durationSec = Math.abs(t2 - t1);
+  const seconds = durationSec > 1e11 ? Math.floor(durationSec / 1000) : durationSec;
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  let durationStr = '';
+  if (days > 0) {
+    durationStr = `${days}g`;
+  } else if (hours > 0) {
+    durationStr = `${hours}sa`;
+  } else if (minutes > 0) {
+    durationStr = `${minutes}dk`;
+  } else {
+    durationStr = `${seconds}s`;
+  }
+
+  const line2 = `${barCount} çubukta, ${durationStr}`;
+
+  let volStr = '';
+  if (volumeSum >= 1e9) {
+    volStr = formatNumberTR(volumeSum / 1e9, 2) + ' B';
+  } else if (volumeSum >= 1e6) {
+    volStr = formatNumberTR(volumeSum / 1e6, 2) + ' M';
+  } else if (volumeSum >= 1e3) {
+    volStr = formatNumberTR(volumeSum / 1e3, 2) + ' K';
+  } else {
+    volStr = formatNumberTR(volumeSum, 0);
+  }
+
+  const line3 = `Hacim ${volStr}`;
+
+  return { line1, line2, line3, isPositive: priceDiff >= 0 };
 }
 
 class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
@@ -69,6 +199,7 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
   private _preview: PixelDrawing | null = null;
   private _selectedId: string | null = null;
   private _hoveredId: string | null = null;
+  private _candles: CandleData[] = [];
 
   setDrawings(drawings: PixelDrawing[]) {
     this._drawings = drawings;
@@ -86,13 +217,17 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
     this._hoveredId = id;
   }
 
+  setCandles(candles: CandleData[]) {
+    this._candles = candles;
+  }
+
   draw(target: CanvasRenderingTarget2D): void {
     target.useMediaCoordinateSpace(({ context: ctx }) => {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
       for (const d of this._drawings) {
-        ctx.globalAlpha = d.opacity;
+        ctx.globalAlpha = d.tool === 'ruler' ? 1 : d.opacity;
         const showHandles = d.id === this._selectedId || d.id === this._hoveredId;
         this._render(ctx, d, false, showHandles);
         ctx.globalAlpha = 1;
@@ -100,7 +235,7 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
 
       if (this._preview) {
         ctx.setLineDash([6, 3]);
-        ctx.globalAlpha = this._preview.opacity;
+        ctx.globalAlpha = this._preview.tool === 'ruler' ? 1 : this._preview.opacity;
         this._render(ctx, this._preview, true, false);
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
@@ -140,6 +275,17 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
         const w = Math.abs(d.points[1].x - d.points[0].x);
         const h = Math.abs(d.points[1].y - d.points[0].y);
         if (!isFinite(w) || !isFinite(h)) return;
+
+        // İç dolgu
+        if (d.fillOpacity != null && d.fillOpacity > 0) {
+          const savedAlpha = ctx.globalAlpha;
+          ctx.globalAlpha = savedAlpha * d.fillOpacity;
+          ctx.fillStyle = d.color;
+          ctx.fillRect(x, y, w, h);
+          ctx.globalAlpha = savedAlpha;
+        }
+
+        // Kenar çizgisi
         ctx.strokeRect(x, y, w, h);
         break;
       }
@@ -171,6 +317,120 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
         ctx.moveTo(d.points[1].x, d.points[1].y);
         ctx.lineTo(p2x, p2y);
         ctx.stroke();
+        break;
+      }
+
+      case 'ruler': {
+        if (d.points.length < 2) return;
+        const x1 = d.points[0].x;
+        const y1 = d.points[0].y;
+        const x2 = d.points[1].x;
+        const y2 = d.points[1].y;
+
+        const minX = Math.min(x1, x2);
+        const maxX = Math.max(x1, x2);
+        const minY = Math.min(y1, y2);
+        const maxY = Math.max(y1, y2);
+        const rectW = maxX - minX;
+        const rectH = maxY - minY;
+
+        // Kardaysa Mavi, Zarardaysa Koyu Kırmızı; Çizerken ve bitince birebir aynı şeffaflık (%14)
+        const isPositive = d.logicalPoints && d.logicalPoints.length >= 2
+          ? d.logicalPoints[1].price >= d.logicalPoints[0].price
+          : y2 <= y1;
+
+        const mainColor = isPositive ? '#2962ff' : '#a71d2a'; // Kar: Mavi, Zarar: Koyu Kırmızı
+        const fillColor = isPositive ? 'rgba(41, 98, 255, 0.14)' : 'rgba(167, 29, 42, 0.14)'; // Çizerkenki %14 şeffaflık sabit
+
+        // 1. Fill shaded background box
+        ctx.fillStyle = fillColor;
+        ctx.fillRect(minX, minY, rectW, rectH);
+
+        // 2. Dashed crosshair lines
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(minX, minY); ctx.lineTo(maxX, minY);
+        ctx.moveTo(minX, maxY); ctx.lineTo(maxX, maxY);
+        ctx.moveTo(minX, minY); ctx.lineTo(minX, maxY);
+        ctx.moveTo(maxX, minY); ctx.lineTo(maxX, maxY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 3. Directional vectors / arrows
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
+
+        ctx.strokeStyle = mainColor;
+        ctx.fillStyle = mainColor;
+        ctx.lineWidth = 2;
+
+        // Vertical arrow (price span)
+        ctx.beginPath();
+        ctx.moveTo(midX, y1);
+        ctx.lineTo(midX, y2);
+        ctx.stroke();
+        drawArrowHead(ctx, midX, y1, midX, y2, 8);
+
+        // Horizontal arrow (time span)
+        ctx.beginPath();
+        ctx.moveTo(x1, midY);
+        ctx.lineTo(x2, midY);
+        ctx.stroke();
+        drawArrowHead(ctx, x1, midY, x2, midY, 8);
+
+        // 4. Callout Tooltip Badge
+        if (d.logicalPoints && d.logicalPoints.length >= 2) {
+          const stats = computeRulerStats(d.logicalPoints[0], d.logicalPoints[1], this._candles);
+
+          const fontHeader = 'bold 13px system-ui, -apple-system, sans-serif';
+          const fontBody = '13px system-ui, -apple-system, sans-serif';
+
+          ctx.font = fontHeader;
+          const w1 = ctx.measureText(stats.line1).width;
+          ctx.font = fontBody;
+          const w2 = ctx.measureText(stats.line2).width;
+          const w3 = ctx.measureText(stats.line3).width;
+
+          const maxTextWidth = Math.max(w1, w2, w3);
+          const boxPaddingX = 14;
+          const boxPaddingY = 10;
+          const lineHeight = 18;
+          const boxW = maxTextWidth + boxPaddingX * 2;
+          const boxH = lineHeight * 3 + boxPaddingY * 2;
+
+          let boxX = midX - boxW / 2;
+          let boxY = minY - boxH - 12;
+
+          if (boxY < 10) {
+            boxY = maxY + 12;
+          }
+
+          // Draw badge background (Kar: Mavi, Zarar: Kırmızı)
+          ctx.fillStyle = mainColor;
+          drawRoundRect(ctx, boxX, boxY, boxW, boxH, 8);
+          ctx.fill();
+
+          // Draw badge text
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+
+          const textCenterX = boxX + boxW / 2;
+          let textY = boxY + boxPaddingY;
+
+          ctx.font = fontHeader;
+          ctx.fillText(stats.line1, textCenterX, textY);
+
+          textY += lineHeight;
+          ctx.font = fontBody;
+          ctx.fillText(stats.line2, textCenterX, textY);
+
+          textY += lineHeight;
+          ctx.fillText(stats.line3, textCenterX, textY);
+        }
+
         break;
       }
     }
@@ -216,7 +476,8 @@ function getDrawingSegments(d: PixelDrawing): [PixelPoint, PixelPoint][] {
     case 'horizontalRay':
       segs.push([d.points[0], { x: d.points[0].x + 99999, y: d.points[0].y }]);
       break;
-    case 'rectangle': {
+    case 'rectangle':
+    case 'ruler': {
       const x1 = Math.min(d.points[0].x, d.points[1].x);
       const y1 = Math.min(d.points[0].y, d.points[1].y);
       const x2 = Math.max(d.points[0].x, d.points[1].x);
@@ -335,6 +596,11 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
     this._requestUpdate?.();
   }
 
+  setCandles(candles: CandleData[]) {
+    this._renderer.setCandles(candles);
+    this._requestUpdate?.();
+  }
+
   get chart() { return this._chart; }
   get series() { return this._series; }
 
@@ -378,6 +644,8 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
       color: d.color,
       lineWidth: d.lineWidth,
       opacity: d.opacity,
+      fillOpacity: d.fillOpacity,
+      logicalPoints: d.points,
     };
   }
 

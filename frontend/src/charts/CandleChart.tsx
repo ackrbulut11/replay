@@ -130,9 +130,10 @@ export default function CandleChart({
 
   const [toolSettings, setToolSettings] = useState<Record<DrawingTool, DrawingEditOptions>>({
     pointer: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
+    ruler: { color: '#2962ff', lineWidth: 2, opacity: 0.9 },
     trendLine: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
     horizontalRay: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
-    rectangle: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
+    rectangle: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, fillOpacity: 0.16 },
     parallelChannel: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
   });
 
@@ -151,16 +152,25 @@ export default function CandleChart({
   const currentPointsRef = useRef<DrawingPoint[]>([]);
   const selectedDrawingRef = useRef<Drawing | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
+  const hoveredObjectIdRef = useRef<string | null>(null); // lightweight-charts'tan gelen hover ID
+  const isDraggingDrawingRef = useRef(false); // gerçek sürükleme mi tıklama mı ayırt et
+  // getPointFromPixel ve applyDrag useCallback ref'leri (global useEffect'ten erişim için)
+  const getPointFromPixelRef = useRef<((x: number, y: number, snap: boolean) => DrawingPoint | null) | null>(null);
+  const applyDragRef = useRef<((drawingId: string, handleIndex: number, point: DrawingPoint) => Drawing | null) | null>(null);
 
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const ctrlPressedRef = useRef(false);
+  const shiftPressedRef = useRef(false);
 
-  // Global Ctrl key listener to temporarily toggle snap/magnet
+  // Global Ctrl/Shift key listener to temporarily toggle snap/magnet and quick ruler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Control') {
         ctrlPressedRef.current = true;
         setCtrlPressed(true);
+      }
+      if (e.key === 'Shift') {
+        shiftPressedRef.current = true;
       }
     };
 
@@ -169,10 +179,14 @@ export default function CandleChart({
         ctrlPressedRef.current = false;
         setCtrlPressed(false);
       }
+      if (e.key === 'Shift') {
+        shiftPressedRef.current = false;
+      }
     };
 
     const handleBlur = () => {
       ctrlPressedRef.current = false;
+      shiftPressedRef.current = false;
       setCtrlPressed(false);
     };
 
@@ -418,25 +432,45 @@ export default function CandleChart({
   // Ayırıcı sürükleme için pencere düzeyinde fare dinleyicileri
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingDividerRef.current || !chartContainerRef.current || !activeDividerRef.current) return;
-      const rect = chartContainerRef.current.getBoundingClientRect();
-      const relativeY = e.clientY - rect.top;
+      // Ayırıcı sürükleme
+      if (isDraggingDividerRef.current && chartContainerRef.current && activeDividerRef.current) {
+        const rect = chartContainerRef.current.getBoundingClientRect();
+        const relativeY = e.clientY - rect.top;
 
-      if (activeDividerRef.current === 'main') {
-        const newRatio = 1 - relativeY / rect.height;
-        setSubPaneRatio(Math.max(0.10, Math.min(0.80, newRatio)));
-      } else {
-        // Alt ayırıcı: alt panel alanındaki konum
-        const curRatio = subPaneRatioRef.current;
-        const subAreaStartPx = rect.height * (1 - curRatio);
-        const subAreaHeightPx = rect.height * curRatio;
-        if (subAreaHeightPx <= 0) return;
-        const posInSubArea = (relativeY - subAreaStartPx) / subAreaHeightPx;
-        setRsiMacdSplit(Math.max(0.15, Math.min(0.85, posInSubArea)));
+        if (activeDividerRef.current === 'main') {
+          const newRatio = 1 - relativeY / rect.height;
+          setSubPaneRatio(Math.max(0.10, Math.min(0.80, newRatio)));
+        } else {
+          const curRatio = subPaneRatioRef.current;
+          const subAreaStartPx = rect.height * (1 - curRatio);
+          const subAreaHeightPx = rect.height * curRatio;
+          if (subAreaHeightPx <= 0) return;
+          const posInSubArea = (relativeY - subAreaStartPx) / subAreaHeightPx;
+          setRsiMacdSplit(Math.max(0.15, Math.min(0.85, posInSubArea)));
+        }
+        return;
+      }
+
+      // Çizim handle sürükleme
+      if (dragStateRef.current && chartContainerRef.current && primitiveRef.current) {
+        isDraggingDrawingRef.current = true;
+        const rect = chartContainerRef.current.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const point = getPointFromPixelRef.current?.(px, py, snapEnabledRef.current || ctrlPressedRef.current);
+        if (point) {
+          const modified = applyDragRef.current?.(dragStateRef.current.drawingId, dragStateRef.current.handleIndex, point);
+          if (modified) {
+            const idx = drawingsRef.current.findIndex(d => d.id === dragStateRef.current!.drawingId);
+            if (idx >= 0) drawingsRef.current[idx] = modified;
+            primitiveRef.current.setDrawings(drawingsRef.current);
+          }
+        }
       }
     };
 
     const handleMouseUp = () => {
+      // Ayırıcı sürükleme bitişi
       if (isDraggingDividerRef.current) {
         isDraggingDividerRef.current = false;
         activeDividerRef.current = null;
@@ -444,6 +478,18 @@ export default function CandleChart({
         setDividerHovered(null);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
+      }
+
+      // Çizim handle sürükleme bitişi
+      if (dragStateRef.current) {
+        dragStateRef.current = null;
+        primitiveRef.current?.setPreview(null);
+        isDraggingDrawingRef.current = false;
+        document.body.style.cursor = '';
+        chartRef.current?.applyOptions({
+          handleScroll: true,
+          handleScale: true,
+        });
       }
     };
 
@@ -453,6 +499,7 @@ export default function CandleChart({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cancelDrawing = useCallback(() => {
@@ -463,6 +510,10 @@ export default function CandleChart({
   const changeTool = useCallback((tool: DrawingTool) => {
     activeToolRef.current = tool;
     setActiveTool(tool);
+    if (drawingsRef.current.some(d => d.tool === 'ruler')) {
+      drawingsRef.current = drawingsRef.current.filter(d => d.tool !== 'ruler');
+      primitiveRef.current?.setDrawings(drawingsRef.current);
+    }
     if (tool === 'pointer') {
       cancelDrawing();
     } else {
@@ -561,6 +612,7 @@ export default function CandleChart({
         color: drawing.color,
         lineWidth: drawing.lineWidth,
         opacity: drawing.opacity,
+        fillOpacity: drawing.fillOpacity,
       });
     }
   }, []);
@@ -586,6 +638,7 @@ export default function CandleChart({
       sel.color = opts.color;
       sel.lineWidth = opts.lineWidth;
       sel.opacity = opts.opacity;
+      sel.fillOpacity = opts.fillOpacity;
       drawingsRef.current = drawingsRef.current.map(d => d.id === sel.id ? sel : d);
       primitiveRef.current?.setDrawings(drawingsRef.current);
 
@@ -605,21 +658,22 @@ export default function CandleChart({
     const drawing = drawingsRef.current.find(d => d.id === drawingId);
     if (!drawing) return null;
 
-    if (drawing.tool === 'rectangle') {
+    if (drawing.tool === 'rectangle' || drawing.tool === 'ruler') {
       const oldTimeMin = Math.min(drawing.points[0].time, drawing.points[1].time);
       const oldTimeMax = Math.max(drawing.points[0].time, drawing.points[1].time);
       const oldPriceMin = Math.min(drawing.points[0].price, drawing.points[1].price);
       const oldPriceMax = Math.max(drawing.points[0].price, drawing.points[1].price);
 
+      // p2: Yüksek Fiyat (Ekranın Üstü 't'), p1: Düşük Fiyat (Ekranın Altı 'b')
       let t1 = oldTimeMin, t2 = oldTimeMax, p1 = oldPriceMin, p2 = oldPriceMax;
       switch (RECT_HANDLE_LABELS[handleIndex]) {
-        case 'tl': t1 = newPoint.time; p1 = newPoint.price; break;
-        case 't':  p1 = newPoint.price; break;
-        case 'tr': t2 = newPoint.time; p1 = newPoint.price; break;
+        case 'tl': t1 = newPoint.time; p2 = newPoint.price; break;
+        case 't':  p2 = newPoint.price; break;
+        case 'tr': t2 = newPoint.time; p2 = newPoint.price; break;
         case 'r':  t2 = newPoint.time; break;
-        case 'br': t2 = newPoint.time; p2 = newPoint.price; break;
-        case 'b':  p2 = newPoint.price; break;
-        case 'bl': t1 = newPoint.time; p2 = newPoint.price; break;
+        case 'br': t2 = newPoint.time; p1 = newPoint.price; break;
+        case 'b':  p1 = newPoint.price; break;
+        case 'bl': t1 = newPoint.time; p1 = newPoint.price; break;
         case 'l':  t1 = newPoint.time; break;
       }
 
@@ -636,6 +690,10 @@ export default function CandleChart({
     modified.points[handleIndex] = newPoint;
     return modified;
   }, []);
+
+  // Fonksiyon ref'lerini güncelle (global useEffect'ten erişim için)
+  getPointFromPixelRef.current = getPointFromPixel;
+  applyDragRef.current = applyDrag;
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -716,6 +774,7 @@ export default function CandleChart({
 
     const primitive = new DrawingsPrimitive();
     candleSeries.attachPrimitive(primitive);
+    primitive.setCandles(fullDataRef.current || data);
     primitiveRef.current = primitive;
 
     chart.subscribeClick((param) => {
@@ -742,19 +801,17 @@ export default function CandleChart({
         }
       }
 
+      // Her tıklamada mevcut cetvel temizlenir (geçici ölçüm aracı)
+      if (drawingsRef.current.some(d => d.tool === 'ruler')) {
+        drawingsRef.current = drawingsRef.current.filter(d => d.tool !== 'ruler');
+        primitive.setDrawings(drawingsRef.current);
+        primitive.setPreview(null);
+      }
+
       if (activeToolRef.current === 'pointer') {
-        if (dragStateRef.current) {
-          const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current || ctrlPressedRef.current);
-          if (point) {
-            const modified = applyDrag(dragStateRef.current.drawingId, dragStateRef.current.handleIndex, point);
-            if (modified) {
-              const idx = drawingsRef.current.findIndex(d => d.id === dragStateRef.current!.drawingId);
-              if (idx >= 0) drawingsRef.current[idx] = modified;
-              primitive.setDrawings(drawingsRef.current);
-            }
-          }
-          dragStateRef.current = null;
-          primitive.setPreview(null);
+        // Sürükleme yapılmışsa tıklama işlemini pas geç
+        if (isDraggingDrawingRef.current) {
+          isDraggingDrawingRef.current = false;
           return;
         }
 
@@ -764,11 +821,7 @@ export default function CandleChart({
             const rest = hitId.substring(2);
             const sep = rest.lastIndexOf(':');
             const drawingId = sep >= 0 ? rest.substring(0, sep) : rest;
-            const handleIndex = sep >= 0 ? parseInt(rest.substring(sep + 1), 10) : -1;
             selectDrawing(drawingId);
-            if (handleIndex >= 0) {
-              dragStateRef.current = { drawingId, handleIndex };
-            }
           } else {
             selectDrawing(hitId.substring(2));
           }
@@ -803,11 +856,16 @@ export default function CandleChart({
           color: settings.color,
           lineWidth: settings.lineWidth,
           opacity: settings.opacity,
+          fillOpacity: settings.fillOpacity,
         };
+
+        if (tool === 'ruler') {
+          // Cetveli drawingsRef'e ekle (sonraki tıklamada silinecek)
+          primitive.setPreview(null);
+        }
         drawingsRef.current = [...drawingsRef.current, drawing];
         primitive.setDrawings(drawingsRef.current);
         currentPointsRef.current = [];
-
         activeToolRef.current = 'pointer';
         setActiveTool('pointer');
       }
@@ -818,26 +876,12 @@ export default function CandleChart({
 
       if (activeToolRef.current === 'pointer') {
         const hitId = param.hoveredObjectId as string | undefined;
+        hoveredObjectIdRef.current = hitId || null; // her zaman güncelle
         let hoveredId: string | null = null;
         if (hitId && hitId.length > 2) {
           hoveredId = hitId.substring(2);
         }
         primitive.setHoveredId(hoveredId);
-
-        if (dragStateRef.current) {
-          const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current || ctrlPressedRef.current);
-          if (point) {
-            const modified = applyDrag(dragStateRef.current.drawingId, dragStateRef.current.handleIndex, point);
-            if (modified) {
-              primitive.setPreview({
-                ...modified,
-                id: 'drag-preview',
-                color: 'rgba(59, 130, 246, 0.5)',
-                opacity: 0.6,
-              });
-            }
-          }
-        }
         return;
       }
 
@@ -856,7 +900,7 @@ export default function CandleChart({
         points: previewPoints,
         color: settings ? settings.color : 'rgba(59, 130, 246, 0.5)',
         lineWidth: settings ? settings.lineWidth : DEFAULT_LINE_WIDTH,
-        opacity: settings ? settings.opacity * 0.7 : 0.6,
+        opacity: activeToolRef.current === 'ruler' ? 1 : (settings ? settings.opacity * 0.7 : 0.6),
       });
     });
 
@@ -874,6 +918,54 @@ export default function CandleChart({
       resizeObserver.observe(chartContainerRef.current);
     }
 
+    // Grafik container'ına mousedown ekle: cetvel temizleme ve handle tutup sürükleme başlatma
+    const handleChartMouseDown = (e: MouseEvent) => {
+      // Sol tık kontrolü
+      if (e.button !== 0) return;
+
+      if (drawingsRef.current.some(d => d.tool === 'ruler')) {
+        drawingsRef.current = drawingsRef.current.filter(d => d.tool !== 'ruler');
+        primitive.setDrawings(drawingsRef.current);
+        primitive.setPreview(null);
+      }
+
+      // Pointer modundaysak ve imleç bir tutamaç (handle) üzerindeyse sürüklemeyi (drag) başlat
+      if (activeToolRef.current === 'pointer' && hoveredObjectIdRef.current) {
+        const hitId = hoveredObjectIdRef.current;
+        if (hitId.startsWith('h:')) {
+          const rest = hitId.substring(2);
+          const sep = rest.lastIndexOf(':');
+          const drawingId = sep >= 0 ? rest.substring(0, sep) : rest;
+          const handleIndex = sep >= 0 ? parseInt(rest.substring(sep + 1), 10) : -1;
+          
+          if (handleIndex >= 0) {
+            selectDrawing(drawingId);
+            dragStateRef.current = { drawingId, handleIndex };
+            isDraggingDrawingRef.current = false; // henüz hareket etmedi
+            
+            // Grafiğin sağa-sola kaymasını (panning) engelle
+            chartRef.current?.applyOptions({
+              handleScroll: false,
+              handleScale: false,
+            });
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }
+      }
+    };
+    chartContainerRef.current?.addEventListener('mousedown', handleChartMouseDown, true);
+
+    // Sağ tıkla çizim aletinden imlece dön
+    const handleChartContextMenu = (e: MouseEvent) => {
+      if (activeToolRef.current !== 'pointer') {
+        e.preventDefault();
+        cancelDrawing();
+        changeTool('pointer');
+      }
+    };
+    chartContainerRef.current?.addEventListener('contextmenu', handleChartContextMenu);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (dragStateRef.current) {
@@ -882,8 +974,12 @@ export default function CandleChart({
         } else if (activeToolRef.current !== 'pointer') {
           cancelDrawing();
           changeTool('pointer');
-        } else if (selectedDrawingRef.current) {
+        } else {
           deselectDrawing();
+          if (drawingsRef.current.some(d => d.tool === 'ruler')) {
+            drawingsRef.current = drawingsRef.current.filter(d => d.tool !== 'ruler');
+            primitive.setDrawings(drawingsRef.current);
+          }
         }
       }
       if (e.key === 'Delete' && selectedDrawingRef.current) {
@@ -899,6 +995,8 @@ export default function CandleChart({
     return () => {
       resizeObserver.disconnect();
       window.removeEventListener('keydown', handleKeyDown);
+      chartContainerRef.current?.removeEventListener('mousedown', handleChartMouseDown, true);
+      chartContainerRef.current?.removeEventListener('contextmenu', handleChartContextMenu);
 
       // Seri referanslarını temizle
       ema20Ref.current = null;
@@ -998,6 +1096,7 @@ export default function CandleChart({
 
       candleSeriesRef.current.setData(paddedCandles);
       volumeSeriesRef.current.setData(paddedVolume);
+      primitiveRef.current?.setCandles(uniqueData);
 
       if (mainLineSeriesRef.current) {
         const lineData = uniqueData.map((d) => ({
@@ -1570,12 +1669,16 @@ export default function CandleChart({
             options={editOptions}
             onChange={updateSelectedOptions}
             onDelete={deleteSelected}
+            isRuler={selectedDrawing.tool === 'ruler'}
+            tool={selectedDrawing.tool}
           />
         ) : activeTool !== 'pointer' ? (
           <DrawingEditPanel
             title={`Stil (${TOOL_CONFIG[activeTool]?.label || 'Araç'}):`}
             options={editOptions}
             onChange={updateSelectedOptions}
+            isRuler={activeTool === 'ruler'}
+            tool={activeTool}
           />
         ) : null}
       </div>

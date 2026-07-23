@@ -10,7 +10,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useWatchlistStore, watchlistStore, FlagColor, WatchlistItem } from '../../store/watchlistStore';
+import { useWatchlistStore, watchlistStore, WatchlistItem } from '../../store/watchlistStore';
 
 interface SortableItemProps {
   item: WatchlistItem;
@@ -33,15 +33,16 @@ function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItem
 
   const isPositive = (item.changePercent || 0) >= 0;
 
-  const getFlagStyle = (color?: FlagColor) => {
-    switch (color) {
-      case 'red':    return 'text-red-500 fill-red-500/20';
-      case 'blue':   return 'text-blue-400 fill-blue-400/20';
-      case 'green':  return 'text-emerald-400 fill-emerald-400/20';
-      case 'yellow': return 'text-amber-400 fill-amber-400/20';
-      case 'purple': return 'text-purple-400 fill-purple-400/20';
-      default:       return 'text-red-500 fill-red-500/20';
+  const getItemFlagStyle = (provider?: string, exchange?: string) => {
+    const p = (provider || '').toLowerCase();
+    const ex = (exchange || '').toLowerCase();
+    if (p === 'bist' || ex.includes('bist')) {
+      return 'text-red-500 fill-red-500/20';
     }
+    if (p === 'nasdaq' || ex.includes('nasdaq')) {
+      return 'text-blue-400 fill-blue-400/20';
+    }
+    return 'text-amber-400 fill-amber-400/20';
   };
 
   const formatPrice = (price?: number | null, provider?: string) => {
@@ -68,16 +69,9 @@ function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItem
       {...listeners}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            watchlistStore.cycleFlagColor(item.id);
-          }}
-          className="p-0.5 hover:scale-125 transition-transform shrink-0"
-          title="Bayrak Rengini Değiştir"
-        >
-          <Flag className={`w-3.5 h-3.5 ${getFlagStyle(item.flagColor)}`} />
-        </button>
+        <div className="p-0.5 shrink-0" title={`${(item.provider || '').toUpperCase()} Piyasası`}>
+          <Flag className={`w-3.5 h-3.5 ${getItemFlagStyle(item.provider, item.exchange)}`} />
+        </div>
 
         <div className="flex flex-col truncate">
           <div className="flex items-center gap-1.5">
@@ -228,16 +222,7 @@ export default function WatchlistPanel({
     }
   };
 
-  const getFlagStyle = (color?: FlagColor) => {
-    switch (color) {
-      case 'red':    return 'text-red-500 fill-red-500/20';
-      case 'blue':   return 'text-blue-400 fill-blue-400/20';
-      case 'green':  return 'text-emerald-400 fill-emerald-400/20';
-      case 'yellow': return 'text-amber-400 fill-amber-400/20';
-      case 'purple': return 'text-purple-400 fill-purple-400/20';
-      default:       return 'text-red-500 fill-red-500/20';
-    }
-  };
+
 
   const formatPrice = (price?: number | null, provider?: string) => {
     if (price === undefined || price === null) return '—';
@@ -422,16 +407,15 @@ export default function WatchlistPanel({
                 }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      watchlistStore.cycleFlagColor(item.id);
-                    }}
-                    className="p-0.5 hover:scale-125 transition-transform shrink-0"
-                    title="Bayrak Rengini Değiştir"
-                  >
-                    <Flag className={`w-3.5 h-3.5 ${getFlagStyle(item.flagColor)}`} />
-                  </button>
+                  <div className="p-0.5 shrink-0" title={`${(item.provider || '').toUpperCase()} Piyasası`}>
+                    <Flag className={`w-3.5 h-3.5 ${
+                      (item.provider || '').toLowerCase() === 'bist' || (item.exchange || '').toLowerCase().includes('bist')
+                        ? 'text-red-500 fill-red-500/20'
+                        : (item.provider || '').toLowerCase() === 'nasdaq' || (item.exchange || '').toLowerCase().includes('nasdaq')
+                        ? 'text-blue-400 fill-blue-400/20'
+                        : 'text-amber-400 fill-amber-400/20'
+                    }`} />
+                  </div>
 
                   <div className="flex flex-col truncate">
                     <div className="flex items-center gap-1.5">

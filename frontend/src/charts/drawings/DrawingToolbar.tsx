@@ -5,6 +5,7 @@ import {
   Minus,
   Square,
   GitPullRequest,
+  Ruler,
   Magnet,
   Eraser,
 } from 'lucide-react';
@@ -20,11 +21,12 @@ interface DrawingToolbarProps {
 }
 
 const tools: { tool: DrawingTool; icon: React.ReactNode; label: string }[] = [
-  { tool: 'pointer', icon: <MousePointer2 className="w-4 h-4" />, label: 'Pointer' },
-  { tool: 'trendLine', icon: <TrendingUp className="w-4 h-4" />, label: 'Trend Line' },
-  { tool: 'horizontalRay', icon: <Minus className="w-4 h-4" />, label: 'Horizontal Ray' },
-  { tool: 'rectangle', icon: <Square className="w-4 h-4" />, label: 'Rectangle' },
-  { tool: 'parallelChannel', icon: <GitPullRequest className="w-4 h-4" />, label: 'Parallel Channel' },
+  { tool: 'pointer', icon: <MousePointer2 className="w-4 h-4" />, label: 'İşaretçi (Pointer)' },
+  { tool: 'ruler', icon: <Ruler className="w-4 h-4" />, label: 'Cetvel (Tarih ve Fiyat Aralığı)' },
+  { tool: 'trendLine', icon: <TrendingUp className="w-4 h-4" />, label: 'Trend Çizgisi' },
+  { tool: 'horizontalRay', icon: <Minus className="w-4 h-4" />, label: 'Yatay Işın' },
+  { tool: 'rectangle', icon: <Square className="w-4 h-4" />, label: 'Dikdörtgen' },
+  { tool: 'parallelChannel', icon: <GitPullRequest className="w-4 h-4" />, label: 'Paralel Kanal' },
 ];
 
 export default function DrawingToolbar({

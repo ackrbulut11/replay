@@ -273,6 +273,17 @@ export const watchlistStore = {
     applyState({ lists: newLists });
   },
 
+  reorderSymbols: (listId: string, fromIndex: number, toIndex: number) => {
+    const newLists = currentState.lists.map((group) => {
+      if (group.id !== listId) return group;
+      const newItems = [...group.items];
+      const [removed] = newItems.splice(fromIndex, 1);
+      newItems.splice(toIndex, 0, removed);
+      return { ...group, items: newItems };
+    });
+    applyState({ lists: newLists });
+  },
+
   toggleSymbol: (symbol: string, provider: string, name?: string, exchange?: string) => {
     const isPresent = watchlistStore.isSymbolInAnyList(symbol, provider);
     if (isPresent) {

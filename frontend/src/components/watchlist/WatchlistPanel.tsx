@@ -3,7 +3,125 @@ import {
   Plus, RefreshCw, X, ChevronDown, Flag, Trash2,
   Sparkles, ArrowUpDown, GripVertical,
 } from 'lucide-react';
-import { useWatchlistStore, watchlistStore, FlagColor } from '../../store/watchlistStore';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useWatchlistStore, watchlistStore, FlagColor, WatchlistItem } from '../../store/watchlistStore';
+
+interface SortableItemProps {
+  item: WatchlistItem;
+  isCurrent: boolean;
+  onSelectSymbol: (symbol: string, provider: string) => void;
+}
+
+function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.85 : undefined,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  };
+
+  const isPositive = (item.changePercent || 0) >= 0;
+
+  const getFlagStyle = (color?: FlagColor) => {
+    switch (color) {
+      case 'red':    return 'text-red-500 fill-red-500/20';
+      case 'blue':   return 'text-blue-400 fill-blue-400/20';
+      case 'green':  return 'text-emerald-400 fill-emerald-400/20';
+      case 'yellow': return 'text-amber-400 fill-amber-400/20';
+      case 'purple': return 'text-purple-400 fill-purple-400/20';
+      default:       return 'text-red-500 fill-red-500/20';
+    }
+  };
+
+  const formatPrice = (price?: number | null, provider?: string) => {
+    if (price === undefined || price === null) return '—';
+    if (provider === 'binance') {
+      return price >= 10
+        ? price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : price.toFixed(4);
+    }
+    return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={() => onSelectSymbol(item.symbol, item.provider)}
+      className={`group flex items-center justify-between px-2 py-2 rounded-xl cursor-pointer transition-all ${
+        isCurrent
+          ? 'bg-indigo-600/20 border border-indigo-500/50 shadow-md shadow-indigo-500/10'
+          : 'hover:bg-slate-800/50 border border-transparent'
+      } ${isDragging ? 'shadow-xl shadow-indigo-500/20 scale-[1.02] bg-slate-800/80' : ''}`}
+      {...attributes}
+      {...listeners}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            watchlistStore.cycleFlagColor(item.id);
+          }}
+          className="p-0.5 hover:scale-125 transition-transform shrink-0"
+          title="Bayrak Rengini Değiştir"
+        >
+          <Flag className={`w-3.5 h-3.5 ${getFlagStyle(item.flagColor)}`} />
+        </button>
+
+        <div className="flex flex-col truncate">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-100 font-mono tracking-tight group-hover:text-indigo-300 transition">
+              {item.symbol}
+            </span>
+            <span className="text-[9px] font-bold px-1 rounded bg-slate-900 border border-slate-800 text-slate-400 shrink-0">
+              {item.exchange}
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-500 truncate max-w-[100px]">
+            {item.name}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-col items-end font-mono">
+          <span className="text-xs font-bold text-slate-100">
+            {formatPrice(item.lastPrice, item.provider)}
+          </span>
+          {item.changePercent !== undefined && item.changePercent !== null ? (
+            <span className={`text-[10px] font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+              {isPositive ? '+' : ''}{item.changePercent.toFixed(2)}%
+            </span>
+          ) : (
+            <span className="text-[10px] text-slate-600">—</span>
+          )}
+        </div>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            watchlistStore.removeSymbol(item.symbol, item.provider);
+          }}
+          className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 hover:bg-red-950/40 rounded transition-all"
+          title="Listeden Çıkar"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface WatchlistPanelProps {
   currentSymbol: string;
@@ -31,6 +149,26 @@ export default function WatchlistPanel({
   const dragStartWidthRef = useRef(0);
 
   const activeGroup = state.lists.find((g) => g.id === state.activeListId) || state.lists[0];
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeGroup = state.lists.find((g) => g.id === state.activeListId);
+    if (!activeGroup) return;
+
+    const oldIndex = activeGroup.items.findIndex((i) => i.id === active.id);
+    const newIndex = activeGroup.items.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    watchlistStore.reorderSymbols(state.activeListId, oldIndex, newIndex);
+  }, [state.activeListId, state.lists]);
 
   // Auto-fetch quotes on mount or active list change
   useEffect(() => {
@@ -266,7 +404,7 @@ export default function WatchlistPanel({
               + Sembol Ekle
             </button>
           </div>
-        ) : (
+        ) : sortField ? (
           items.map((item) => {
             const isCurrent =
               currentSymbol.toUpperCase() === item.symbol.toUpperCase() &&
@@ -283,9 +421,7 @@ export default function WatchlistPanel({
                     : 'hover:bg-slate-800/50 border border-transparent'
                 }`}
               >
-                {/* Left: Flag + Symbol */}
                 <div className="flex items-center gap-2 min-w-0">
-                  {/* Flag Color Toggle */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -312,7 +448,6 @@ export default function WatchlistPanel({
                   </div>
                 </div>
 
-                {/* Right: Price + Change + Delete */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <div className="flex flex-col items-end font-mono">
                     <span className="text-xs font-bold text-slate-100">
@@ -341,6 +476,24 @@ export default function WatchlistPanel({
               </div>
             );
           })
+        ) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+              {items.map((item) => {
+                const isCurrent =
+                  currentSymbol.toUpperCase() === item.symbol.toUpperCase() &&
+                  currentProvider.toLowerCase() === item.provider.toLowerCase();
+                return (
+                  <SortableWatchlistItem
+                    key={item.id}
+                    item={item}
+                    isCurrent={isCurrent}
+                    onSelectSymbol={onSelectSymbol}
+                  />
+                );
+              })}
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 

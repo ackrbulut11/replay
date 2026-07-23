@@ -1,4 +1,4 @@
-import { Bookmark, Clock, BarChart2, Layers, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
+import { Bookmark, Bell, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { useWatchlistStore, watchlistStore } from '../../store/watchlistStore';
 
 interface RightActionBarProps {
@@ -8,13 +8,19 @@ interface RightActionBarProps {
 export default function RightActionBar({ onOpenSearchModal }: RightActionBarProps) {
   const [state] = useWatchlistStore();
 
-  const activeGroup = state.lists.find((g) => g.id === state.activeListId);
-  const itemCount = activeGroup ? activeGroup.items.length : 0;
+  // Total items across all lists (deduplicated by item id)
+  const allIds = new Set<string>();
+  state.lists.forEach(g => g.items.forEach(i => allIds.add(i.id)));
+  const totalCount = allIds.size;
+
+  const isWatchlistActive = state.isOpen && state.activeRightTool === 'watchlist';
+  const isAlertsActive = state.isOpen && state.activeRightTool === 'alerts';
 
   return (
     <div className="w-11 h-full bg-[#0d1321] border-l border-slate-800 flex flex-col items-center justify-between py-2.5 z-20 select-none shrink-0">
       {/* Top Action Tools */}
-      <div className="flex flex-col items-center gap-2.5 w-full">
+      <div className="flex flex-col items-center gap-2 w-full">
+
         {/* Toggle Collapse/Expand Button */}
         <button
           onClick={() => watchlistStore.togglePanel()}
@@ -28,25 +34,25 @@ export default function RightActionBar({ onOpenSearchModal }: RightActionBarProp
           )}
         </button>
 
-        <div className="w-6 h-px bg-slate-800/80 my-1" />
+        <div className="w-6 h-px bg-slate-800/80" />
 
-        {/* Watchlist Icon Button */}
+        {/* Watchlist (Favoriler) Icon Button */}
         <div className="relative">
           <button
             onClick={() => watchlistStore.setActiveRightTool('watchlist')}
             className={`p-2 rounded-xl transition-all relative group ${
-              state.isOpen && state.activeRightTool === 'watchlist'
+              isWatchlistActive
                 ? 'bg-indigo-600/30 text-indigo-400 border border-indigo-500/40 shadow-lg shadow-indigo-500/10'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
-            title="Favoriler & İzleme Listesi (Watchlist)"
+            title="Favoriler & İzleme Listesi"
           >
-            <Bookmark className="w-4 h-4 fill-current" />
+            <Bookmark className={`w-4 h-4 ${isWatchlistActive ? 'fill-indigo-400' : ''}`} />
 
             {/* Item Count Badge */}
-            {itemCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-indigo-500 text-white text-[9px] font-bold px-1 py-0.2 rounded-full min-w-[14px] text-center leading-none">
-                {itemCount}
+            {totalCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-indigo-500 text-white text-[9px] font-bold px-1 rounded-full min-w-[14px] text-center leading-[14px]">
+                {totalCount > 99 ? '99+' : totalCount}
               </span>
             )}
           </button>
@@ -61,50 +67,25 @@ export default function RightActionBar({ onOpenSearchModal }: RightActionBarProp
           <Plus className="w-4 h-4" />
         </button>
 
-        {/* Alerts / Alarmlar Button */}
+        {/* Alarm / Alerts Button — işlevsiz, sonra eklenecek */}
         <button
           onClick={() => watchlistStore.setActiveRightTool('alerts')}
           className={`p-2 rounded-xl transition-all ${
-            state.isOpen && state.activeRightTool === 'alerts'
-              ? 'bg-indigo-600/30 text-indigo-400 border border-indigo-500/40'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            isAlertsActive
+              ? 'bg-amber-600/20 text-amber-400 border border-amber-500/40'
+              : 'text-slate-500 hover:text-amber-400 hover:bg-slate-800/50'
           }`}
-          title="Fiyat Alarmları"
+          title="Fiyat Alarmları (Yakında)"
         >
-          <Clock className="w-4 h-4" />
+          <Bell className="w-4 h-4" />
         </button>
 
-        {/* Hotlist / Stats Button */}
-        <button
-          onClick={() => watchlistStore.setActiveRightTool('stats')}
-          className={`p-2 rounded-xl transition-all ${
-            state.isOpen && state.activeRightTool === 'stats'
-              ? 'bg-indigo-600/30 text-indigo-400 border border-indigo-500/40'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="Piyasa İstatistikleri"
-        >
-          <BarChart2 className="w-4 h-4" />
-        </button>
-
-        {/* Layers / Object Tree Button */}
-        <button
-          onClick={() => watchlistStore.setActiveRightTool('layers')}
-          className={`p-2 rounded-xl transition-all ${
-            state.isOpen && state.activeRightTool === 'layers'
-              ? 'bg-indigo-600/30 text-indigo-400 border border-indigo-500/40'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-          }`}
-          title="Grafik Katmanları"
-        >
-          <Layers className="w-4 h-4" />
-        </button>
       </div>
 
-      {/* Bottom status indicator */}
+      {/* Bottom status dot */}
       <div className="flex flex-col items-center gap-2">
-        <div 
-          className={`w-2 h-2 rounded-full ${state.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`} 
+        <div
+          className={`w-2 h-2 rounded-full transition-colors ${state.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}
           title={state.isOpen ? 'Panel Açık' : 'Panel Kapalı'}
         />
       </div>

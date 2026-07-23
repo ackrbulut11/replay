@@ -18,13 +18,15 @@ export interface WatchlistItem {
 export interface WatchlistGroup {
   id: string;
   name: string;
-  color: string; // Hex or CSS color
+  emoji: string;  // display emoji instead of color dot
+  color: string;  // Hex or CSS color
   items: WatchlistItem[];
 }
 
 export interface WatchlistState {
   isOpen: boolean;
-  activeRightTool: 'watchlist' | 'alerts' | 'stats' | 'layers' | null;
+  panelWidth: number; // px, resizable
+  activeRightTool: 'watchlist' | 'alerts' | null;
   activeListId: string;
   lists: WatchlistGroup[];
   quotesLoading: boolean;
@@ -32,63 +34,101 @@ export interface WatchlistState {
 
 const DEFAULT_LISTS: WatchlistGroup[] = [
   {
-    id: 'red_list',
-    name: 'Kırmızı Liste',
-    color: '#ef4444',
-    items: [
-      { id: 'bist:THYAO', symbol: 'THYAO', provider: 'bist', name: 'Türk Hava Yolları A.O.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:GARAN', symbol: 'GARAN', provider: 'bist', name: 'Türkiye Garanti Bankası A.Ş.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:EREGL', symbol: 'EREGL', provider: 'bist', name: 'Ereğli Demir ve Çelik Fabrikaları T.A.Ş.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:ASELS', symbol: 'ASELS', provider: 'bist', name: 'Aselsan Elektronik Sanayi', exchange: 'BIST', flagColor: 'blue' },
-      { id: 'nasdaq:AAPL', symbol: 'AAPL', provider: 'nasdaq', name: 'Apple Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:NVDA', symbol: 'NVDA', provider: 'nasdaq', name: 'NVIDIA Corporation', exchange: 'NASDAQ', flagColor: 'green' },
-      { id: 'nasdaq:TSLA', symbol: 'TSLA', provider: 'nasdaq', name: 'Tesla Inc.', exchange: 'NASDAQ', flagColor: 'red' },
-      { id: 'binance:BTCUSDT', symbol: 'BTCUSDT', provider: 'binance', name: 'Bitcoin / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
-      { id: 'binance:ETHUSDT', symbol: 'ETHUSDT', provider: 'binance', name: 'Ethereum / Tether', exchange: 'BINANCE', flagColor: 'purple' },
-    ],
-  },
-  {
-    id: 'bist_favoriler',
-    name: 'BIST 100 Favoriler',
+    id: 'favoriler',
+    name: 'Favoriler',
+    emoji: '⭐',
     color: '#f59e0b',
     items: [
       { id: 'bist:THYAO', symbol: 'THYAO', provider: 'bist', name: 'Türk Hava Yolları A.O.', exchange: 'BIST', flagColor: 'red' },
       { id: 'bist:GARAN', symbol: 'GARAN', provider: 'bist', name: 'Türkiye Garanti Bankası A.Ş.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:EREGL', symbol: 'EREGL', provider: 'bist', name: 'Ereğli Demir Çelik', exchange: 'BIST', flagColor: 'blue' },
-      { id: 'bist:SISE', symbol: 'SISE', provider: 'bist', name: 'Türkiye Şişe ve Cam Fabrikaları', exchange: 'BIST', flagColor: 'green' },
+      { id: 'nasdaq:AAPL', symbol: 'AAPL', provider: 'nasdaq', name: 'Apple Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
+      { id: 'nasdaq:NVDA', symbol: 'NVDA', provider: 'nasdaq', name: 'NVIDIA Corporation', exchange: 'NASDAQ', flagColor: 'blue' },
+      { id: 'binance:BTCUSDT', symbol: 'BTCUSDT', provider: 'binance', name: 'Bitcoin / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
+    ],
+  },
+  {
+    id: 'bist_favoriler',
+    name: 'BIST 100',
+    emoji: '🇹🇷',
+    color: '#ef4444',
+    items: [
+      { id: 'bist:THYAO', symbol: 'THYAO', provider: 'bist', name: 'Türk Hava Yolları A.O.', exchange: 'BIST', flagColor: 'red' },
+      { id: 'bist:GARAN', symbol: 'GARAN', provider: 'bist', name: 'Türkiye Garanti Bankası A.Ş.', exchange: 'BIST', flagColor: 'red' },
+      { id: 'bist:EREGL', symbol: 'EREGL', provider: 'bist', name: 'Ereğli Demir Çelik', exchange: 'BIST', flagColor: 'red' },
+      { id: 'bist:SISE', symbol: 'SISE', provider: 'bist', name: 'Türkiye Şişe ve Cam Fab.', exchange: 'BIST', flagColor: 'red' },
       { id: 'bist:AKBNK', symbol: 'AKBNK', provider: 'bist', name: 'Akbank T.A.Ş.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:ASELS', symbol: 'ASELS', provider: 'bist', name: 'Aselsan Elektronik Sanayi', exchange: 'BIST', flagColor: 'blue' },
-      { id: 'bist:TUPRS', symbol: 'TUPRS', provider: 'bist', name: 'Tüpraş Türkiye Petrol Rafinerileri', exchange: 'BIST', flagColor: 'yellow' },
+      { id: 'bist:ASELS', symbol: 'ASELS', provider: 'bist', name: 'Aselsan Elektronik Sanayi', exchange: 'BIST', flagColor: 'red' },
+      { id: 'bist:TUPRS', symbol: 'TUPRS', provider: 'bist', name: 'Tüpraş Türkiye Pet. Raf.', exchange: 'BIST', flagColor: 'red' },
     ],
   },
   {
     id: 'nasdaq_favoriler',
     name: 'NASDAQ & ABD',
+    emoji: '🇺🇸',
     color: '#3b82f6',
     items: [
       { id: 'nasdaq:AAPL', symbol: 'AAPL', provider: 'nasdaq', name: 'Apple Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
       { id: 'nasdaq:MSFT', symbol: 'MSFT', provider: 'nasdaq', name: 'Microsoft Corporation', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:NVDA', symbol: 'NVDA', provider: 'nasdaq', name: 'NVIDIA Corporation', exchange: 'NASDAQ', flagColor: 'green' },
-      { id: 'nasdaq:AMZN', symbol: 'AMZN', provider: 'nasdaq', name: 'Amazon.com Inc.', exchange: 'NASDAQ', flagColor: 'yellow' },
-      { id: 'nasdaq:GOOGL', symbol: 'GOOGL', provider: 'nasdaq', name: 'Alphabet Inc.', exchange: 'NASDAQ', flagColor: 'red' },
+      { id: 'nasdaq:NVDA', symbol: 'NVDA', provider: 'nasdaq', name: 'NVIDIA Corporation', exchange: 'NASDAQ', flagColor: 'blue' },
+      { id: 'nasdaq:AMZN', symbol: 'AMZN', provider: 'nasdaq', name: 'Amazon.com Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
+      { id: 'nasdaq:GOOGL', symbol: 'GOOGL', provider: 'nasdaq', name: 'Alphabet Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
       { id: 'nasdaq:META', symbol: 'META', provider: 'nasdaq', name: 'Meta Platforms Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:TSLA', symbol: 'TSLA', provider: 'nasdaq', name: 'Tesla Inc.', exchange: 'NASDAQ', flagColor: 'red' },
+      { id: 'nasdaq:TSLA', symbol: 'TSLA', provider: 'nasdaq', name: 'Tesla Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
+    ],
+  },
+  {
+    id: 'kripto',
+    name: 'Kripto',
+    emoji: '₿',
+    color: '#f97316',
+    items: [
+      { id: 'binance:BTCUSDT', symbol: 'BTCUSDT', provider: 'binance', name: 'Bitcoin / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
+      { id: 'binance:ETHUSDT', symbol: 'ETHUSDT', provider: 'binance', name: 'Ethereum / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
+      { id: 'binance:SOLUSDT', symbol: 'SOLUSDT', provider: 'binance', name: 'Solana / Tether', exchange: 'BINANCE', flagColor: 'purple' },
     ],
   },
 ];
 
-const LOCAL_STORAGE_KEY = 'replay_watchlists_v1';
+// Determine which list a symbol best belongs to based on its provider
+function getSmartListId(provider: string): string {
+  switch (provider.toLowerCase()) {
+    case 'bist': return 'bist_favoriler';
+    case 'nasdaq': return 'nasdaq_favoriler';
+    case 'binance': return 'kripto';
+    default: return 'favoriler';
+  }
+}
+
+const LOCAL_STORAGE_KEY = 'replay_watchlists_v2';
+const DEFAULT_PANEL_WIDTH = 288; // 72 tailwind units = 288px
 
 function loadInitialState(): WatchlistState {
   try {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
+      // Merge stored lists with defaults to pick up new lists (like kripto)
+      let lists = parsed.lists && parsed.lists.length > 0 ? parsed.lists : DEFAULT_LISTS;
+      // Ensure all lists have an emoji field (migration)
+      lists = lists.map((l: WatchlistGroup) => {
+        if (!l.emoji) {
+          const def = DEFAULT_LISTS.find(d => d.id === l.id);
+          return { ...l, emoji: def?.emoji || '📋' };
+        }
+        return l;
+      });
+      // Add missing default lists (e.g. kripto)
+      DEFAULT_LISTS.forEach(def => {
+        if (!lists.find((l: WatchlistGroup) => l.id === def.id)) {
+          lists = [...lists, def];
+        }
+      });
       return {
-        isOpen: true,
+        isOpen: parsed.isOpen !== undefined ? parsed.isOpen : true,
+        panelWidth: parsed.panelWidth || DEFAULT_PANEL_WIDTH,
         activeRightTool: 'watchlist',
-        activeListId: parsed.activeListId || 'red_list',
-        lists: parsed.lists && parsed.lists.length > 0 ? parsed.lists : DEFAULT_LISTS,
+        activeListId: parsed.activeListId || 'favoriler',
+        lists,
         quotesLoading: false,
       };
     }
@@ -97,8 +137,9 @@ function loadInitialState(): WatchlistState {
   }
   return {
     isOpen: true,
+    panelWidth: DEFAULT_PANEL_WIDTH,
     activeRightTool: 'watchlist',
-    activeListId: 'red_list',
+    activeListId: 'favoriler',
     lists: DEFAULT_LISTS,
     quotesLoading: false,
   };
@@ -114,6 +155,8 @@ function saveToLocalStorage() {
     localStorage.setItem(
       LOCAL_STORAGE_KEY,
       JSON.stringify({
+        isOpen: currentState.isOpen,
+        panelWidth: currentState.panelWidth,
         activeListId: currentState.activeListId,
         lists: currentState.lists,
       })
@@ -148,7 +191,7 @@ export const watchlistStore = {
     });
   },
 
-  setActiveRightTool: (tool: 'watchlist' | 'alerts' | 'stats' | 'layers' | null) => {
+  setActiveRightTool: (tool: 'watchlist' | 'alerts' | null) => {
     if (currentState.activeRightTool === tool && currentState.isOpen) {
       watchlistStore.setState({ isOpen: false, activeRightTool: null });
     } else {
@@ -161,12 +204,27 @@ export const watchlistStore = {
     watchlistStore.fetchQuotes();
   },
 
+  setPanelWidth: (width: number) => {
+    const clamped = Math.max(220, Math.min(480, width));
+    watchlistStore.setState({ panelWidth: clamped });
+  },
+
+  // Smart add: routes to the appropriate provider-specific list automatically
   addSymbol: (symbol: string, provider: string, name?: string, exchange?: string, listId?: string) => {
-    const targetListId = listId || currentState.activeListId;
+    // If no explicit listId, route by provider
+    const targetListId = listId || getSmartListId(provider);
     const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
 
+    // Also add to Favoriler (first list) always
+    const listsToUpdate = new Set([targetListId]);
+    // Only add to "favoriler" if we're not already targeting it
+    // and always add to the correct provider list
+    if (targetListId !== 'favoriler') {
+      listsToUpdate.add('favoriler');
+    }
+
     const newLists = currentState.lists.map((group) => {
-      if (group.id !== targetListId) return group;
+      if (!listsToUpdate.has(group.id)) return group;
       if (group.items.some((i) => i.id === itemId)) return group;
 
       const newItem: WatchlistItem = {
@@ -175,7 +233,7 @@ export const watchlistStore = {
         provider: provider.toLowerCase(),
         name: name || symbol.toUpperCase(),
         exchange: (exchange || provider).toUpperCase(),
-        flagColor: 'red',
+        flagColor: provider === 'bist' ? 'red' : provider === 'nasdaq' ? 'blue' : 'yellow',
       };
       return { ...group, items: [...group.items, newItem] };
     });
@@ -200,9 +258,15 @@ export const watchlistStore = {
   },
 
   toggleSymbol: (symbol: string, provider: string, name?: string, exchange?: string) => {
-    const isPresent = watchlistStore.isSymbolInActiveList(symbol, provider);
+    const isPresent = watchlistStore.isSymbolInAnyList(symbol, provider);
     if (isPresent) {
-      watchlistStore.removeSymbol(symbol, provider);
+      // Remove from all lists
+      const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
+      const newLists = currentState.lists.map((group) => ({
+        ...group,
+        items: group.items.filter((i) => i.id !== itemId),
+      }));
+      watchlistStore.setState({ lists: newLists });
     } else {
       watchlistStore.addSymbol(symbol, provider, name, exchange);
     }
@@ -212,6 +276,11 @@ export const watchlistStore = {
     const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
     const activeGroup = currentState.lists.find((g) => g.id === currentState.activeListId);
     return activeGroup ? activeGroup.items.some((i) => i.id === itemId) : false;
+  },
+
+  isSymbolInAnyList: (symbol: string, provider: string): boolean => {
+    const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
+    return currentState.lists.some((g) => g.items.some((i) => i.id === itemId));
   },
 
   cycleFlagColor: (itemId: string) => {
@@ -228,9 +297,9 @@ export const watchlistStore = {
     watchlistStore.setState({ lists: newLists });
   },
 
-  createList: (name: string, color = '#ef4444') => {
+  createList: (name: string, emoji = '📋', color = '#6366f1') => {
     const id = `list_${Date.now()}`;
-    const newList: WatchlistGroup = { id, name, color, items: [] };
+    const newList: WatchlistGroup = { id, name, emoji, color, items: [] };
     watchlistStore.setState({
       lists: [...currentState.lists, newList],
       activeListId: id,
@@ -238,7 +307,7 @@ export const watchlistStore = {
   },
 
   deleteList: (listId: string) => {
-    if (currentState.lists.length <= 1) return; // Keep at least 1 list
+    if (currentState.lists.length <= 1) return;
     const newLists = currentState.lists.filter((l) => l.id !== listId);
     const nextActive = newLists[0].id;
     watchlistStore.setState({

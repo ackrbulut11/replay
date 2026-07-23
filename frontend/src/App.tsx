@@ -3,7 +3,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
 import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
 import { BarChart3, ChevronUp, ChevronDown } from 'lucide-react';
-import { useReplayStore } from './store/replayStore';
+import { useReplayStore, replayStore } from './store/replayStore';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';
@@ -38,6 +38,13 @@ function App() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
 
   const [replayState] = useReplayStore();
+
+  // Replay sekmesine geçildiğinde Replay modunu grafik üzerinde otomatik aktif et
+  useEffect(() => {
+    if (activeTab === 'replay') {
+      replayStore.setState({ isReplayActive: true });
+    }
+  }, [activeTab]);
 
   const handleToggleIndicator = (key: keyof IndicatorsState) => {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -159,6 +166,7 @@ function App() {
                 loading={loading}
                 error={error}
                 onOpenSearchModal={() => setIsSearchModalOpen(true)}
+                onSelectTab={setActiveTab}
               />
             </div>
 

@@ -48,6 +48,7 @@ interface CandleChartProps {
   loading?: boolean;
   error?: string | null;
   onOpenSearchModal?: () => void;
+  onSelectTab?: (tab: any) => void;
 }
 
 
@@ -89,11 +90,15 @@ export default function CandleChart({
   loading = false,
   error = null,
   onOpenSearchModal,
+  onSelectTab,
 }: CandleChartProps) {
+
+  const [chartType, setChartType] = useState<'candlestick' | 'line'>('candlestick');
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addCandlestickSeries']> | null>(null);
+  const mainLineSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const volumeSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
   const primitiveRef = useRef<DrawingsPrimitive | null>(null);
 
@@ -271,6 +276,7 @@ export default function CandleChart({
   const handleToggleReplayMode = useCallback(() => {
     setReplayState((prev) => {
       if (prev.isReplayActive) {
+        if (onSelectTab) onSelectTab('chart');
         return {
           isReplayActive: false,
           isSelectingCutoff: false,
@@ -280,6 +286,7 @@ export default function CandleChart({
           targetTimestamp: null,
         };
       } else {
+        if (onSelectTab) onSelectTab('replay');
         const lastIdx = data.length > 0 ? data.length - 1 : null;
         const lastTime = lastIdx !== null ? data[lastIdx]?.time : null;
         return {
@@ -292,7 +299,7 @@ export default function CandleChart({
         };
       }
     });
-  }, [data, setReplayState]);
+  }, [data, setReplayState, onSelectTab]);
 
   const handleResetToCutoff = useCallback(() => {
     setReplayState((prev) => {
@@ -686,7 +693,16 @@ export default function CandleChart({
       borderVisible: false,
       wickUpColor: '#10b981',
       wickDownColor: '#ef4444',
+      visible: chartType === 'candlestick',
     });
+
+    const mainLineSeries = chart.addLineSeries({
+      color: '#ffffff',
+      lineWidth: 2,
+      crosshairMarkerVisible: true,
+      visible: chartType === 'line',
+    });
+    mainLineSeriesRef.current = mainLineSeries;
 
     const volumeSeries = chart.addHistogramSeries({
       color: '#2563eb',
@@ -922,6 +938,15 @@ export default function CandleChart({
   }, [snapEnabled, ctrlPressed]);
 
   useEffect(() => {
+    if (candleSeriesRef.current) {
+      candleSeriesRef.current.applyOptions({ visible: chartType === 'candlestick' });
+    }
+    if (mainLineSeriesRef.current) {
+      mainLineSeriesRef.current.applyOptions({ visible: chartType === 'line' });
+    }
+  }, [chartType]);
+
+  useEffect(() => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) return;
 
     if (visibleData && visibleData.length > 0) {
@@ -973,6 +998,14 @@ export default function CandleChart({
 
       candleSeriesRef.current.setData(paddedCandles);
       volumeSeriesRef.current.setData(paddedVolume);
+
+      if (mainLineSeriesRef.current) {
+        const lineData = uniqueData.map((d) => ({
+          time: d.time as Time,
+          value: d.close,
+        }));
+        mainLineSeriesRef.current.setData(lineData);
+      }
 
       
       if (chart) {
@@ -1077,6 +1110,7 @@ export default function CandleChart({
       chart.removeSeries(ema200Ref.current);
       ema200Ref.current = null;
     }
+
 
     // RSI (Alt panel)
     if (indicators.rsi) {
@@ -1363,6 +1397,19 @@ export default function CandleChart({
               <option value="1d" className="bg-[#070b13] text-slate-100">1d</option>
               <option value="1w" className="bg-[#070b13] text-slate-100">1w</option>
               <option value="1mo" className="bg-[#070b13] text-slate-100">1mo</option>
+            </select>
+          </div>
+
+          {/* Grafik Tipi Seçimi (Mum / Çizgi) */}
+          <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
+            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Grafik</span>
+            <select
+              value={chartType}
+              onChange={(e) => setChartType(e.target.value as 'candlestick' | 'line')}
+              className="bg-transparent border-none outline-none text-xs font-medium text-slate-300 cursor-pointer focus:ring-0"
+            >
+              <option value="candlestick" className="bg-[#070b13] text-slate-100">Mum Grafiği</option>
+              <option value="line" className="bg-[#070b13] text-slate-100">Çizgi Grafiği</option>
             </select>
           </div>
 

@@ -17,7 +17,16 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
     <div className="flex items-center gap-3 bg-[#0d1321]/95 border border-slate-700 rounded-lg px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
       <span className="text-slate-400 font-medium whitespace-nowrap">{title}</span>
 
-      {isRuler ? (
+      {tool === 'longPosition' || tool === 'shortPosition' ? (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            Kar Hedefi: Yeşil
+          </span>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+            Stop Loss: Kırmızı
+          </span>
+        </div>
+      ) : isRuler ? (
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
             Kar: Mavi

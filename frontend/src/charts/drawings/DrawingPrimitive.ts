@@ -68,10 +68,30 @@ export function getRectHandlePositions(d: PixelDrawing): PixelPoint[] {
   ];
 }
 
+export function getPositionHandlePositions(d: PixelDrawing): PixelPoint[] {
+  if (d.points.length < 2) return [];
+  const startX = d.points[0].x;
+  const rightX = d.points[1].x;
+  const mx = (startX + rightX) / 2;
+
+  const yEntry = d.points[0].y;
+  const yTarget = d.points[1].y;
+  const yStop = d.points.length >= 3 ? d.points[2].y : (yEntry + (yEntry - yTarget) / 2);
+
+  return [
+    { x: mx, y: yTarget },   // 0: Target
+    { x: mx, y: yStop },     // 1: Stop
+    { x: mx, y: yEntry },    // 2: Entry
+    { x: rightX, y: yEntry },// 3: Right time limit
+  ];
+}
+
 export const RECT_HANDLE_LABELS = ['tl', 't', 'tr', 'r', 'br', 'b', 'bl', 'l'];
+export const POSITION_HANDLE_LABELS = ['target', 'stop', 'entry', 'right'];
 
 function getHandlePositions(d: PixelDrawing): PixelPoint[] {
   if (d.tool === 'rectangle' || d.tool === 'ruler') return getRectHandlePositions(d);
+  if (d.tool === 'longPosition' || d.tool === 'shortPosition') return getPositionHandlePositions(d);
   return d.points;
 }
 
@@ -433,6 +453,146 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
 
         break;
       }
+
+      case 'longPosition':
+      case 'shortPosition': {
+        if (d.points.length < 2) return;
+        const x1 = d.points[0].x;
+        const yEntry = d.points[0].y;
+        const x2 = d.points[1].x;
+        const yTarget = d.points[1].y;
+        const yStop = d.points.length >= 3 ? d.points[2].y : (yEntry + (yEntry - yTarget) / 2);
+
+        const minX = Math.min(x1, x2);
+        const maxX = Math.max(x1, x2);
+        const rectW = Math.max(2, maxX - minX);
+
+        const isLong = d.tool === 'longPosition';
+
+        // Long: Target arriba (yTarget < yEntry), Stop abajo (yStop > yEntry)
+        // Short: Target abajo (yTarget > yEntry), Stop arriba (yStop < yEntry)
+        const profitTopY = Math.min(yEntry, yTarget);
+        const profitHeight = Math.abs(yEntry - yTarget);
+
+        const lossTopY = Math.min(yEntry, yStop);
+        const lossHeight = Math.abs(yEntry - yStop);
+
+        // 1. Kar Bölgesi (Yeşil Dolgu)
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.20)';
+        ctx.fillRect(minX, profitTopY, rectW, profitHeight);
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(minX, profitTopY, rectW, profitHeight);
+
+        // 2. Zarar Bölgesi (Kırmızı Dolgu)
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.20)';
+        ctx.fillRect(minX, lossTopY, rectW, lossHeight);
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(minX, lossTopY, rectW, lossHeight);
+
+        // 3. Giriş Çizgisi (Mavi Ortadaki Çizgi)
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(minX, yEntry);
+        ctx.lineTo(maxX, yEntry);
+        ctx.stroke();
+
+        // 4. Değer Rozeti (Merkez Bilgi Kutusu - Yalnızca üstüne tıklandığında/seçildiğinde gösterilir)
+        if (showHandles && d.logicalPoints && d.logicalPoints.length >= 2) {
+          const pEntry = d.logicalPoints[0].price;
+          const pTarget = d.logicalPoints[1].price;
+          const pStop = d.logicalPoints.length >= 3 ? d.logicalPoints[2].price : (pEntry - (pTarget - pEntry) / 2);
+
+          let targetDiff: number, targetPct: number, stopDiff: number, stopPct: number;
+          if (isLong) {
+            targetDiff = pTarget - pEntry;
+            targetPct = (targetDiff / pEntry) * 100;
+            stopDiff = pEntry - pStop;
+            stopPct = (stopDiff / pEntry) * 100;
+          } else {
+            targetDiff = pEntry - pTarget;
+            targetPct = (targetDiff / pEntry) * 100;
+            stopDiff = pStop - pEntry;
+            stopPct = (stopDiff / pEntry) * 100;
+          }
+          const rrRatio = stopDiff !== 0 ? Math.abs(targetDiff / stopDiff) : 0;
+
+          const text1 = `R:R  ${formatNumberTR(rrRatio, 2)}`;
+          const text2 = `Hedef: ${targetPct >= 0 ? '+' : ''}${formatNumberTR(targetPct, 2)}% (${targetDiff >= 0 ? '+' : ''}${formatNumberTR(targetDiff, 2)})`;
+          const text3 = `Stop: -${formatNumberTR(Math.abs(stopPct), 2)}% (-${formatNumberTR(Math.abs(stopDiff), 2)})`;
+
+          ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+          const w1 = ctx.measureText(text1).width;
+          const w2 = ctx.measureText(text2).width;
+          const w3 = ctx.measureText(text3).width;
+          const badgeW = Math.max(w1, w2, w3) + 20;
+          const badgeH = 54;
+          const badgeX = minX + (rectW - badgeW) / 2;
+          const badgeY = yEntry - badgeH / 2;
+
+          ctx.fillStyle = 'rgba(13, 19, 33, 0.92)';
+          ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
+          ctx.lineWidth = 1;
+          drawRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+
+          ctx.fillStyle = '#f59e0b';
+          ctx.fillText(text1, minX + rectW / 2, badgeY + 6);
+
+          ctx.fillStyle = '#34d399';
+          ctx.fillText(text2, minX + rectW / 2, badgeY + 22);
+
+          ctx.fillStyle = '#f87171';
+          ctx.fillText(text3, minX + rectW / 2, badgeY + 38);
+
+          ctx.textAlign = 'left';
+        }
+
+        // 5. Sağ Kenar Fiyat Etiketleri
+        if (d.logicalPoints && d.logicalPoints.length >= 2) {
+          const pEntry = d.logicalPoints[0].price;
+          const pTarget = d.logicalPoints[1].price;
+          const pStop = d.logicalPoints.length >= 3 ? d.logicalPoints[2].price : (pEntry - (pTarget - pEntry));
+
+          ctx.font = '10px monospace';
+          ctx.textBaseline = 'middle';
+
+          // Kar Al Etiketi
+          const tText = `Kar Al: ${formatNumberTR(pTarget)}`;
+          const tW = ctx.measureText(tText).width + 8;
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+          drawRoundRect(ctx, maxX + 4, yTarget - 8, tW, 16, 3);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(tText, maxX + 8, yTarget);
+
+          // Durdur Etiketi
+          const sText = `Durdur: ${formatNumberTR(pStop)}`;
+          const sW = ctx.measureText(sText).width + 8;
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+          drawRoundRect(ctx, maxX + 4, yStop - 8, sW, 16, 3);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(sText, maxX + 8, yStop);
+
+          // Giriş Etiketi
+          const eText = `Giriş: ${formatNumberTR(pEntry)}`;
+          const eW = ctx.measureText(eText).width + 8;
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
+          drawRoundRect(ctx, maxX + 4, yEntry - 8, eW, 16, 3);
+          ctx.fill();
+          ctx.fillStyle = '#0f172a';
+          ctx.fillText(eText, maxX + 8, yEntry);
+        }
+
+        break;
+      }
     }
 
     if (showHandles) {
@@ -486,6 +646,23 @@ function getDrawingSegments(d: PixelDrawing): [PixelPoint, PixelPoint][] {
       segs.push([{ x: x2, y: y1 }, { x: x2, y: y2 }]);
       segs.push([{ x: x2, y: y2 }, { x: x1, y: y2 }]);
       segs.push([{ x: x1, y: y2 }, { x: x1, y: y1 }]);
+      break;
+    }
+    case 'longPosition':
+    case 'shortPosition': {
+      const x1 = d.points[0].x;
+      const x2 = d.points[1].x;
+      const minX = Math.min(x1, x2);
+      const maxX = Math.max(x1, x2);
+      const yEntry = d.points[0].y;
+      const yTarget = d.points[1].y;
+      const yStop = d.points.length >= 3 ? d.points[2].y : (yEntry + (yEntry - yTarget) / 2);
+
+      segs.push([{ x: minX, y: yTarget }, { x: maxX, y: yTarget }]);
+      segs.push([{ x: minX, y: yEntry }, { x: maxX, y: yEntry }]);
+      segs.push([{ x: minX, y: yStop }, { x: maxX, y: yStop }]);
+      segs.push([{ x: minX, y: yTarget }, { x: minX, y: yStop }]);
+      segs.push([{ x: maxX, y: yTarget }, { x: maxX, y: yStop }]);
       break;
     }
     case 'parallelChannel': {

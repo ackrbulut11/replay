@@ -3,7 +3,7 @@ import { createChart, ColorType, PriceScaleMode, CrosshairMode } from 'lightweig
 import type { Time } from 'lightweight-charts';
 import DrawingToolbar from './drawings/DrawingToolbar';
 import DrawingEditPanel from './drawings/DrawingEditPanel';
-import { DrawingsPrimitive, RECT_HANDLE_LABELS } from './drawings/DrawingPrimitive';
+import { DrawingsPrimitive, RECT_HANDLE_LABELS, POSITION_HANDLE_LABELS } from './drawings/DrawingPrimitive';
 import {
   TOOL_CONFIG, generateDrawingId,
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY,
@@ -131,6 +131,8 @@ export default function CandleChart({
   const [toolSettings, setToolSettings] = useState<Record<DrawingTool, DrawingEditOptions>>({
     pointer: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
     ruler: { color: '#2962ff', lineWidth: 2, opacity: 0.9 },
+    longPosition: { color: '#10b981', lineWidth: 2, opacity: DEFAULT_OPACITY },
+    shortPosition: { color: '#ef4444', lineWidth: 2, opacity: DEFAULT_OPACITY },
     trendLine: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
     horizontalRay: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
     rectangle: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, fillOpacity: 0.16 },
@@ -459,7 +461,11 @@ export default function CandleChart({
         const py = e.clientY - rect.top;
         const point = getPointFromPixelRef.current?.(px, py, snapEnabledRef.current || ctrlPressedRef.current);
         if (point) {
-          const modified = applyDragRef.current?.(dragStateRef.current.drawingId, dragStateRef.current.handleIndex, point);
+          const modified = applyDragRef.current?.(
+            dragStateRef.current.drawingId,
+            dragStateRef.current.handleIndex,
+            point
+          );
           if (modified) {
             const idx = drawingsRef.current.findIndex(d => d.id === dragStateRef.current!.drawingId);
             if (idx >= 0) drawingsRef.current[idx] = modified;
@@ -584,7 +590,7 @@ export default function CandleChart({
     if (logical === null || price === null) return null;
 
     const barIdx = Math.floor(logical);
-    const nextIdx = Math.ceil(logical);
+    const nextIdx = barIdx + 1;
     const fraction = logical - barIdx;
 
     const bar = series.dataByIndex(barIdx) as any;
@@ -594,6 +600,10 @@ export default function CandleChart({
       const t1 = bar.time as number;
       const t2 = nextBar.time as number;
       time = t1 + (t2 - t1) * fraction;
+    } else if (bar) {
+      const prevBar = series.dataByIndex(Math.max(0, barIdx - 1)) as any;
+      const step = (prevBar && bar) ? ((bar.time as number) - (prevBar.time as number)) : 86400;
+      time = (bar.time as number) + step * fraction;
     } else {
       const snapped = chart.timeScale().coordinateToTime(x);
       if (snapped === null) return null;
@@ -683,6 +693,47 @@ export default function CandleChart({
       return {
         ...drawing,
         points: [{ time: t1, price: p1 }, { time: t2, price: p2 }],
+      };
+    }
+
+    if (drawing.tool === 'longPosition' || drawing.tool === 'shortPosition') {
+      const tStart = drawing.points[0].time;
+      const pEntry = drawing.points[0].price;
+      const tEnd = drawing.points[1].time;
+      const pTarget = drawing.points[1].price;
+      const pStop = drawing.points.length >= 3 ? drawing.points[2].price : (pEntry - (pTarget - pEntry));
+
+      let newEntry = pEntry;
+      let newTarget = pTarget;
+      let newStop = pStop;
+      let newEnd = tEnd;
+
+      switch (POSITION_HANDLE_LABELS[handleIndex]) {
+        case 'target':
+          newTarget = newPoint.price;
+          break;
+        case 'stop':
+          newStop = newPoint.price;
+          break;
+        case 'entry': {
+          const delta = newPoint.price - pEntry;
+          newEntry = newPoint.price;
+          newTarget = pTarget + delta;
+          newStop = pStop + delta;
+          break;
+        }
+        case 'right':
+          newEnd = Math.max(tStart, newPoint.time);
+          break;
+      }
+
+      return {
+        ...drawing,
+        points: [
+          { time: tStart, price: newEntry },
+          { time: newEnd, price: newTarget },
+          { time: newEnd, price: newStop },
+        ],
       };
     }
 
@@ -849,10 +900,43 @@ export default function CandleChart({
           opacity: DEFAULT_OPACITY,
         };
 
+        let finalPoints = newPoints;
+        if (tool === 'longPosition') {
+          const t0 = newPoints[0].time;
+          const pEntry = newPoints[0].price;
+          const t1 = newPoints[1].time;
+          let pTarget = newPoints[1].price;
+          if (pTarget <= pEntry) {
+            pTarget = pEntry * 1.04;
+          }
+          const targetDiff = pTarget - pEntry;
+          const pStop = pEntry - (targetDiff / 2); // Otomatik 1:2 R:R
+          finalPoints = [
+            { time: t0, price: pEntry },
+            { time: t1, price: pTarget },
+            { time: t1, price: pStop },
+          ];
+        } else if (tool === 'shortPosition') {
+          const t0 = newPoints[0].time;
+          const pEntry = newPoints[0].price;
+          const t1 = newPoints[1].time;
+          let pTarget = newPoints[1].price;
+          if (pTarget >= pEntry) {
+            pTarget = pEntry * 0.96;
+          }
+          const targetDiff = pEntry - pTarget;
+          const pStop = pEntry + (targetDiff / 2); // Otomatik 1:2 R:R
+          finalPoints = [
+            { time: t0, price: pEntry },
+            { time: t1, price: pTarget },
+            { time: t1, price: pStop },
+          ];
+        }
+
         const drawing: Drawing = {
           id: generateDrawingId(),
           tool,
-          points: newPoints,
+          points: finalPoints,
           color: settings.color,
           lineWidth: settings.lineWidth,
           opacity: settings.opacity,
@@ -929,7 +1013,7 @@ export default function CandleChart({
         primitive.setPreview(null);
       }
 
-      // Pointer modundaysak ve imleç bir tutamaç (handle) üzerindeyse sürüklemeyi (drag) başlat
+      // Pointer modundaysak ve imleç bir çizim/tutamaç üzerindeyse sürüklemeyi (drag) başlat
       if (activeToolRef.current === 'pointer' && hoveredObjectIdRef.current) {
         const hitId = hoveredObjectIdRef.current;
         if (hitId.startsWith('h:')) {

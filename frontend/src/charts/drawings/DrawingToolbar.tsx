@@ -8,6 +8,8 @@ import {
   Ruler,
   Magnet,
   Eraser,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react';
 import type { DrawingTool } from './types';
 
@@ -23,6 +25,8 @@ interface DrawingToolbarProps {
 const tools: { tool: DrawingTool; icon: React.ReactNode; label: string }[] = [
   { tool: 'pointer', icon: <MousePointer2 className="w-4 h-4" />, label: 'İşaretçi (Pointer)' },
   { tool: 'ruler', icon: <Ruler className="w-4 h-4" />, label: 'Cetvel (Tarih ve Fiyat Aralığı)' },
+  { tool: 'longPosition', icon: <ArrowUpRight className="w-4 h-4 text-emerald-400" />, label: 'Long Pozisyon (Alış)' },
+  { tool: 'shortPosition', icon: <ArrowDownRight className="w-4 h-4 text-rose-400" />, label: 'Short Pozisyon (Satış)' },
   { tool: 'trendLine', icon: <TrendingUp className="w-4 h-4" />, label: 'Trend Çizgisi' },
   { tool: 'horizontalRay', icon: <Minus className="w-4 h-4" />, label: 'Yatay Işın' },
   { tool: 'rectangle', icon: <Square className="w-4 h-4" />, label: 'Dikdörtgen' },

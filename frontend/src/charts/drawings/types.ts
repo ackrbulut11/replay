@@ -1,4 +1,4 @@
-export type DrawingTool = 'pointer' | 'ruler' | 'trendLine' | 'horizontalRay' | 'rectangle' | 'parallelChannel';
+export type DrawingTool = 'pointer' | 'ruler' | 'trendLine' | 'horizontalRay' | 'rectangle' | 'parallelChannel' | 'longPosition' | 'shortPosition';
 
 export interface DrawingPoint {
   time: number;
@@ -41,6 +41,8 @@ export const TOOL_CONFIG: Record<DrawingTool, { label: string; pointsNeeded: num
   horizontalRay: { label: 'Horizontal Ray', pointsNeeded: 1 },
   rectangle: { label: 'Rectangle', pointsNeeded: 2 },
   parallelChannel: { label: 'Parallel Channel', pointsNeeded: 3 },
+  longPosition: { label: 'Long Pozisyon', pointsNeeded: 2 },
+  shortPosition: { label: 'Short Pozisyon', pointsNeeded: 2 },
 };
 
 let _nextId = 1;

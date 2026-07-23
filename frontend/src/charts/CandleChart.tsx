@@ -457,10 +457,11 @@ export default function CandleChart({
       if (logical !== null) {
         const barIdx = Math.round(logical);
         const bar = series.dataByIndex(barIdx) as any;
-        if (bar) {
+        if (bar && typeof bar.open === 'number' && !isNaN(bar.open)) {
           const barTime = bar.time as number;
           const barPixelX = chart.timeScale().timeToCoordinate(barTime as Time);
           const snapPrice = series.coordinateToPrice(y);
+
           if (barPixelX !== null && snapPrice !== null) {
             const visibleRange = chart.timeScale().getVisibleLogicalRange();
             let threshold = 20;
@@ -903,16 +904,39 @@ export default function CandleChart({
       const currentLen = uniqueData.length;
       prevVisibleLengthRef.current = currentLen;
 
-      candleSeriesRef.current.setData(
-        uniqueData.map((d) => ({ time: d.time as Time, open: d.open, high: d.high, low: d.low, close: d.close }))
-      );
-      volumeSeriesRef.current.setData(
-        uniqueData.map((d) => ({
-          time: d.time as Time,
-          value: d.volume,
-          color: d.close >= d.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)',
-        }))
-      );
+      const paddedCandles: any[] = uniqueData.map((d) => ({
+        time: d.time as Time,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      }));
+
+      const paddedVolume: any[] = uniqueData.map((d) => ({
+        time: d.time as Time,
+        value: d.volume,
+        color: d.close >= d.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+      }));
+
+      if (uniqueData.length > 1) {
+        const lastBar = uniqueData[uniqueData.length - 1];
+        const prevBar = uniqueData[uniqueData.length - 2];
+        const interval = lastBar.time - prevBar.time;
+
+        for (let i = 1; i <= 1000; i++) {
+          const futureTime = (lastBar.time + interval * i) as Time;
+          paddedCandles.push({
+            time: futureTime,
+          });
+          paddedVolume.push({
+            time: futureTime,
+          });
+        }
+      }
+
+      candleSeriesRef.current.setData(paddedCandles);
+      volumeSeriesRef.current.setData(paddedVolume);
+
       
       if (chart) {
         if (replayState.isReplayActive && currentRange && prevLen > 0 && currentLen === prevLen + 1) {

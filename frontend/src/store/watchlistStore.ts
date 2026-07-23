@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 
-
 export type FlagColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple';
 
 export interface WatchlistItem {
@@ -48,17 +47,12 @@ const DEFAULT_LISTS: WatchlistGroup[] = [
   },
   {
     id: 'bist_favoriler',
-    name: 'BIST 100',
+    name: 'BIST',
     emoji: '🇹🇷',
     color: '#ef4444',
     items: [
       { id: 'bist:THYAO', symbol: 'THYAO', provider: 'bist', name: 'Türk Hava Yolları A.O.', exchange: 'BIST', flagColor: 'red' },
       { id: 'bist:GARAN', symbol: 'GARAN', provider: 'bist', name: 'Türkiye Garanti Bankası A.Ş.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:EREGL', symbol: 'EREGL', provider: 'bist', name: 'Ereğli Demir Çelik', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:SISE', symbol: 'SISE', provider: 'bist', name: 'Türkiye Şişe ve Cam Fab.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:AKBNK', symbol: 'AKBNK', provider: 'bist', name: 'Akbank T.A.Ş.', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:ASELS', symbol: 'ASELS', provider: 'bist', name: 'Aselsan Elektronik Sanayi', exchange: 'BIST', flagColor: 'red' },
-      { id: 'bist:TUPRS', symbol: 'TUPRS', provider: 'bist', name: 'Tüpraş Türkiye Pet. Raf.', exchange: 'BIST', flagColor: 'red' },
     ],
   },
   {
@@ -68,12 +62,7 @@ const DEFAULT_LISTS: WatchlistGroup[] = [
     color: '#3b82f6',
     items: [
       { id: 'nasdaq:AAPL', symbol: 'AAPL', provider: 'nasdaq', name: 'Apple Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:MSFT', symbol: 'MSFT', provider: 'nasdaq', name: 'Microsoft Corporation', exchange: 'NASDAQ', flagColor: 'blue' },
       { id: 'nasdaq:NVDA', symbol: 'NVDA', provider: 'nasdaq', name: 'NVIDIA Corporation', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:AMZN', symbol: 'AMZN', provider: 'nasdaq', name: 'Amazon.com Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:GOOGL', symbol: 'GOOGL', provider: 'nasdaq', name: 'Alphabet Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:META', symbol: 'META', provider: 'nasdaq', name: 'Meta Platforms Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
-      { id: 'nasdaq:TSLA', symbol: 'TSLA', provider: 'nasdaq', name: 'Tesla Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
     ],
   },
   {
@@ -83,24 +72,40 @@ const DEFAULT_LISTS: WatchlistGroup[] = [
     color: '#f97316',
     items: [
       { id: 'binance:BTCUSDT', symbol: 'BTCUSDT', provider: 'binance', name: 'Bitcoin / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
-      { id: 'binance:ETHUSDT', symbol: 'ETHUSDT', provider: 'binance', name: 'Ethereum / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
-      { id: 'binance:SOLUSDT', symbol: 'SOLUSDT', provider: 'binance', name: 'Solana / Tether', exchange: 'BINANCE', flagColor: 'purple' },
     ],
   },
 ];
 
-// Smart list routing: route to the provider-specific list automatically
-function getSmartListId(provider: string): string {
-  switch (provider.toLowerCase()) {
-    case 'bist': return 'bist_favoriler';
-    case 'nasdaq': return 'nasdaq_favoriler';
-    case 'binance': return 'kripto';
-    default: return 'favoriler';
-  }
-}
-
 const LOCAL_STORAGE_KEY = 'replay_watchlists_v2';
 const DEFAULT_PANEL_WIDTH = 288;
+
+/**
+ * Ensures strict 1-to-1 equivalence between Favoriler and Market Lists (BIST, NASDAQ, Kripto):
+ * 1. Favoriler is the master source of truth.
+ * 2. Every BIST symbol in Favoriler MUST exist in the BIST list.
+ * 3. Every NASDAQ symbol in Favoriler MUST exist in the NASDAQ list.
+ * 4. Every Kripto symbol in Favoriler MUST exist in the Kripto list.
+ * 5. NO symbol that is not in Favoriler can exist in any market list.
+ */
+function sanitizeLists(lists: WatchlistGroup[]): WatchlistGroup[] {
+  const favorilerGroup = lists.find((g) => g.id === 'favoriler') || DEFAULT_LISTS[0];
+  const favoriItems = favorilerGroup.items;
+
+  const bistItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'bist');
+  const nasdaqItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'nasdaq' || i.provider.toLowerCase() === 'nyse');
+  const kriptoItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'binance' || i.provider.toLowerCase() === 'crypto');
+
+  const defaultMarketGroupIds = new Set(['favoriler', 'bist_favoriler', 'nasdaq_favoriler', 'kripto']);
+  const customLists = lists.filter((g) => !defaultMarketGroupIds.has(g.id));
+
+  return [
+    { ...favorilerGroup, id: 'favoriler', name: 'Favoriler', emoji: '⭐', color: '#f59e0b', items: favoriItems },
+    { id: 'bist_favoriler', name: 'BIST', emoji: '🇹🇷', color: '#ef4444', items: bistItems },
+    { id: 'nasdaq_favoriler', name: 'NASDAQ & ABD', emoji: '🇺🇸', color: '#3b82f6', items: nasdaqItems },
+    { id: 'kripto', name: 'Kripto', emoji: '₿', color: '#f97316', items: kriptoItems },
+    ...customLists,
+  ];
+}
 
 function loadInitialState(): WatchlistState {
   try {
@@ -108,20 +113,8 @@ function loadInitialState(): WatchlistState {
     if (stored) {
       const parsed = JSON.parse(stored);
       let lists: WatchlistGroup[] = parsed.lists && parsed.lists.length > 0 ? parsed.lists : DEFAULT_LISTS;
-      // Migration: ensure emoji field exists
-      lists = lists.map((l) => {
-        if (!l.emoji) {
-          const def = DEFAULT_LISTS.find((d) => d.id === l.id);
-          return { ...l, emoji: def?.emoji || '📋' };
-        }
-        return l;
-      });
-      // Ensure all default lists exist (add missing ones)
-      DEFAULT_LISTS.forEach((def) => {
-        if (!lists.find((l) => l.id === def.id)) {
-          lists = [...lists, def];
-        }
-      });
+      lists = sanitizeLists(lists);
+
       return {
         isOpen: parsed.isOpen !== undefined ? parsed.isOpen : true,
         panelWidth: parsed.panelWidth || DEFAULT_PANEL_WIDTH,
@@ -139,7 +132,7 @@ function loadInitialState(): WatchlistState {
     panelWidth: DEFAULT_PANEL_WIDTH,
     activeRightTool: 'watchlist',
     activeListId: 'favoriler',
-    lists: DEFAULT_LISTS,
+    lists: sanitizeLists(DEFAULT_LISTS),
     quotesLoading: false,
   };
 }
@@ -149,7 +142,6 @@ type Listener = (state: WatchlistState) => void;
 let currentState: WatchlistState = loadInitialState();
 const listeners: Set<Listener> = new Set();
 
-// Debounce timer for quote fetching — prevents spamming API on rapid add/remove
 let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function saveToLocalStorage() {
@@ -168,14 +160,12 @@ function saveToLocalStorage() {
   }
 }
 
-// Synchronous state update — instantly notifies all React subscribers
 function applyState(partial: Partial<WatchlistState>) {
   currentState = { ...currentState, ...partial };
   saveToLocalStorage();
   listeners.forEach((listener) => listener(currentState));
 }
 
-// Schedule a quote fetch after a short debounce (so rapid adds don't hammer the API)
 function scheduleFetchQuotes(delayMs = 1500) {
   if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
   fetchDebounceTimer = setTimeout(() => {
@@ -216,7 +206,6 @@ export const watchlistStore = {
 
   setActiveList: (listId: string) => {
     applyState({ activeListId: listId });
-    // Fetch quotes immediately when switching lists (user expects to see prices)
     watchlistStore.fetchQuotes();
   },
 
@@ -225,18 +214,21 @@ export const watchlistStore = {
     applyState({ panelWidth: clamped });
   },
 
-  // Instant add — UI updates synchronously, quote fetch is debounced separately
-  addSymbol: (symbol: string, provider: string, name?: string, exchange?: string, listId?: string) => {
+  createList: (name: string, emoji = '📋', color = '#6366f1') => {
+    const newGroup: WatchlistGroup = {
+      id: `custom_${Date.now()}`,
+      name,
+      emoji,
+      color,
+      items: [],
+    };
+    applyState({ lists: [...currentState.lists, newGroup], activeListId: newGroup.id });
+  },
+
+  addSymbol: (symbol: string, provider: string, name?: string, exchange?: string) => {
     const providerKey = provider.toLowerCase();
     const symKey = symbol.toUpperCase();
     const itemId = `${providerKey}:${symKey}`;
-
-    // Target the provider-specific list (smart routing) + always add to Favoriler
-    const targetListId = listId || getSmartListId(providerKey);
-    const listsToUpdate = new Set([targetListId]);
-    if (targetListId !== 'favoriler') {
-      listsToUpdate.add('favoriler');
-    }
 
     const newItem: WatchlistItem = {
       id: itemId,
@@ -247,30 +239,28 @@ export const watchlistStore = {
       flagColor: providerKey === 'bist' ? 'red' : providerKey === 'nasdaq' ? 'blue' : 'yellow',
     };
 
-    const newLists = currentState.lists.map((group) => {
-      if (!listsToUpdate.has(group.id)) return group;
-      if (group.items.some((i) => i.id === itemId)) return group; // already present
-      return { ...group, items: [...group.items, newItem] };
-    });
+    const favorilerGroup = currentState.lists.find((g) => g.id === 'favoriler') || currentState.lists[0];
+    if (favorilerGroup.items.some((i) => i.id === itemId)) return; // already in favoriler
 
-    // Synchronous UI update — no await, no fetch blocking
-    applyState({ lists: newLists });
+    const updatedFavoriItems = [...favorilerGroup.items, newItem];
+    const updatedLists = currentState.lists.map((g) =>
+      g.id === 'favoriler' ? { ...g, items: updatedFavoriItems } : g
+    );
 
-    // Schedule quote fetch after 1.5s debounce
+    applyState({ lists: sanitizeLists(updatedLists) });
     scheduleFetchQuotes(1500);
   },
 
-  removeSymbol: (symbol: string, provider: string, listId?: string) => {
-    const targetListId = listId || currentState.activeListId;
+  removeSymbol: (symbol: string, provider: string) => {
     const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
 
-    const newLists = currentState.lists.map((group) => {
-      if (group.id !== targetListId) return group;
-      return { ...group, items: group.items.filter((i) => i.id !== itemId) };
-    });
+    const favorilerGroup = currentState.lists.find((g) => g.id === 'favoriler') || currentState.lists[0];
+    const updatedFavoriItems = favorilerGroup.items.filter((i) => i.id !== itemId);
+    const updatedLists = currentState.lists.map((g) =>
+      g.id === 'favoriler' ? { ...g, items: updatedFavoriItems } : g
+    );
 
-    // Synchronous — instant
-    applyState({ lists: newLists });
+    applyState({ lists: sanitizeLists(updatedLists) });
   },
 
   reorderSymbols: (listId: string, fromIndex: number, toIndex: number) => {
@@ -281,19 +271,13 @@ export const watchlistStore = {
       newItems.splice(toIndex, 0, removed);
       return { ...group, items: newItems };
     });
-    applyState({ lists: newLists });
+    applyState({ lists: sanitizeLists(newLists) });
   },
 
   toggleSymbol: (symbol: string, provider: string, name?: string, exchange?: string) => {
     const isPresent = watchlistStore.isSymbolInAnyList(symbol, provider);
     if (isPresent) {
-      // Remove from ALL lists instantly
-      const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
-      const newLists = currentState.lists.map((group) => ({
-        ...group,
-        items: group.items.filter((i) => i.id !== itemId),
-      }));
-      applyState({ lists: newLists });
+      watchlistStore.removeSymbol(symbol, provider);
     } else {
       watchlistStore.addSymbol(symbol, provider, name, exchange);
     }
@@ -307,7 +291,8 @@ export const watchlistStore = {
 
   isSymbolInAnyList: (symbol: string, provider: string): boolean => {
     const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
-    return currentState.lists.some((g) => g.items.some((i) => i.id === itemId));
+    const favorilerGroup = currentState.lists.find((g) => g.id === 'favoriler');
+    return favorilerGroup ? favorilerGroup.items.some((i) => i.id === itemId) : false;
   },
 
   cycleFlagColor: (itemId: string) => {
@@ -321,22 +306,7 @@ export const watchlistStore = {
         return { ...item, flagColor: nextColor };
       }),
     }));
-    applyState({ lists: newLists });
-  },
-
-  createList: (name: string, emoji = '📋', color = '#6366f1') => {
-    const id = `list_${Date.now()}`;
-    const newList: WatchlistGroup = { id, name, emoji, color, items: [] };
-    applyState({
-      lists: [...currentState.lists, newList],
-      activeListId: id,
-    });
-  },
-
-  deleteList: (listId: string) => {
-    if (currentState.lists.length <= 1) return;
-    const newLists = currentState.lists.filter((l) => l.id !== listId);
-    applyState({ lists: newLists, activeListId: newLists[0].id });
+    applyState({ lists: sanitizeLists(newLists) });
   },
 
   fetchQuotes: async () => {
@@ -344,61 +314,70 @@ export const watchlistStore = {
     if (!activeGroup || activeGroup.items.length === 0) return;
 
     applyState({ quotesLoading: true });
+
     try {
-      const itemParams = activeGroup.items.map((i) => `${i.provider}:${i.symbol}`).join(',');
-      const res = await fetch(`/api/market/quotes?items=${encodeURIComponent(itemParams)}`);
-      if (!res.ok) return;
+      const itemsToFetch = activeGroup.items;
+      const updatedItems = await Promise.all(
+        itemsToFetch.map(async (item) => {
+          try {
+            const end = new Date().toISOString().split('T')[0];
+            const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const res = await fetch(
+              `/api/market/data?provider=${item.provider}&symbol=${item.symbol}&timeframe=1d&start=${start}&end=${end}`
+            );
+            if (!res.ok) return item;
+            const data = await res.json();
+            if (!data || data.length === 0) return item;
 
-      const quotes: Array<{
-        provider: string;
-        symbol: string;
-        lastPrice: number | null;
-        change: number | null;
-        changePercent: number | null;
-      }> = await res.json();
+            const lastCandle = data[data.length - 1];
+            const prevCandle = data.length > 1 ? data[data.length - 2] : null;
 
-      const quoteMap = new Map<string, { lastPrice: number | null; change: number | null; changePercent: number | null }>();
-      quotes.forEach((q) => {
-        quoteMap.set(`${q.provider}:${q.symbol}`, {
-          lastPrice: q.lastPrice,
-          change: q.change,
-          changePercent: q.changePercent,
-        });
-      });
+            const lastPrice = lastCandle.close;
+            let change: number | null = null;
+            let changePercent: number | null = null;
 
-      // Only update the active list's items with fresh prices
-      const newLists = currentState.lists.map((group) => {
-        if (group.id !== currentState.activeListId) return group;
-        return {
-          ...group,
-          items: group.items.map((item) => {
-            const q = quoteMap.get(item.id);
-            return q ? { ...item, ...q } : item;
-          }),
-        };
-      });
+            if (prevCandle && prevCandle.close) {
+              change = lastPrice - prevCandle.close;
+              changePercent = (change / prevCandle.close) * 100;
+            } else if (lastCandle.open) {
+              change = lastPrice - lastCandle.open;
+              changePercent = (change / lastCandle.open) * 100;
+            }
 
-      applyState({ lists: newLists });
-    } catch (e) {
-      console.error('Failed to fetch watchlist quotes', e);
-    } finally {
+            return {
+              ...item,
+              lastPrice,
+              change,
+              changePercent,
+            };
+          } catch {
+            return item;
+          }
+        })
+      );
+
+      const itemMap = new Map(updatedItems.map((i) => [i.id, i]));
+      const newLists = currentState.lists.map((group) => ({
+        ...group,
+        items: group.items.map((item) => itemMap.get(item.id) || item),
+      }));
+
+      applyState({ lists: sanitizeLists(newLists), quotesLoading: false });
+    } catch {
       applyState({ quotesLoading: false });
     }
   },
 };
 
-// React hook — subscribes component to store changes reactively
-export function useWatchlistStore(): [WatchlistState, typeof watchlistStore] {
+export function useWatchlistStore(): [WatchlistState, (partial: Partial<WatchlistState> | ((prev: WatchlistState) => Partial<WatchlistState>)) => void] {
   const [state, setState] = useState<WatchlistState>(watchlistStore.getState());
 
   useEffect(() => {
-    // Sync on mount in case state changed before this component mounted
-    setState(watchlistStore.getState());
     const unsubscribe = watchlistStore.subscribe((newState) => {
       setState(newState);
     });
     return unsubscribe;
   }, []);
 
-  return [state, watchlistStore];
+  return [state, watchlistStore.setState];
 }

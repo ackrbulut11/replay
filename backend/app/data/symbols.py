@@ -5,7 +5,7 @@ Provides rich metadata including ticker symbol, full company name, sector, and s
 
 from typing import List, Dict, Optional
 
-# BIST Stock Database (BIST 100, BIST 30 Indexes and All BIST Companies)
+# BIST Stock Database (Indexes and All BIST Companies)
 BIST_100_SYMBOLS: List[Dict[str, str]] = [
     # Endeksler (Index Instruments)
     {"symbol": "XU100", "name": "BIST 100 Endeksi", "sector": "BIST Endeks", "exchange": "BIST", "ticker": "XU100.IS"},

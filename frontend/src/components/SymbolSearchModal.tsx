@@ -139,7 +139,7 @@ export default function SymbolSearchModal({
             }`}
           >
             <Building2 className="w-3.5 h-3.5 text-red-400" />
-            BIST 100
+            BIST
           </button>
 
           <button

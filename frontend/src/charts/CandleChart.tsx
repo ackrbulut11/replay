@@ -11,10 +11,13 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
+import { watchlistStore } from '../store/watchlistStore';
+
+
 
 
 interface CandleData {
@@ -44,7 +47,9 @@ interface CandleChartProps {
   setEnd: (v: string) => void;
   loading?: boolean;
   error?: string | null;
+  onOpenSearchModal?: () => void;
 }
+
 
 interface DragState {
   drawingId: string;
@@ -83,7 +88,9 @@ export default function CandleChart({
   setEnd,
   loading = false,
   error = null,
+  onOpenSearchModal,
 }: CandleChartProps) {
+
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const candleSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addCandlestickSeries']> | null>(null);
@@ -1227,19 +1234,36 @@ export default function CandleChart({
           </div>
 
           {/* Sembol / Ticker Girişi ve Arama Butonu */}
-          <button
-            onClick={() => setIsSearchModalOpen(true)}
-            className="flex items-center gap-2 bg-[#070b13]/80 border border-slate-800 hover:border-indigo-500/50 rounded-lg px-2.5 py-1 transition-all group"
-            title="Sembol Ara (BIST 100, NASDAQ, Crypto)"
-          >
-            <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Symbol:</span>
-              <span className="text-xs font-bold text-slate-100 font-mono tracking-tight group-hover:text-indigo-300">
-                {symbol || 'ARA'}
-              </span>
-            </div>
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onOpenSearchModal || (() => setIsSearchModalOpen(true))}
+              className="flex items-center gap-2 bg-[#070b13]/80 border border-slate-800 hover:border-indigo-500/50 rounded-lg px-2.5 py-1 transition-all group"
+              title="Sembol Ara (BIST 100, NASDAQ, Crypto)"
+            >
+              <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Symbol:</span>
+                <span className="text-xs font-bold text-slate-100 font-mono tracking-tight group-hover:text-indigo-300">
+                  {symbol || 'ARA'}
+                </span>
+              </div>
+            </button>
+
+
+            {/* Quick Watchlist Bookmark Button */}
+            <button
+              onClick={() => watchlistStore.toggleSymbol(symbol, provider)}
+              className={`p-1.5 rounded-lg border transition-all ${
+                watchlistStore.isSymbolInActiveList(symbol, provider)
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
+                  : 'bg-[#070b13]/80 border-slate-800 text-slate-500 hover:text-amber-400 hover:bg-slate-800'
+              }`}
+              title={watchlistStore.isSymbolInActiveList(symbol, provider) ? 'İzleme Listesinden Çıkar' : 'İzleme Listesine Ekle'}
+            >
+              <Bookmark className={`w-3.5 h-3.5 ${watchlistStore.isSymbolInActiveList(symbol, provider) ? 'fill-amber-400' : ''}`} />
+            </button>
+          </div>
+
 
 
           {/* Sağlayıcı Seçimi */}

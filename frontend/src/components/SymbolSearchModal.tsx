@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles } from 'lucide-react';
+import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark } from 'lucide-react';
+import { watchlistStore } from '../store/watchlistStore';
 
 export interface SymbolItem {
   symbol: string;
@@ -8,7 +9,6 @@ export interface SymbolItem {
   exchange: string;
   ticker?: string;
 }
-
 
 interface SymbolSearchModalProps {
   isOpen: boolean;
@@ -23,6 +23,8 @@ export default function SymbolSearchModal({
   onSelectSymbol,
   currentProvider,
 }: SymbolSearchModalProps) {
+
+
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
   const [results, setResults] = useState<SymbolItem[]>([]);
@@ -181,6 +183,9 @@ export default function SymbolSearchModal({
                 item.exchange === 'BINANCE' ? 'bg-amber-950/60 text-amber-400 border-amber-900/60' :
                 'bg-blue-950/60 text-blue-400 border-blue-900/60';
 
+              const itemProvider = getProviderFromExchange(item.exchange);
+              const isFavorited = watchlistStore.isSymbolInActiveList(item.symbol, itemProvider);
+
               return (
                 <div
                   key={`${item.exchange}-${item.symbol}`}
@@ -188,6 +193,21 @@ export default function SymbolSearchModal({
                   className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-800/60 cursor-pointer transition-all group"
                 >
                   <div className="flex items-center gap-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        watchlistStore.toggleSymbol(item.symbol, itemProvider, item.name, item.exchange);
+                      }}
+                      className={`p-1 rounded-lg transition-all ${
+                        isFavorited
+                          ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20'
+                          : 'text-slate-600 hover:text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isFavorited ? 'Listeden Çıkar' : 'Favorilere Ekle'}
+                    >
+                      <Bookmark className={`w-4 h-4 ${isFavorited ? 'fill-amber-400' : ''}`} />
+                    </button>
+
                     <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-xs text-slate-200 font-mono group-hover:border-indigo-500/50 group-hover:text-indigo-300 transition">
                       {item.symbol.substring(0, 3)}
                     </div>
@@ -214,6 +234,7 @@ export default function SymbolSearchModal({
                   )}
                 </div>
               );
+
             })
           )}
         </div>

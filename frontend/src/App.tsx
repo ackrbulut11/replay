@@ -4,6 +4,9 @@ import CandleChart from './charts/CandleChart';
 import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
 import { BarChart3, ChevronUp, ChevronDown } from 'lucide-react';
 import { useReplayStore } from './store/replayStore';
+import WatchlistPanel from './components/watchlist/WatchlistPanel';
+import RightActionBar from './components/watchlist/RightActionBar';
+import SymbolSearchModal from './components/SymbolSearchModal';
 
 interface CandleData {
   time: number;
@@ -20,9 +23,11 @@ function App() {
   const [timeframe, setTimeframe] = useState('1h');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   
   const [logScale, setLogScale] = useState(false);
   const [indicators, setIndicators] = useState<IndicatorsState>(DEFAULT_INDICATORS_STATE);
+
   
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,28 +130,61 @@ function App() {
   return (
     <DashboardLayout>
       <div className="h-full w-full flex flex-col p-2 space-y-2 overflow-hidden bg-[#070b13]">
-        {/* Grafik Görüntüleme Alanı */}
-        <div className="flex-1 min-h-0 w-full relative">
-          <CandleChart
-            data={chartData}
-            logScale={logScale}
-            setLogScale={setLogScale}
-            indicators={indicators}
-            onToggleIndicator={handleToggleIndicator}
-            provider={provider}
-            setProvider={setProvider}
-            symbol={symbol}
-            setSymbol={setSymbol}
-            timeframe={timeframe}
-            setTimeframe={setTimeframe}
-            start={start}
-            setStart={setStart}
-            end={end}
-            setEnd={setEnd}
-            loading={loading}
-            error={error}
+        {/* Ana İçerik Alanı: Grafik + Favoriler (Watchlist) Yan Paneli + Sağ Araç Çubuğu */}
+
+        <div className="flex-1 min-h-0 w-full flex relative overflow-hidden rounded-xl">
+          {/* Grafik Alanı */}
+          <div className="flex-1 min-w-0 h-full relative">
+            <CandleChart
+              data={chartData}
+              logScale={logScale}
+              setLogScale={setLogScale}
+              indicators={indicators}
+              onToggleIndicator={handleToggleIndicator}
+              provider={provider}
+              setProvider={setProvider}
+              symbol={symbol}
+              setSymbol={setSymbol}
+              timeframe={timeframe}
+              setTimeframe={setTimeframe}
+              start={start}
+              setStart={setStart}
+              end={end}
+              setEnd={setEnd}
+              loading={loading}
+              error={error}
+              onOpenSearchModal={() => setIsSearchModalOpen(true)}
+            />
+          </div>
+
+          {/* Açılır / Kapanır Favoriler Paneli */}
+          <WatchlistPanel
+            currentSymbol={symbol}
+            currentProvider={provider}
+            onSelectSymbol={(newSym, newProv) => {
+              setSymbol(newSym);
+              setProvider(newProv);
+            }}
+            onOpenSearchModal={() => setIsSearchModalOpen(true)}
+          />
+
+          {/* Dikey Sağ Araç Çubuğu (TradingView Stili) */}
+          <RightActionBar
+            onOpenSearchModal={() => setIsSearchModalOpen(true)}
           />
         </div>
+
+        {/* Global Sembol Arama Modal Penceresi */}
+        <SymbolSearchModal
+          isOpen={isSearchModalOpen}
+          onClose={() => setIsSearchModalOpen(false)}
+          onSelectSymbol={(newSym, newProv) => {
+            setSymbol(newSym);
+            setProvider(newProv);
+          }}
+          currentProvider={provider}
+        />
+
 
         {/* İstatistik Paneli Bileşenleri (Açılır-Kapanır Çekmece) */}
         {stats && !loading && (

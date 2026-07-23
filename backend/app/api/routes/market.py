@@ -23,6 +23,70 @@ def search_market_symbols(
     return search_symbols(q, provider)
 
 
+@router.get("/quotes")
+def get_market_quotes(
+    items: str = Query(..., description="Comma-separated provider:symbol pairs, e.g. bist:THYAO,nasdaq:AAPL,binance:BTCUSDT")
+) -> List[Dict]:
+    """Returns latest price and daily change percentage for a list of symbols."""
+    results = []
+    from datetime import timedelta
+    end_dt = datetime.now()
+    start_dt = end_dt - timedelta(days=14)
+
+    item_pairs = [i.strip() for i in items.split(",") if i.strip()]
+    for item in item_pairs:
+        parts = item.split(":")
+        if len(parts) != 2:
+            continue
+        provider, symbol = parts[0].lower(), parts[1].upper()
+        try:
+            df = loader.load_data(
+                provider_name=provider,
+                symbol=symbol,
+                timeframe="1d",
+                start_time=start_dt,
+                end_time=end_dt
+            )
+            if df.empty or len(df) == 0:
+                results.append({
+                    "provider": provider,
+                    "symbol": symbol,
+                    "lastPrice": None,
+                    "change": None,
+                    "changePercent": None
+                })
+                continue
+
+            if len(df) >= 2:
+                last_close = float(df.iloc[-1]["close"])
+                prev_close = float(df.iloc[-2]["close"])
+            else:
+                last_close = float(df.iloc[-1]["close"])
+                prev_close = float(df.iloc[-1]["open"])
+
+            change = last_close - prev_close
+            change_percent = (change / prev_close * 100.0) if prev_close != 0 else 0.0
+
+            results.append({
+                "provider": provider,
+                "symbol": symbol,
+                "lastPrice": round(last_close, 4 if provider == "binance" else 2),
+                "change": round(change, 4 if provider == "binance" else 2),
+                "changePercent": round(change_percent, 2)
+            })
+        except Exception as e:
+            results.append({
+                "provider": provider,
+                "symbol": symbol,
+                "lastPrice": None,
+                "change": None,
+                "changePercent": None,
+                "error": str(e)
+            })
+    return results
+
+
+
 @router.get("/data")
 def get_market_data(
     provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),

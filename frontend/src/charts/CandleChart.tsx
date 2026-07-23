@@ -1022,7 +1022,7 @@ export default function CandleChart({
       if (!rsiRef.current) {
         rsiRef.current = chart.addLineSeries({
           color: '#ffffff',
-          lineWidth: 1,
+          lineWidth: 2,
           priceScaleId: 'rsi',
           title: '',
           lastValueVisible: false,

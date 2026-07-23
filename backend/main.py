@@ -17,9 +17,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.api.routes import market
+from app.api.routes import market, strategy
 
 app.include_router(market.router, prefix="/api")
+app.include_router(strategy.router, prefix="/api")
 
 @app.get("/")
 def read_root():

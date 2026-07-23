@@ -21,9 +21,10 @@ export interface DrawingEditOptions {
 }
 
 export const DRAWING_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6',
+  '#ffffff', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6',
   '#ec4899', '#06b6d4', '#f97316', '#a855f7',
 ];
+
 
 export const DEFAULT_DRAWING_COLOR = DRAWING_COLORS[0];
 export const DEFAULT_LINE_WIDTH = 2;

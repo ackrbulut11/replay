@@ -15,7 +15,7 @@ import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
-import { watchlistStore } from '../store/watchlistStore';
+import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 
 
 
@@ -151,6 +151,12 @@ export default function CandleChart({
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
   const [isDatesOpen, setIsDatesOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
+  // Reactive watchlist state — ensures bookmark button re-renders on add/remove
+  const [watchlistState] = useWatchlistStore();
+  const isBookmarked = watchlistState.lists.some((g) =>
+    g.items.some((i) => i.id === `${provider.toLowerCase()}:${symbol.toUpperCase()}`)
+  );
 
 
   // --- REPLAY ENGINE STATE & HANDLERS ---
@@ -1250,17 +1256,17 @@ export default function CandleChart({
             </button>
 
 
-            {/* Quick Watchlist Bookmark Button */}
+            {/* Quick Watchlist Bookmark Button — reactive via useWatchlistStore */}
             <button
               onClick={() => watchlistStore.toggleSymbol(symbol, provider)}
               className={`p-1.5 rounded-lg border transition-all ${
-                watchlistStore.isSymbolInActiveList(symbol, provider)
+                isBookmarked
                   ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
                   : 'bg-[#070b13]/80 border-slate-800 text-slate-500 hover:text-amber-400 hover:bg-slate-800'
               }`}
-              title={watchlistStore.isSymbolInActiveList(symbol, provider) ? 'İzleme Listesinden Çıkar' : 'İzleme Listesine Ekle'}
+              title={isBookmarked ? 'İzleme Listesinden Çıkar' : 'İzleme Listesine Ekle'}
             >
-              <Bookmark className={`w-3.5 h-3.5 ${watchlistStore.isSymbolInActiveList(symbol, provider) ? 'fill-amber-400' : ''}`} />
+              <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-amber-400' : ''}`} />
             </button>
           </div>
 

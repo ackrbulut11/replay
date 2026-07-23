@@ -18,14 +18,14 @@ export interface WatchlistItem {
 export interface WatchlistGroup {
   id: string;
   name: string;
-  emoji: string;  // display emoji instead of color dot
-  color: string;  // Hex or CSS color
+  emoji: string;
+  color: string;
   items: WatchlistItem[];
 }
 
 export interface WatchlistState {
   isOpen: boolean;
-  panelWidth: number; // px, resizable
+  panelWidth: number;
   activeRightTool: 'watchlist' | 'alerts' | null;
   activeListId: string;
   lists: WatchlistGroup[];
@@ -89,7 +89,7 @@ const DEFAULT_LISTS: WatchlistGroup[] = [
   },
 ];
 
-// Determine which list a symbol best belongs to based on its provider
+// Smart list routing: route to the provider-specific list automatically
 function getSmartListId(provider: string): string {
   switch (provider.toLowerCase()) {
     case 'bist': return 'bist_favoriler';
@@ -100,26 +100,25 @@ function getSmartListId(provider: string): string {
 }
 
 const LOCAL_STORAGE_KEY = 'replay_watchlists_v2';
-const DEFAULT_PANEL_WIDTH = 288; // 72 tailwind units = 288px
+const DEFAULT_PANEL_WIDTH = 288;
 
 function loadInitialState(): WatchlistState {
   try {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Merge stored lists with defaults to pick up new lists (like kripto)
-      let lists = parsed.lists && parsed.lists.length > 0 ? parsed.lists : DEFAULT_LISTS;
-      // Ensure all lists have an emoji field (migration)
-      lists = lists.map((l: WatchlistGroup) => {
+      let lists: WatchlistGroup[] = parsed.lists && parsed.lists.length > 0 ? parsed.lists : DEFAULT_LISTS;
+      // Migration: ensure emoji field exists
+      lists = lists.map((l) => {
         if (!l.emoji) {
-          const def = DEFAULT_LISTS.find(d => d.id === l.id);
+          const def = DEFAULT_LISTS.find((d) => d.id === l.id);
           return { ...l, emoji: def?.emoji || '📋' };
         }
         return l;
       });
-      // Add missing default lists (e.g. kripto)
-      DEFAULT_LISTS.forEach(def => {
-        if (!lists.find((l: WatchlistGroup) => l.id === def.id)) {
+      // Ensure all default lists exist (add missing ones)
+      DEFAULT_LISTS.forEach((def) => {
+        if (!lists.find((l) => l.id === def.id)) {
           lists = [...lists, def];
         }
       });
@@ -150,6 +149,9 @@ type Listener = (state: WatchlistState) => void;
 let currentState: WatchlistState = loadInitialState();
 const listeners: Set<Listener> = new Set();
 
+// Debounce timer for quote fetching — prevents spamming API on rapid add/remove
+let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 function saveToLocalStorage() {
   try {
     localStorage.setItem(
@@ -166,14 +168,27 @@ function saveToLocalStorage() {
   }
 }
 
+// Synchronous state update — instantly notifies all React subscribers
+function applyState(partial: Partial<WatchlistState>) {
+  currentState = { ...currentState, ...partial };
+  saveToLocalStorage();
+  listeners.forEach((listener) => listener(currentState));
+}
+
+// Schedule a quote fetch after a short debounce (so rapid adds don't hammer the API)
+function scheduleFetchQuotes(delayMs = 1500) {
+  if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
+  fetchDebounceTimer = setTimeout(() => {
+    watchlistStore.fetchQuotes();
+  }, delayMs);
+}
+
 export const watchlistStore = {
   getState: (): WatchlistState => currentState,
 
   setState: (partial: Partial<WatchlistState> | ((prev: WatchlistState) => Partial<WatchlistState>)) => {
     const nextPartial = typeof partial === 'function' ? partial(currentState) : partial;
-    currentState = { ...currentState, ...nextPartial };
-    saveToLocalStorage();
-    listeners.forEach((listener) => listener(currentState));
+    applyState(nextPartial);
   },
 
   subscribe: (listener: Listener) => {
@@ -185,7 +200,7 @@ export const watchlistStore = {
 
   togglePanel: () => {
     const nextOpen = !(currentState.isOpen && currentState.activeRightTool === 'watchlist');
-    watchlistStore.setState({
+    applyState({
       isOpen: nextOpen,
       activeRightTool: nextOpen ? 'watchlist' : null,
     });
@@ -193,53 +208,56 @@ export const watchlistStore = {
 
   setActiveRightTool: (tool: 'watchlist' | 'alerts' | null) => {
     if (currentState.activeRightTool === tool && currentState.isOpen) {
-      watchlistStore.setState({ isOpen: false, activeRightTool: null });
+      applyState({ isOpen: false, activeRightTool: null });
     } else {
-      watchlistStore.setState({ isOpen: true, activeRightTool: tool });
+      applyState({ isOpen: true, activeRightTool: tool });
     }
   },
 
   setActiveList: (listId: string) => {
-    watchlistStore.setState({ activeListId: listId });
+    applyState({ activeListId: listId });
+    // Fetch quotes immediately when switching lists (user expects to see prices)
     watchlistStore.fetchQuotes();
   },
 
   setPanelWidth: (width: number) => {
     const clamped = Math.max(220, Math.min(480, width));
-    watchlistStore.setState({ panelWidth: clamped });
+    applyState({ panelWidth: clamped });
   },
 
-  // Smart add: routes to the appropriate provider-specific list automatically
+  // Instant add — UI updates synchronously, quote fetch is debounced separately
   addSymbol: (symbol: string, provider: string, name?: string, exchange?: string, listId?: string) => {
-    // If no explicit listId, route by provider
-    const targetListId = listId || getSmartListId(provider);
-    const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
+    const providerKey = provider.toLowerCase();
+    const symKey = symbol.toUpperCase();
+    const itemId = `${providerKey}:${symKey}`;
 
-    // Also add to Favoriler (first list) always
+    // Target the provider-specific list (smart routing) + always add to Favoriler
+    const targetListId = listId || getSmartListId(providerKey);
     const listsToUpdate = new Set([targetListId]);
-    // Only add to "favoriler" if we're not already targeting it
-    // and always add to the correct provider list
     if (targetListId !== 'favoriler') {
       listsToUpdate.add('favoriler');
     }
 
+    const newItem: WatchlistItem = {
+      id: itemId,
+      symbol: symKey,
+      provider: providerKey,
+      name: name || symKey,
+      exchange: (exchange || provider).toUpperCase(),
+      flagColor: providerKey === 'bist' ? 'red' : providerKey === 'nasdaq' ? 'blue' : 'yellow',
+    };
+
     const newLists = currentState.lists.map((group) => {
       if (!listsToUpdate.has(group.id)) return group;
-      if (group.items.some((i) => i.id === itemId)) return group;
-
-      const newItem: WatchlistItem = {
-        id: itemId,
-        symbol: symbol.toUpperCase(),
-        provider: provider.toLowerCase(),
-        name: name || symbol.toUpperCase(),
-        exchange: (exchange || provider).toUpperCase(),
-        flagColor: provider === 'bist' ? 'red' : provider === 'nasdaq' ? 'blue' : 'yellow',
-      };
+      if (group.items.some((i) => i.id === itemId)) return group; // already present
       return { ...group, items: [...group.items, newItem] };
     });
 
-    watchlistStore.setState({ lists: newLists });
-    watchlistStore.fetchQuotes();
+    // Synchronous UI update — no await, no fetch blocking
+    applyState({ lists: newLists });
+
+    // Schedule quote fetch after 1.5s debounce
+    scheduleFetchQuotes(1500);
   },
 
   removeSymbol: (symbol: string, provider: string, listId?: string) => {
@@ -248,25 +266,23 @@ export const watchlistStore = {
 
     const newLists = currentState.lists.map((group) => {
       if (group.id !== targetListId) return group;
-      return {
-        ...group,
-        items: group.items.filter((i) => i.id !== itemId),
-      };
+      return { ...group, items: group.items.filter((i) => i.id !== itemId) };
     });
 
-    watchlistStore.setState({ lists: newLists });
+    // Synchronous — instant
+    applyState({ lists: newLists });
   },
 
   toggleSymbol: (symbol: string, provider: string, name?: string, exchange?: string) => {
     const isPresent = watchlistStore.isSymbolInAnyList(symbol, provider);
     if (isPresent) {
-      // Remove from all lists
+      // Remove from ALL lists instantly
       const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
       const newLists = currentState.lists.map((group) => ({
         ...group,
         items: group.items.filter((i) => i.id !== itemId),
       }));
-      watchlistStore.setState({ lists: newLists });
+      applyState({ lists: newLists });
     } else {
       watchlistStore.addSymbol(symbol, provider, name, exchange);
     }
@@ -294,13 +310,13 @@ export const watchlistStore = {
         return { ...item, flagColor: nextColor };
       }),
     }));
-    watchlistStore.setState({ lists: newLists });
+    applyState({ lists: newLists });
   },
 
   createList: (name: string, emoji = '📋', color = '#6366f1') => {
     const id = `list_${Date.now()}`;
     const newList: WatchlistGroup = { id, name, emoji, color, items: [] };
-    watchlistStore.setState({
+    applyState({
       lists: [...currentState.lists, newList],
       activeListId: id,
     });
@@ -309,72 +325,64 @@ export const watchlistStore = {
   deleteList: (listId: string) => {
     if (currentState.lists.length <= 1) return;
     const newLists = currentState.lists.filter((l) => l.id !== listId);
-    const nextActive = newLists[0].id;
-    watchlistStore.setState({
-      lists: newLists,
-      activeListId: nextActive,
-    });
+    applyState({ lists: newLists, activeListId: newLists[0].id });
   },
 
   fetchQuotes: async () => {
     const activeGroup = currentState.lists.find((g) => g.id === currentState.activeListId);
     if (!activeGroup || activeGroup.items.length === 0) return;
 
-    watchlistStore.setState({ quotesLoading: true });
+    applyState({ quotesLoading: true });
     try {
       const itemParams = activeGroup.items.map((i) => `${i.provider}:${i.symbol}`).join(',');
       const res = await fetch(`/api/market/quotes?items=${encodeURIComponent(itemParams)}`);
-      if (res.ok) {
-        const quotes: Array<{
-          provider: string;
-          symbol: string;
-          lastPrice: number | null;
-          change: number | null;
-          changePercent: number | null;
-        }> = await res.json();
+      if (!res.ok) return;
 
-        const quoteMap = new Map<string, { lastPrice: number | null; change: number | null; changePercent: number | null }>();
-        quotes.forEach((q) => {
-          quoteMap.set(`${q.provider}:${q.symbol}`, {
-            lastPrice: q.lastPrice,
-            change: q.change,
-            changePercent: q.changePercent,
-          });
+      const quotes: Array<{
+        provider: string;
+        symbol: string;
+        lastPrice: number | null;
+        change: number | null;
+        changePercent: number | null;
+      }> = await res.json();
+
+      const quoteMap = new Map<string, { lastPrice: number | null; change: number | null; changePercent: number | null }>();
+      quotes.forEach((q) => {
+        quoteMap.set(`${q.provider}:${q.symbol}`, {
+          lastPrice: q.lastPrice,
+          change: q.change,
+          changePercent: q.changePercent,
         });
+      });
 
-        const newLists = currentState.lists.map((group) => {
-          if (group.id !== currentState.activeListId) return group;
-          return {
-            ...group,
-            items: group.items.map((item) => {
-              const q = quoteMap.get(item.id);
-              if (q) {
-                return {
-                  ...item,
-                  lastPrice: q.lastPrice,
-                  change: q.change,
-                  changePercent: q.changePercent,
-                };
-              }
-              return item;
-            }),
-          };
-        });
+      // Only update the active list's items with fresh prices
+      const newLists = currentState.lists.map((group) => {
+        if (group.id !== currentState.activeListId) return group;
+        return {
+          ...group,
+          items: group.items.map((item) => {
+            const q = quoteMap.get(item.id);
+            return q ? { ...item, ...q } : item;
+          }),
+        };
+      });
 
-        watchlistStore.setState({ lists: newLists });
-      }
+      applyState({ lists: newLists });
     } catch (e) {
       console.error('Failed to fetch watchlist quotes', e);
     } finally {
-      watchlistStore.setState({ quotesLoading: false });
+      applyState({ quotesLoading: false });
     }
   },
 };
 
+// React hook — subscribes component to store changes reactively
 export function useWatchlistStore(): [WatchlistState, typeof watchlistStore] {
   const [state, setState] = useState<WatchlistState>(watchlistStore.getState());
 
   useEffect(() => {
+    // Sync on mount in case state changed before this component mounted
+    setState(watchlistStore.getState());
     const unsubscribe = watchlistStore.subscribe((newState) => {
       setState(newState);
     });

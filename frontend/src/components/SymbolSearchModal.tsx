@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark } from 'lucide-react';
-import { watchlistStore } from '../store/watchlistStore';
+import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 
 export interface SymbolItem {
   symbol: string;
@@ -23,7 +23,8 @@ export default function SymbolSearchModal({
   onSelectSymbol,
   currentProvider,
 }: SymbolSearchModalProps) {
-
+  // Reactive watchlist state so bookmark icons update instantly
+  const [watchlistState] = useWatchlistStore();
 
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -184,7 +185,11 @@ export default function SymbolSearchModal({
                 'bg-blue-950/60 text-blue-400 border-blue-900/60';
 
               const itemProvider = getProviderFromExchange(item.exchange);
-              const isFavorited = watchlistStore.isSymbolInActiveList(item.symbol, itemProvider);
+              const itemId = `${itemProvider}:${item.symbol.toUpperCase()}`;
+              // Check across all lists reactively (watchlistState is live)
+              const isFavorited = watchlistState.lists.some((g) =>
+                g.items.some((i) => i.id === itemId)
+              );
 
               return (
                 <div

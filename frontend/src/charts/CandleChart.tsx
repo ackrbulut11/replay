@@ -147,10 +147,46 @@ export default function CandleChart({
   const selectedDrawingRef = useRef<Drawing | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
 
+  const [ctrlPressed, setCtrlPressed] = useState(false);
+  const ctrlPressedRef = useRef(false);
+
+  // Global Ctrl key listener to temporarily toggle snap/magnet
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        ctrlPressedRef.current = true;
+        setCtrlPressed(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        ctrlPressedRef.current = false;
+        setCtrlPressed(false);
+      }
+    };
+
+    const handleBlur = () => {
+      ctrlPressedRef.current = false;
+      setCtrlPressed(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
   const [chartHeight, setChartHeight] = useState(600);
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
   const [isDatesOpen, setIsDatesOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
 
   // Reactive watchlist state — ensures bookmark button re-renders on add/remove
   const [watchlistState] = useWatchlistStore();
@@ -692,7 +728,7 @@ export default function CandleChart({
 
       if (activeToolRef.current === 'pointer') {
         if (dragStateRef.current) {
-          const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current);
+          const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current || ctrlPressedRef.current);
           if (point) {
             const modified = applyDrag(dragStateRef.current.drawingId, dragStateRef.current.handleIndex, point);
             if (modified) {
@@ -731,7 +767,7 @@ export default function CandleChart({
       const config = TOOL_CONFIG[tool];
       if (!config) return;
 
-      const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current);
+      const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current || ctrlPressedRef.current);
       if (!point) return;
 
       const newPoints = [...currentPointsRef.current, point];
@@ -773,7 +809,7 @@ export default function CandleChart({
         primitive.setHoveredId(hoveredId);
 
         if (dragStateRef.current) {
-          const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current);
+          const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current || ctrlPressedRef.current);
           if (point) {
             const modified = applyDrag(dragStateRef.current.drawingId, dragStateRef.current.handleIndex, point);
             if (modified) {
@@ -793,7 +829,7 @@ export default function CandleChart({
       if (!config || currentPointsRef.current.length === 0) return;
       if (currentPointsRef.current.length >= config.pointsNeeded) return;
 
-      const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current);
+      const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current || ctrlPressedRef.current);
       if (!point) return;
 
       const previewPoints = [...currentPointsRef.current, point];
@@ -877,12 +913,13 @@ export default function CandleChart({
 
   useEffect(() => {
     if (!chartRef.current) return;
+    const isMagnet = snapEnabled || ctrlPressed;
     chartRef.current.applyOptions({
       crosshair: {
-        mode: snapEnabled ? CrosshairMode.Magnet : CrosshairMode.Normal,
+        mode: isMagnet ? CrosshairMode.Magnet : CrosshairMode.Normal,
       },
     });
-  }, [snapEnabled]);
+  }, [snapEnabled, ctrlPressed]);
 
   useEffect(() => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) return;

@@ -20,7 +20,7 @@ interface CandleData {
 function App() {
   const [provider, setProvider] = useState('binance');
   const [symbol, setSymbol] = useState('BTCUSDT');
-  const [timeframe, setTimeframe] = useState('1h');
+  const [timeframe, setTimeframe] = useState('1d');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);

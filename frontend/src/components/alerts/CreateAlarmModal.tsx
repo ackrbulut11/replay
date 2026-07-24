@@ -132,8 +132,8 @@ export default function CreateAlarmModal({
               className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-amber-500/60 transition"
             >
               <option value="price">Fiyat (Price Level)</option>
-              <option value="EMA_CROSS">⚡ EMA Kesişimi (Golden / Death Cross)</option>
-              <option value="PERCENT_CHANGE">📊 Yüzdelik Değişim (% Change)</option>
+              <option value="EMA_CROSS">EMA Kesişimi (Golden / Death Cross)</option>
+              <option value="PERCENT_CHANGE">Yüzdelik Değişim (% Change)</option>
               <option value="RSI">RSI Göstergesi</option>
               <option value="EMA">EMA (Exponential Moving Average)</option>
               <option value="SMA">SMA (Simple Moving Average)</option>

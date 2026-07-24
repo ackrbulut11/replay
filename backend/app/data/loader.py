@@ -91,6 +91,9 @@ class DataLoader:
                     df = pd.read_parquet(cache_path)
                     # Doğru tipleri ve sıralamayı garanti et
                     df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    if timeframe in ["1d", "1w", "1mo"]:
+                        df['timestamp'] = df['timestamp'].dt.normalize()
+                        df.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
                     df.sort_values('timestamp', inplace=True)
                     df.reset_index(drop=True, inplace=True)
                 except Exception as e:
@@ -103,6 +106,9 @@ class DataLoader:
                 df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
                 
                 if not df.empty:
+                    if timeframe in ["1d", "1w", "1mo"]:
+                        df['timestamp'] = df['timestamp'].dt.normalize()
+                        df.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
                     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                     df.to_parquet(cache_path, index=False)
                 return df
@@ -147,9 +153,12 @@ class DataLoader:
                 dfs_to_concat.append(df_after)
                 
             df_combined = pd.concat(dfs_to_concat, ignore_index=True)
-            df_combined.drop_duplicates(subset=['timestamp'], inplace=True)
+            if timeframe in ["1d", "1w", "1mo"]:
+                df_combined['timestamp'] = pd.to_datetime(df_combined['timestamp']).dt.normalize()
+            df_combined.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
             df_combined.sort_values('timestamp', inplace=True)
             df_combined.reset_index(drop=True, inplace=True)
+
             
             # Önbelleğe geri yaz
             try:

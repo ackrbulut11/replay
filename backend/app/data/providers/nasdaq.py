@@ -77,6 +77,11 @@ class NasdaqProvider(IDataProvider):
         # Zaman damgasını dönüştür
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
         
+        # Günlük ve üzeri zaman dilimlerinde zaman damgalarını gün başına sıfırla (normalize et)
+        if timeframe in ["1d", "1w", "1mo"]:
+            df['timestamp'] = df['timestamp'].dt.normalize()
+            df.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
+        
         # Null değerleri temizle (Yahoo işlem yapılmayan dönemler için null döndürür)
         df.dropna(subset=['open', 'high', 'low', 'close'], inplace=True)
         
@@ -86,3 +91,4 @@ class NasdaqProvider(IDataProvider):
             df[col] = df[col].astype(float)
             
         return df.reset_index(drop=True)
+

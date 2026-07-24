@@ -11,7 +11,7 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Clock } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
@@ -1115,6 +1115,22 @@ export default function CandleChart({
       if (e.key === 'Delete' && selectedDrawingRef.current) {
         deleteSelected();
       }
+      if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        const currentPrice = currentCrosshairPriceRef.current ?? (fullDataRef.current.length > 0 ? fullDataRef.current[fullDataRef.current.length - 1].close : 0);
+        if (currentPrice > 0) {
+          const targetPrice = Number(currentPrice.toFixed(2));
+          const lastPrice = fullDataRef.current.length > 0 ? fullDataRef.current[fullDataRef.current.length - 1].close : targetPrice;
+          const condition = targetPrice >= lastPrice ? 'rises_above' : 'falls_below';
+          alertStore.createAlert({
+            symbol,
+            provider,
+            target_type: 'price',
+            condition,
+            threshold_value: targetPrice,
+          });
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
 
@@ -1496,7 +1512,10 @@ export default function CandleChart({
       const color = '#f59e0b'; // Sarı renk (Yellow)
 
       const condSym = isRises ? '>' : '<';
-      const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${alert.threshold_value}`;
+      const formattedVal = typeof alert.threshold_value === 'number'
+        ? alert.threshold_value.toFixed(2)
+        : alert.threshold_value;
+      const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${formattedVal}`;
 
       try {
         const line = targetSeries.createPriceLine({
@@ -1971,17 +1990,30 @@ export default function CandleChart({
           style={{ top: `${Math.max(10, plusMenu.y - 18)}px` }}
           className="absolute right-[84px] z-40 bg-[#1e222d] border border-[#2a2e39] rounded-xl shadow-2xl py-1.5 min-w-[310px] text-xs animate-fadeIn select-none backdrop-blur-md"
         >
-          {/* Alarm Ekle Menü Seçeneği */}
+          {/* Alarm Ekle Menü Seçeneği - Modal Açmadan Doğrudan Anında Ekler */}
           <button
-            onClick={() => {
-              const targetPrice = plusMenu.price;
+            onClick={async () => {
+              const targetPrice = Number(plusMenu.price.toFixed(2));
               setPlusMenu(null);
-              alertStore.openCreateModal(symbol, provider, targetPrice);
+              const lastPrice = fullDataRef.current.length > 0 ? fullDataRef.current[fullDataRef.current.length - 1].close : targetPrice;
+              const condition = targetPrice >= lastPrice ? 'rises_above' : 'falls_below';
+
+              try {
+                await alertStore.createAlert({
+                  symbol,
+                  provider,
+                  target_type: 'price',
+                  condition,
+                  threshold_value: targetPrice,
+                });
+              } catch (e) {
+                console.error('Fast alert create error:', e);
+              }
             }}
             className="w-full px-3 py-2 flex items-center justify-between text-slate-200 hover:bg-[#2a2e39] hover:text-white transition group cursor-pointer"
           >
             <div className="flex items-center gap-2.5 truncate pr-2">
-              <Clock className="w-4 h-4 text-slate-400 group-hover:text-amber-400 shrink-0" />
+              <Bell className="w-4 h-4 text-[#f59e0b] shrink-0" />
               <span className="truncate">
                 {formatPriceLabel(plusMenu.price)} üzerinden {symbol} için alarm ekle
               </span>

@@ -244,7 +244,9 @@ function App() {
                   <p className="text-sm font-bold text-slate-100 font-mono mt-1">
                     {alertState.latestTriggeredAlert.symbol} • {alertState.latestTriggeredAlert.target_type}{' '}
                     {alertState.latestTriggeredAlert.condition === 'rises_above' ? '>' : '<'}{' '}
-                    {alertState.latestTriggeredAlert.threshold_value}
+                    {typeof alertState.latestTriggeredAlert.threshold_value === 'number'
+                      ? alertState.latestTriggeredAlert.threshold_value.toFixed(2)
+                      : alertState.latestTriggeredAlert.threshold_value}
                   </p>
                   {alertState.latestTriggeredAlert.last_value && (
                     <p className="text-xs text-slate-400 font-mono mt-1">

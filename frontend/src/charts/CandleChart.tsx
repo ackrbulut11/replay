@@ -11,7 +11,7 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, X } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2 } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
@@ -178,6 +178,7 @@ export default function CandleChart({
   const currentCrosshairPriceRef = useRef<number | null>(null);
   const isHoveringPlusButtonRef = useRef(false);
 
+  const [currentCrosshairY, setCurrentCrosshairY] = useState<number | null>(null);
   const [alarmOverlays, setAlarmOverlays] = useState<Array<{ id: string; y: number; symbol: string; condSym: string; val: string }>>([]);
 
   const formatPriceLabel = useCallback((val?: number | null) => {
@@ -967,6 +968,12 @@ export default function CandleChart({
     });
 
     chart.subscribeCrosshairMove((param) => {
+      if (param.point) {
+        setCurrentCrosshairY(param.point.y);
+      } else {
+        setCurrentCrosshairY(null);
+      }
+
       if (isHoveringPlusButtonRef.current) {
         return;
       }
@@ -2019,31 +2026,35 @@ export default function CandleChart({
         </div>
       )}
 
-      {/* Grafikteki 5% Opaklıklı Alarm Rozetleri (Sağ Tarafta, Üzerine Gelince Solunda Şeffaf X Butonu Açılır) */}
-      {alarmOverlays.map((item) => (
-        <div
-          key={item.id}
-          style={{ top: `${item.y - 12}px` }}
-          className="absolute right-[80px] z-25 flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-500/5 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-mono font-bold shadow-sm backdrop-blur-xs group transition-all select-none cursor-pointer"
-        >
-          {/* İmleç Üzerine Geldiğinde Sol Tarafında Açılan Şeffaf Alarm İptal Et (X) Butonu */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              alertStore.deleteAlert(item.id);
-            }}
-            className="hidden group-hover:flex items-center justify-center p-0.5 rounded-md text-amber-400/80 hover:text-amber-200 hover:bg-amber-500/25 shrink-0 transition-all cursor-pointer active:scale-95"
-            title="Alarmı İptal Et"
+      {/* TradingView Tarzı Çizgi Üzerinde Açılan Alarm Rozeti ve Çöp Kutusu (Trash2) */}
+      {alarmOverlays.map((item) => {
+        const isNearLine = currentCrosshairY !== null && Math.abs(item.y - currentCrosshairY) <= 18;
+
+        return (
+          <div
+            key={item.id}
+            style={{ top: `${item.y - 14}px` }}
+            className={`absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1 rounded-md bg-[#131722]/95 border border-slate-300 text-slate-100 text-xs font-mono font-medium shadow-2xl backdrop-blur-md transition-all duration-150 select-none group ${
+              isNearLine ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none hover:opacity-100 hover:pointer-events-auto'
+            }`}
           >
-            <X className="w-3 h-3" />
-          </button>
-          <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0 group-hover:scale-105 transition-transform" />
-          <span>
-            {item.symbol} {item.condSym} {item.val}
-          </span>
-        </div>
-      ))}
+            <span>
+              {item.symbol} Kesişme {item.val}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                alertStore.deleteAlert(item.id);
+              }}
+              className="p-0.5 text-slate-300 hover:text-red-400 active:scale-90 transition-colors cursor-pointer shrink-0 ml-0.5"
+              title="Alarmı Sil"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        );
+      })}
 
       {/* Fiyat Göstergesi Yanındaki (+) Butonu - Doğrudan DOM Ref ile 0ms Gecikmesiz Konumlandırma */}
       <button

@@ -207,6 +207,7 @@ class EvaluateRequest(BaseModel):
     timeframe: str = Field(..., description="Ana zaman dilimi (ör. 15m, 1h, 1d)")
     start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
     end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
+    limit_bars: Optional[int] = Field(365, description="Değerlendirilecek maksimum mum sayısı (varsayılan: 365)")
     param_overrides: Dict[str, Union[int, float]] = Field(
         default_factory=dict, description="Parametre override'ları"
     )
@@ -217,7 +218,10 @@ class SignalResult(BaseModel):
 
     timestamp: int = Field(..., description="Unix timestamp (saniye)")
     signal: SignalType = Field(..., description="Sinyal tipi")
+    price: float = Field(0.0, description="Sinyal anındaki kapanış fiyatı")
     conditions_met: List[str] = Field(default_factory=list, description="Karşılanan koşulların açıklaması")
+    entry_price: Optional[float] = Field(None, description="Alış fiyatı (SELL sinyalinde doldurulur)")
+    pnl_percent: Optional[float] = Field(None, description="Kar/Zarar yüzdesi (SELL sinyalinde doldurulur)")
 
 
 class EvaluateResponse(BaseModel):
@@ -232,6 +236,11 @@ class EvaluateResponse(BaseModel):
     signals: List[SignalResult]
     buy_count: int = 0
     sell_count: int = 0
+    total_trades: int = 0
+    winning_trades: int = 0
+    losing_trades: int = 0
+    win_rate: float = 0.0
+    total_pnl_percent: float = 0.0
 
 
 class IndicatorInfo(BaseModel):

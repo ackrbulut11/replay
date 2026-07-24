@@ -119,12 +119,21 @@ class RuleEngine:
         end_index = min(end_index, len(df) - 1)
 
         signals: list[dict] = []
+        last_signal: SignalType | None = None
+        last_buy_price: float | None = None
 
         for i in range(start_index, end_index + 1):
             signal, conditions_met = RuleEngine.evaluate(
                 strategy, df, i, effective_params, multi_tf_data
             )
             if signal != SignalType.NEUTRAL:
+                # Sinyal Sıralaması Mantığı (BUY -> SELL -> BUY -> SELL):
+                # Bir BUY sinyalinden sonra tekrar BUY üretilmez; SELL beklenir.
+                if signal == SignalType.BUY and last_signal == SignalType.BUY:
+                    continue
+                if signal == SignalType.SELL and last_signal != SignalType.BUY:
+                    continue
+
                 ts_val = df.iloc[i].get("timestamp", 0)
                 if hasattr(ts_val, "timestamp"):
                     timestamp = int(ts_val.timestamp())
@@ -134,14 +143,28 @@ class RuleEngine:
                 else:
                     timestamp = int(ts_val) if ts_val else 0
 
-                signals.append(
-                    {
-                        "bar_index": i,
-                        "timestamp": timestamp,
-                        "signal": signal.value,
-                        "conditions_met": conditions_met,
-                    }
-                )
+                close_price = float(df.iloc[i]["close"]) if "close" in df.columns else 0.0
+
+                sig_item: dict = {
+                    "bar_index": i,
+                    "timestamp": timestamp,
+                    "signal": signal.value,
+                    "price": round(close_price, 4),
+                    "conditions_met": conditions_met,
+                }
+
+                if signal == SignalType.BUY:
+                    last_signal = SignalType.BUY
+                    last_buy_price = close_price
+                elif signal == SignalType.SELL:
+                    last_signal = SignalType.SELL
+                    if last_buy_price is not None and last_buy_price > 0:
+                        pnl = ((close_price - last_buy_price) / last_buy_price) * 100.0
+                        sig_item["entry_price"] = round(last_buy_price, 4)
+                        sig_item["pnl_percent"] = round(pnl, 2)
+                    last_buy_price = None
+
+                signals.append(sig_item)
 
         return signals
 

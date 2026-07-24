@@ -168,6 +168,13 @@ class StrategyEngine:
         buy_count = sum(1 for s in signals if s["signal"] == "BUY")
         sell_count = sum(1 for s in signals if s["signal"] == "SELL")
 
+        trades = [s for s in signals if s.get("pnl_percent") is not None]
+        total_trades = len(trades)
+        winning_trades = sum(1 for s in trades if s["pnl_percent"] > 0)
+        losing_trades = sum(1 for s in trades if s["pnl_percent"] < 0)
+        win_rate = round((winning_trades / total_trades) * 100.0, 2) if total_trades > 0 else 0.0
+        total_pnl_percent = round(sum(s["pnl_percent"] for s in trades), 2)
+
         return {
             "strategy_id": strategy_id,
             "strategy_name": strategy.get("name", ""),
@@ -175,4 +182,9 @@ class StrategyEngine:
             "signals": signals,
             "buy_count": buy_count,
             "sell_count": sell_count,
+            "total_trades": total_trades,
+            "winning_trades": winning_trades,
+            "losing_trades": losing_trades,
+            "win_rate": win_rate,
+            "total_pnl_percent": total_pnl_percent,
         }

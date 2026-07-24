@@ -176,6 +176,9 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
                         except Exception:
                             pass
 
+    if request.limit_bars and request.limit_bars > 0 and len(df) > request.limit_bars:
+        df = df.iloc[-request.limit_bars:].reset_index(drop=True)
+
     # Değerlendir
     try:
         result = _engine.evaluate(
@@ -198,10 +201,18 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
             SignalResult(
                 timestamp=s["timestamp"],
                 signal=s["signal"],
+                price=s.get("price", 0.0),
                 conditions_met=s["conditions_met"],
+                entry_price=s.get("entry_price"),
+                pnl_percent=s.get("pnl_percent"),
             )
             for s in result["signals"]
         ],
         buy_count=result["buy_count"],
         sell_count=result["sell_count"],
+        total_trades=result.get("total_trades", 0),
+        winning_trades=result.get("winning_trades", 0),
+        losing_trades=result.get("losing_trades", 0),
+        win_rate=result.get("win_rate", 0.0),
+        total_pnl_percent=result.get("total_pnl_percent", 0.0),
     )

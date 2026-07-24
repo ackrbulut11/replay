@@ -122,13 +122,17 @@ export interface EvaluateRequest {
   timeframe: string;
   start?: string;
   end?: string;
+  limit_bars?: number;
   param_overrides?: Record<string, number>;
 }
 
 export interface SignalResult {
   timestamp: number;
   signal: SignalType;
+  price?: number;
   conditions_met: string[];
+  entry_price?: number;
+  pnl_percent?: number;
 }
 
 export interface EvaluateResponse {
@@ -141,6 +145,11 @@ export interface EvaluateResponse {
   signals: SignalResult[];
   buy_count: number;
   sell_count: number;
+  total_trades?: number;
+  winning_trades?: number;
+  losing_trades?: number;
+  win_rate?: number;
+  total_pnl_percent?: number;
 }
 
 // ─── İndikatör Bilgisi ───────────────────────────────────────────────────────

@@ -93,11 +93,11 @@ class RuleEngine:
         strategy: dict,
         df: pd.DataFrame,
         bar_index: int,
-        in_position: bool,
+        position_state: str,
         effective_params: dict,
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
     ) -> tuple[SignalType, list[str]]:
-        """Pozisyon durumuna göre (in_position) ilgili kuralları değerlendirir."""
+        """Pozisyon durumuna (none, long, short) göre ilgili kuralları değerlendirir."""
         if bar_index < 0 or bar_index >= len(df):
             return SignalType.NEUTRAL, []
 
@@ -110,24 +110,42 @@ class RuleEngine:
             if not tf_result:
                 return SignalType.NEUTRAL, []
 
-        if not in_position:
-            # Pozisyonda değiliz -> YALNIZCA GİRİŞ (BUY) kurallarını kontrol et
-            entry_rules = strategy.get("entry_rules", {})
+        entry_rules = strategy.get("entry_rules", {})
+        exit_rules = strategy.get("exit_rules", {})
+
+        if position_state == "none":
+            # Pozisyon yoksa önce BUY (giriş) sonra SELL (short giriş) kontrol edilir
             if entry_rules and entry_rules.get("conditions"):
                 entry_result, entry_met = RuleEvaluator.evaluate_group(
                     entry_rules, df, bar_index, effective_params, multi_tf_data
                 )
                 if entry_result:
                     return SignalType.BUY, entry_met
-        else:
-            # Pozisyondayız -> YALNIZCA ÇIKIŞ (SELL) kurallarını kontrol et
-            exit_rules = strategy.get("exit_rules", {})
+
             if exit_rules and exit_rules.get("conditions"):
                 exit_result, exit_met = RuleEvaluator.evaluate_group(
                     exit_rules, df, bar_index, effective_params, multi_tf_data
                 )
                 if exit_result:
                     return SignalType.SELL, exit_met
+
+        elif position_state == "long":
+            # Long pozisyondayız -> YALNIZCA ÇIKIŞ (SELL -> Short'a geçiş) kurallarını kontrol et
+            if exit_rules and exit_rules.get("conditions"):
+                exit_result, exit_met = RuleEvaluator.evaluate_group(
+                    exit_rules, df, bar_index, effective_params, multi_tf_data
+                )
+                if exit_result:
+                    return SignalType.SELL, exit_met
+
+        elif position_state == "short":
+            # Short pozisyondayız -> YALNIZCA GİRİŞ (BUY -> Long'a geçiş) kurallarını kontrol et
+            if entry_rules and entry_rules.get("conditions"):
+                entry_result, entry_met = RuleEvaluator.evaluate_group(
+                    entry_rules, df, bar_index, effective_params, multi_tf_data
+                )
+                if entry_result:
+                    return SignalType.BUY, entry_met
 
         return SignalType.NEUTRAL, []
 
@@ -142,7 +160,7 @@ class RuleEngine:
     ) -> list[dict]:
         """
         Belirli bir aralıktaki tüm barları değerlendirir.
-        Garantili BUY -> SELL -> BUY -> SELL sıralı sinyal üretimi yapar.
+        Long ve Short pozisyon dönüşümlü sürekli işlem simülasyonu yapar.
         """
         if params is None:
             params = {}
@@ -158,8 +176,8 @@ class RuleEngine:
         end_index = min(end_index, len(df) - 1)
 
         signals: list[dict] = []
-        in_position: bool = False
-        last_buy_price: float | None = None
+        position_state: str = "none"  # "none", "long", "short"
+        last_entry_price: float | None = None
 
         # Fiyat sütun adını büyük/küçük harf bağımsız bul
         close_col = None
@@ -173,60 +191,61 @@ class RuleEngine:
                 strategy=strategy,
                 df=df,
                 bar_index=i,
-                in_position=in_position,
+                position_state=position_state,
                 effective_params=effective_params,
                 multi_tf_data=multi_tf_data,
             )
 
-            if signal == SignalType.BUY and not in_position:
-                in_position = True
-                close_price = float(df.iloc[i][close_col]) if close_col else 0.0
-                last_buy_price = close_price
+            close_price = float(df.iloc[i][close_col]) if close_col else 0.0
 
-                ts_val = df.iloc[i].get("timestamp", 0)
-                if hasattr(ts_val, "timestamp"):
-                    timestamp = int(ts_val.timestamp())
-                elif "time" in df.columns:
-                    time_val = df.iloc[i]["time"]
-                    timestamp = int(time_val.timestamp()) if hasattr(time_val, "timestamp") else int(time_val)
-                else:
-                    timestamp = int(ts_val) if ts_val else 0
+            ts_val = df.iloc[i].get("timestamp", 0)
+            if hasattr(ts_val, "timestamp"):
+                timestamp = int(ts_val.timestamp())
+            elif "time" in df.columns:
+                time_val = df.iloc[i]["time"]
+                timestamp = int(time_val.timestamp()) if hasattr(time_val, "timestamp") else int(time_val)
+            else:
+                timestamp = int(ts_val) if ts_val else 0
 
-                signals.append({
+            if signal == SignalType.BUY:
+                sig_item: dict = {
                     "bar_index": i,
                     "timestamp": timestamp,
                     "signal": "BUY",
                     "price": round(close_price, 4),
                     "conditions_met": conditions_met,
-                })
+                }
 
-            elif signal == SignalType.SELL and in_position:
-                in_position = False
-                close_price = float(df.iloc[i][close_col]) if close_col else 0.0
+                if position_state == "short" and last_entry_price is not None and last_entry_price > 0:
+                    # Short pozisyonunu kapat ve Short PnL % hesapla
+                    short_pnl = ((last_entry_price - close_price) / last_entry_price) * 100.0
+                    sig_item["entry_price"] = round(last_entry_price, 4)
+                    sig_item["pnl_percent"] = round(short_pnl, 2)
+                    sig_item["position_closed"] = "SHORT"
 
-                ts_val = df.iloc[i].get("timestamp", 0)
-                if hasattr(ts_val, "timestamp"):
-                    timestamp = int(ts_val.timestamp())
-                elif "time" in df.columns:
-                    time_val = df.iloc[i]["time"]
-                    timestamp = int(time_val.timestamp()) if hasattr(time_val, "timestamp") else int(time_val)
-                else:
-                    timestamp = int(ts_val) if ts_val else 0
+                position_state = "long"
+                last_entry_price = close_price
+                signals.append(sig_item)
 
-                pnl = 0.0
-                if last_buy_price is not None and last_buy_price > 0:
-                    pnl = ((close_price - last_buy_price) / last_buy_price) * 100.0
-
-                signals.append({
+            elif signal == SignalType.SELL:
+                sig_item: dict = {
                     "bar_index": i,
                     "timestamp": timestamp,
                     "signal": "SELL",
                     "price": round(close_price, 4),
-                    "entry_price": round(last_buy_price, 4) if last_buy_price else None,
-                    "pnl_percent": round(pnl, 2),
                     "conditions_met": conditions_met,
-                })
-                last_buy_price = None
+                }
+
+                if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
+                    # Long pozisyonunu kapat ve Long PnL % hesapla
+                    long_pnl = ((close_price - last_entry_price) / last_entry_price) * 100.0
+                    sig_item["entry_price"] = round(last_entry_price, 4)
+                    sig_item["pnl_percent"] = round(long_pnl, 2)
+                    sig_item["position_closed"] = "LONG"
+
+                position_state = "short"
+                last_entry_price = close_price
+                signals.append(sig_item)
 
         return signals
 

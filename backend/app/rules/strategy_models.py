@@ -207,7 +207,7 @@ class EvaluateRequest(BaseModel):
     timeframe: str = Field(..., description="Ana zaman dilimi (ör. 15m, 1h, 1d)")
     start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
     end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
-    limit_bars: Optional[int] = Field(365, description="Değerlendirilecek maksimum mum sayısı (varsayılan: 365)")
+    limit_bars: Optional[int] = Field(1000, description="Değerlendirilecek maksimum mum sayısı (varsayılan: 1000)")
     param_overrides: Dict[str, Union[int, float]] = Field(
         default_factory=dict, description="Parametre override'ları"
     )

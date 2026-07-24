@@ -177,7 +177,7 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
                             pass
 
     # Limit bars logic
-    limit_bars = 365
+    limit_bars = 1000
     if request.limit_bars is not None:
         limit_bars = request.limit_bars
 

@@ -44,7 +44,7 @@ export default function StrategyPage({
   const [evalTimeframe, setEvalTimeframe] = useState('1d');
   const [evalStart, setEvalStart] = useState('');
   const [evalEnd, setEvalEnd] = useState('');
-  const [evalLimitBars, setEvalLimitBars] = useState<number>(365);
+  const [evalLimitBars, setEvalLimitBars] = useState<number>(1000);
   const [showEvalPanel, setShowEvalPanel] = useState(false);
 
   // İlk yükleme
@@ -200,13 +200,13 @@ export default function StrategyPage({
                     </select>
                     <select
                       value={evalLimitBars}
-                      onChange={(e) => setEvalLimitBars(parseInt(e.target.value) || 365)}
+                      onChange={(e) => setEvalLimitBars(parseInt(e.target.value) || 1000)}
                       className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:border-indigo-500 outline-none"
                       title="Test Edilecek Mum Aralığı"
                     >
-                      <option value={365}>Son 365 Mum (Varsayılan)</option>
+                      <option value={1000}>Son 1000 Mum (Varsayılan)</option>
+                      <option value={365}>Son 365 Mum</option>
                       <option value={100}>Son 100 Mum</option>
-                      <option value={1000}>Son 1000 Mum</option>
                       <option value={0}>Tüm Veri (Sınırsız)</option>
                     </select>
                     <input

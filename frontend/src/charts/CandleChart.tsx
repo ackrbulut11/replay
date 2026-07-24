@@ -11,7 +11,7 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Clock } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
@@ -169,6 +169,16 @@ export default function CandleChart({
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const ctrlPressedRef = useRef(false);
   const shiftPressedRef = useRef(false);
+
+  const [crosshairInfo, setCrosshairInfo] = useState<{ y: number; price: number } | null>(null);
+  const [plusMenu, setPlusMenu] = useState<{ y: number; price: number } | null>(null);
+
+  const formatPriceLabel = useCallback((val?: number | null) => {
+    if (val === undefined || val === null) return '—';
+    return provider === 'binance' && val < 10
+      ? val.toFixed(4)
+      : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, [provider]);
 
   // Global Ctrl/Shift key listener to temporarily toggle snap/magnet and quick ruler
   useEffect(() => {
@@ -950,6 +960,17 @@ export default function CandleChart({
     });
 
     chart.subscribeCrosshairMove((param) => {
+      if (param.point && candleSeriesRef.current) {
+        const price = candleSeriesRef.current.coordinateToPrice(param.point.y);
+        if (price !== null && !isNaN(price)) {
+          setCrosshairInfo({ y: param.point.y, price });
+        } else {
+          setCrosshairInfo(null);
+        }
+      } else {
+        setCrosshairInfo(null);
+      }
+
       if (!param.point) return;
 
       if (activeToolRef.current === 'pointer') {
@@ -1909,6 +1930,61 @@ export default function CandleChart({
         <div className="absolute top-28 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-full shadow-lg border border-amber-300/50 backdrop-blur-md animate-bounce flex items-center gap-2 select-none pointer-events-none">
           <Scissors className="w-4 h-4" />
           <span>Grafikte kestirmek istediğiniz muma tıklayın!</span>
+        </div>
+      )}
+
+      {/* Fiyat Göstergesi Yanındaki (+) Butonu */}
+      {crosshairInfo && !plusMenu && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setPlusMenu({ y: crosshairInfo.y, price: crosshairInfo.price });
+          }}
+          style={{ top: `${crosshairInfo.y - 11}px` }}
+          className="absolute right-[56px] z-30 w-5.5 h-5.5 rounded-full bg-[#1e222d] border border-slate-600 hover:border-amber-400 hover:bg-slate-800 text-slate-200 hover:text-amber-400 flex items-center justify-center shadow-lg transition-all cursor-pointer group"
+          title="Alarm veya Seçenek Ekle (+)"
+        >
+          <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+        </button>
+      )}
+
+      {/* Popover Menü Açıkken Dışarı Tıklama Yakalayıcı Backdrop */}
+      {plusMenu && (
+        <div
+          className="absolute inset-0 z-35 bg-transparent"
+          onClick={() => setPlusMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setPlusMenu(null);
+          }}
+        />
+      )}
+
+      {/* (+) Butonuna Tıklandığında Açılan Hızlı İşlem Menüsü Popover */}
+      {plusMenu && (
+        <div
+          style={{ top: `${Math.max(10, plusMenu.y - 18)}px` }}
+          className="absolute right-[65px] z-40 bg-[#1e222d] border border-[#2a2e39] rounded-xl shadow-2xl py-1.5 min-w-[310px] text-xs animate-fadeIn select-none backdrop-blur-md"
+        >
+          {/* Alarm Ekle Menü Seçeneği */}
+          <button
+            onClick={() => {
+              const targetPrice = plusMenu.price;
+              setPlusMenu(null);
+              alertStore.openCreateModal(symbol, provider, targetPrice);
+            }}
+            className="w-full px-3 py-2 flex items-center justify-between text-slate-200 hover:bg-[#2a2e39] hover:text-white transition group cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5 truncate pr-2">
+              <Clock className="w-4 h-4 text-slate-400 group-hover:text-amber-400 shrink-0" />
+              <span className="truncate">
+                {formatPriceLabel(plusMenu.price)} üzerinden {symbol} için alarm ekle
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono shrink-0 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">
+              Alt + A
+            </span>
+          </button>
         </div>
       )}
 

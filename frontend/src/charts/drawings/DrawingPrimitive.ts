@@ -478,14 +478,15 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
         const lossHeight = Math.abs(yEntry - yStop);
 
         // 1. Kar Bölgesi (Yeşil Dolgu)
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.20)';
+        const fillAlpha = d.fillOpacity ?? 0.18;
+        ctx.fillStyle = `rgba(16, 185, 129, ${fillAlpha})`;
         ctx.fillRect(minX, profitTopY, rectW, profitHeight);
         ctx.strokeStyle = 'rgba(16, 185, 129, 0.85)';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(minX, profitTopY, rectW, profitHeight);
 
         // 2. Zarar Bölgesi (Kırmızı Dolgu)
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.20)';
+        ctx.fillStyle = `rgba(239, 68, 68, ${fillAlpha})`;
         ctx.fillRect(minX, lossTopY, rectW, lossHeight);
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
         ctx.lineWidth = 1.5;
@@ -532,8 +533,8 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
           const badgeX = minX + (rectW - badgeW) / 2;
           const badgeY = yEntry - badgeH / 2;
 
-          ctx.fillStyle = 'rgba(13, 19, 33, 0.92)';
-          ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.70)';
+          ctx.strokeStyle = 'rgba(51, 65, 85, 0.6)';
           ctx.lineWidth = 1;
           drawRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
           ctx.fill();

@@ -1,5 +1,6 @@
 import { Bookmark, Bell, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { useWatchlistStore, watchlistStore } from '../../store/watchlistStore';
+import { useAlertStore } from '../../store/alertStore';
 
 interface RightActionBarProps {
   onOpenSearchModal: () => void;
@@ -7,11 +8,14 @@ interface RightActionBarProps {
 
 export default function RightActionBar({ onOpenSearchModal }: RightActionBarProps) {
   const [state] = useWatchlistStore();
+  const [alertState] = useAlertStore();
 
   // Total items across all lists (deduplicated by item id)
   const allIds = new Set<string>();
   state.lists.forEach(g => g.items.forEach(i => allIds.add(i.id)));
   const totalCount = allIds.size;
+  const alertCount = alertState.alerts.filter(a => a.status === 'ACTIVE' || a.status === 'TRIGGERED').length;
+
 
   const isWatchlistActive = state.isOpen && state.activeRightTool === 'watchlist';
   const isAlertsActive = state.isOpen && state.activeRightTool === 'alerts';
@@ -67,18 +71,28 @@ export default function RightActionBar({ onOpenSearchModal }: RightActionBarProp
           <Plus className="w-4 h-4" />
         </button>
 
-        {/* Alarm / Alerts Button — işlevsiz, sonra eklenecek */}
-        <button
-          onClick={() => watchlistStore.setActiveRightTool('alerts')}
-          className={`p-2 rounded-xl transition-all ${
-            isAlertsActive
-              ? 'bg-amber-600/20 text-amber-400 border border-amber-500/40'
-              : 'text-slate-500 hover:text-amber-400 hover:bg-slate-800/50'
-          }`}
-          title="Fiyat Alarmları (Yakında)"
-        >
-          <Bell className="w-4 h-4" />
-        </button>
+        {/* Alarm / Alerts Button */}
+        <div className="relative">
+          <button
+            onClick={() => watchlistStore.setActiveRightTool('alerts')}
+            className={`p-2 rounded-xl transition-all relative group ${
+              isAlertsActive
+                ? 'bg-amber-600/30 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/10'
+                : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800/50'
+            }`}
+            title="Fiyat & İndikatör Alarmları"
+          >
+            <Bell className={`w-4 h-4 ${isAlertsActive ? 'fill-amber-400' : ''}`} />
+
+            {/* Alert Count Badge */}
+            {alertCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 text-[9px] font-extrabold px-1 rounded-full min-w-[14px] text-center leading-[14px]">
+                {alertCount > 99 ? '99+' : alertCount}
+              </span>
+            )}
+          </button>
+        </div>
+
 
       </div>
 

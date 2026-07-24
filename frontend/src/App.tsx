@@ -2,13 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
 import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
-import { BarChart3, ChevronUp, ChevronDown } from 'lucide-react';
+import { BarChart3, ChevronUp, ChevronDown, Bell, X } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';
 import StrategyPage from './pages/StrategyPage';
+import AlertsPanel from './components/alerts/AlertsPanel';
+import CreateAlarmModal from './components/alerts/CreateAlarmModal';
+import { useAlertStore, alertStore } from './store/alertStore';
 import type { NavigationTab } from './components/Sidebar';
+
 
 interface CandleData {
   time: number;
@@ -38,6 +42,8 @@ function App() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
 
   const [replayState] = useReplayStore();
+  const [alertState] = useAlertStore();
+
 
   // Replay sekmesine geçildiğinde Replay modunu grafik üzerinde otomatik aktif et
   useEffect(() => {
@@ -181,6 +187,20 @@ function App() {
               onOpenSearchModal={() => setIsSearchModalOpen(true)}
             />
 
+            {/* Açılır / Kapanır Alarmlar Paneli */}
+            <AlertsPanel
+              currentSymbol={symbol}
+              currentProvider={provider}
+              currentPrice={chartData.length > 0 ? chartData[chartData.length - 1].close : undefined}
+              onOpenCreateModal={() =>
+                alertStore.openCreateModal(
+                  symbol,
+                  provider,
+                  chartData.length > 0 ? chartData[chartData.length - 1].close : undefined
+                )
+              }
+            />
+
             {/* Dikey Sağ Araç Çubuğu (TradingView Stili) */}
             <RightActionBar
               onOpenSearchModal={() => setIsSearchModalOpen(true)}
@@ -197,6 +217,50 @@ function App() {
             }}
             currentProvider={provider}
           />
+
+          {/* Global Alarm Oluşturma Modalı */}
+          <CreateAlarmModal
+            isOpen={alertState.isCreateModalOpen}
+            onClose={() => alertStore.closeCreateModal()}
+            currentSymbol={alertState.modalSymbol || symbol}
+            currentProvider={alertState.modalProvider || provider}
+            currentPrice={
+              alertState.modalCurrentPrice ??
+              (chartData.length > 0 ? chartData[chartData.length - 1].close : undefined)
+            }
+          />
+
+          {/* Tetiklenen Alarm Toast Bildirimi */}
+          {alertState.latestTriggeredAlert && (
+            <div className="fixed bottom-6 right-6 z-50 bg-[#0d1321] border border-amber-500/50 shadow-2xl shadow-amber-500/20 rounded-2xl p-4 max-w-sm flex items-start gap-3 animate-slideUp">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                <Bell className="w-5 h-5 animate-bounce" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">🔔 Alarm Tetiklendi!</h4>
+                  <button
+                    onClick={() => alertStore.dismissTriggeredAlert()}
+                    className="p-1 text-slate-500 hover:text-slate-200 rounded-lg transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs font-bold text-slate-100 font-mono mt-1">
+                  {alertState.latestTriggeredAlert.symbol} • {alertState.latestTriggeredAlert.target_type}{' '}
+                  {alertState.latestTriggeredAlert.condition === 'rises_above' ? '>' : '<'}{' '}
+                  {alertState.latestTriggeredAlert.threshold_value}
+                </p>
+                {alertState.latestTriggeredAlert.last_value && (
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    Mevcut Değer:{' '}
+                    <span className="text-amber-400 font-bold">{alertState.latestTriggeredAlert.last_value}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
 
           {/* İstatistik Paneli Bileşenleri (Açılır-Kapanır Çekmece) */}
           {stats && !loading && (

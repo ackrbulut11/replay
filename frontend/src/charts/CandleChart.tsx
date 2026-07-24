@@ -16,6 +16,8 @@ import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
+import { useAlertStore, alertStore } from '../store/alertStore';
+
 
 
 
@@ -113,6 +115,10 @@ export default function CandleChart({
   const macdLineRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const macdSignalRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const macdHistRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
+
+  const alertPriceLinesRef = useRef<Array<{ line: any; series: any }>>([]);
+  const [alertState] = useAlertStore();
+
 
   // Alt panel boyutlandırma durumu
   const [subPaneRatio, setSubPaneRatio] = useState(0.28);
@@ -905,12 +911,9 @@ export default function CandleChart({
           const t0 = newPoints[0].time;
           const pEntry = newPoints[0].price;
           const t1 = newPoints[1].time;
-          let pTarget = newPoints[1].price;
-          if (pTarget <= pEntry) {
-            pTarget = pEntry * 1.04;
-          }
-          const targetDiff = pTarget - pEntry;
-          const pStop = pEntry - (targetDiff / 2); // Otomatik 1:2 R:R
+          const diff = Math.max(pEntry * 0.03, Math.abs(newPoints[1].price - pEntry));
+          const pTarget = pEntry + diff; // Buy/Long: Target Her Zaman Girişin Üstünde (pTarget > pEntry)
+          const pStop = pEntry - (diff / 2); // Buy/Long: Stop Loss Her Zaman Girişin Altında (1:2 R:R)
           finalPoints = [
             { time: t0, price: pEntry },
             { time: t1, price: pTarget },
@@ -920,12 +923,9 @@ export default function CandleChart({
           const t0 = newPoints[0].time;
           const pEntry = newPoints[0].price;
           const t1 = newPoints[1].time;
-          let pTarget = newPoints[1].price;
-          if (pTarget >= pEntry) {
-            pTarget = pEntry * 0.96;
-          }
-          const targetDiff = pEntry - pTarget;
-          const pStop = pEntry + (targetDiff / 2); // Otomatik 1:2 R:R
+          const diff = Math.max(pEntry * 0.03, Math.abs(pEntry - newPoints[1].price));
+          const pTarget = pEntry - diff; // Sell/Short: Target Her Zaman Girişin Altında (pTarget < pEntry)
+          const pStop = pEntry + (diff / 2); // Sell/Short: Stop Loss Her Zaman Girişin Üstünde (1:2 R:R)
           finalPoints = [
             { time: t0, price: pEntry },
             { time: t1, price: pTarget },
@@ -940,7 +940,7 @@ export default function CandleChart({
           color: settings.color,
           lineWidth: settings.lineWidth,
           opacity: settings.opacity,
-          fillOpacity: settings.fillOpacity,
+          fillOpacity: settings.fillOpacity ?? 0.18,
         };
 
         if (tool === 'ruler') {
@@ -976,7 +976,30 @@ export default function CandleChart({
       const point = getPointFromPixel(param.point.x, param.point.y, snapEnabledRef.current || ctrlPressedRef.current);
       if (!point) return;
 
-      const previewPoints = [...currentPointsRef.current, point];
+      let previewPoints = [...currentPointsRef.current, point];
+      if (activeToolRef.current === 'longPosition' || activeToolRef.current === 'shortPosition') {
+        const pEntry = currentPointsRef.current[0].price;
+        const t0 = currentPointsRef.current[0].time;
+        const t1 = point.time;
+        let pTarget: number, pStop: number;
+
+        if (activeToolRef.current === 'longPosition') {
+          const diff = Math.max(pEntry * 0.03, Math.abs(point.price - pEntry));
+          pTarget = pEntry + diff;
+          pStop = pEntry - (diff / 2);
+        } else {
+          const diff = Math.max(pEntry * 0.03, Math.abs(pEntry - point.price));
+          pTarget = pEntry - diff;
+          pStop = pEntry + (diff / 2);
+        }
+
+        previewPoints = [
+          { time: t0, price: pEntry },
+          { time: t1, price: pTarget },
+          { time: t1, price: pStop },
+        ];
+      }
+
       const settings = toolSettingsRef.current[activeToolRef.current];
       primitive.setPreview({
         id: 'preview',
@@ -984,7 +1007,7 @@ export default function CandleChart({
         points: previewPoints,
         color: settings ? settings.color : 'rgba(59, 130, 246, 0.5)',
         lineWidth: settings ? settings.lineWidth : DEFAULT_LINE_WIDTH,
-        opacity: activeToolRef.current === 'ruler' ? 1 : (settings ? settings.opacity * 0.7 : 0.6),
+        opacity: settings ? settings.opacity : DEFAULT_OPACITY,
       });
     });
 
@@ -1417,6 +1440,69 @@ export default function CandleChart({
       }
     }
   }, [subPaneRatio, rsiMacdSplit, indicators]);
+
+
+  // Render alarm price lines on the chart
+  useEffect(() => {
+    // Clear old alert price lines
+    alertPriceLinesRef.current.forEach(({ line, series }) => {
+      try {
+        series.removePriceLine(line);
+      } catch (e) {
+        // ignore
+      }
+    });
+    alertPriceLinesRef.current = [];
+
+    const mainSeries = candleSeriesRef.current || mainLineSeriesRef.current;
+    if (!mainSeries) return;
+
+    const matchingAlerts = alertState.alerts.filter(
+      (a) => a.symbol.toUpperCase() === symbol.toUpperCase() && (a.status === 'ACTIVE' || a.status === 'TRIGGERED')
+    );
+
+    matchingAlerts.forEach((alert) => {
+      let targetSeries: any = mainSeries;
+      if (alert.target_type === 'RSI' && rsiRef.current) {
+        targetSeries = rsiRef.current;
+      }
+
+      if (!targetSeries) return;
+
+      const isRises = alert.condition === 'rises_above';
+      const color =
+        alert.status === 'TRIGGERED'
+          ? '#f59e0b'
+          : isRises
+          ? '#10b981'
+          : '#ef4444';
+
+      const condSym = isRises ? '>' : '<';
+      const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${alert.threshold_value}`;
+
+      try {
+        const line = targetSeries.createPriceLine({
+          price: alert.threshold_value,
+          color: color,
+          lineWidth: alert.status === 'TRIGGERED' ? 2 : 1,
+          lineStyle: 2, // Dashed
+          axisLabelVisible: true,
+          title: labelTitle,
+        });
+        alertPriceLinesRef.current.push({ line, series: targetSeries });
+      } catch (err) {
+        console.warn('PriceLine create failed:', err);
+      }
+    });
+  }, [alertState.alerts, symbol, data, indicators]);
+
+  // Check alerts against current visible price
+  useEffect(() => {
+    if (visibleData.length === 0) return;
+    const last = visibleData[visibleData.length - 1];
+    alertStore.checkAlerts(symbol, provider, last.close);
+  }, [visibleData, symbol, provider]);
+
 
   // Ayırıcı konumlarını hesapla — marj yerleşim formülünü birebir yansıtır (sıfır boşluk)
   const hasSubPane = indicators.rsi || indicators.macd;

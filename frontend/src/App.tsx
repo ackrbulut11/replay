@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
 import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
-import { BarChart3, ChevronUp, ChevronDown, Bell, X } from 'lucide-react';
+import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import RightActionBar from './components/watchlist/RightActionBar';
@@ -230,33 +230,41 @@ function App() {
             }
           />
 
-          {/* Tetiklenen Alarm Toast Bildirimi */}
+          {/* Tetiklenen Alarm Ekran Uyarı Modalı ve Ses Kapatma */}
           {alertState.latestTriggeredAlert && (
-            <div className="fixed bottom-6 right-6 z-50 bg-[#0d1321] border border-amber-500/50 shadow-2xl shadow-amber-500/20 rounded-2xl p-4 max-w-sm flex items-start gap-3 animate-slideUp">
-              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
-                <Bell className="w-5 h-5 animate-bounce" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">🔔 Alarm Tetiklendi!</h4>
-                  <button
-                    onClick={() => alertStore.dismissTriggeredAlert()}
-                    className="p-1 text-slate-500 hover:text-slate-200 rounded-lg transition"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fadeIn select-none">
+              <div className="bg-[#0d1321] border-2 border-amber-500/80 shadow-2xl shadow-amber-500/30 rounded-2xl p-6 max-w-sm w-full flex flex-col items-center text-center space-y-4 animate-scaleUp">
+                <div className="p-3.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20 animate-bounce">
+                  <Bell className="w-8 h-8" />
                 </div>
-                <p className="text-xs font-bold text-slate-100 font-mono mt-1">
-                  {alertState.latestTriggeredAlert.symbol} • {alertState.latestTriggeredAlert.target_type}{' '}
-                  {alertState.latestTriggeredAlert.condition === 'rises_above' ? '>' : '<'}{' '}
-                  {alertState.latestTriggeredAlert.threshold_value}
-                </p>
-                {alertState.latestTriggeredAlert.last_value && (
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                    Mevcut Değer:{' '}
-                    <span className="text-amber-400 font-bold">{alertState.latestTriggeredAlert.last_value}</span>
+                <div>
+                  <h3 className="text-base font-extrabold text-amber-400 uppercase tracking-wide">
+                    🔔 Alarm Tetiklendi!
+                  </h3>
+                  <p className="text-sm font-bold text-slate-100 font-mono mt-1">
+                    {alertState.latestTriggeredAlert.symbol} • {alertState.latestTriggeredAlert.target_type}{' '}
+                    {alertState.latestTriggeredAlert.condition === 'rises_above' ? '>' : '<'}{' '}
+                    {alertState.latestTriggeredAlert.threshold_value}
                   </p>
-                )}
+                  {alertState.latestTriggeredAlert.last_value && (
+                    <p className="text-xs text-slate-400 font-mono mt-1">
+                      Mevcut Fiyat:{' '}
+                      <span className="text-amber-400 font-bold">{alertState.latestTriggeredAlert.last_value}</span>
+                    </p>
+                  )}
+                  {alertState.latestTriggeredAlert.note && (
+                    <p className="text-xs text-slate-300 italic mt-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                      "{alertState.latestTriggeredAlert.note}"
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => alertStore.dismissTriggeredAlert()}
+                  className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold rounded-xl shadow-lg transition-all text-sm cursor-pointer"
+                >
+                  Tamam (Sesi Kapat)
+                </button>
               </div>
             </div>
           )}

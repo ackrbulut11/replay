@@ -45,6 +45,68 @@ function emitChange() {
   listeners.forEach(listener => listener());
 }
 
+let alarmAudioCtx: AudioContext | null = null;
+let alarmAudioTimeout: ReturnType<typeof setTimeout> | null = null;
+
+export function playBellSound(durationSec: number = 5) {
+  try {
+    stopBellSound();
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    alarmAudioCtx = ctx;
+
+    const now = ctx.currentTime;
+    
+    // Çan sesi harmonikleri (A5: 880Hz, 1320Hz, 1760Hz, 2640Hz)
+    const freqs = [880, 1320, 1760, 2640];
+    const gains = [0.35, 0.22, 0.14, 0.08];
+
+    // 5 saniye içinde 3 kez çan vuruşu (0s, 1.6s, 3.2s)
+    [0, 1.6, 3.2].forEach(strikeOffset => {
+      freqs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + strikeOffset);
+
+        const startTime = now + strikeOffset;
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(gains[idx], startTime + 0.015);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + 1.2);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 1.25);
+      });
+    });
+
+    alarmAudioTimeout = setTimeout(() => {
+      stopBellSound();
+    }, durationSec * 1000);
+  } catch (e) {
+    console.warn('AudioContext error:', e);
+  }
+}
+
+export function stopBellSound() {
+  if (alarmAudioTimeout) {
+    clearTimeout(alarmAudioTimeout);
+    alarmAudioTimeout = null;
+  }
+  if (alarmAudioCtx) {
+    try {
+      alarmAudioCtx.close();
+    } catch (e) {
+      // ignore
+    }
+    alarmAudioCtx = null;
+  }
+}
+
 export const alertStore = {
   getState: () => state,
   
@@ -74,6 +136,7 @@ export const alertStore = {
   },
 
   dismissTriggeredAlert: () => {
+    stopBellSound();
     alertStore.setState(() => ({
       latestTriggeredAlert: null,
     }));
@@ -201,6 +264,7 @@ export const alertStore = {
             latestTriggeredAlert: triggered[triggered.length - 1],
           };
         });
+        playBellSound(5);
       }
     } catch (err: any) {
       console.error('Check alerts error:', err);

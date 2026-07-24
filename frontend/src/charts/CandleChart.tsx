@@ -1485,12 +1485,7 @@ export default function CandleChart({
       if (!targetSeries) return;
 
       const isRises = alert.condition === 'rises_above';
-      const color =
-        alert.status === 'TRIGGERED'
-          ? '#f59e0b'
-          : isRises
-          ? '#10b981'
-          : '#ef4444';
+      const color = '#f59e0b'; // Sarı renk (Yellow)
 
       const condSym = isRises ? '>' : '<';
       const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${alert.threshold_value}`;

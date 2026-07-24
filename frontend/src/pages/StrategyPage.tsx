@@ -12,6 +12,7 @@ import {
   ArrowDownRight,
   Zap,
   Layers,
+  BarChart3,
 } from 'lucide-react';
 import StrategyList from '../strategy/StrategyList';
 import StrategyBuilder from '../strategy/StrategyBuilder';
@@ -19,7 +20,19 @@ import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import type { Strategy, EvaluateRequest } from '../types/strategy';
 import { TIMEFRAMES } from '../types/strategy';
 
-export default function StrategyPage() {
+interface StrategyPageProps {
+  onSelectTab?: (tab: 'chart' | 'replay' | 'strategy') => void;
+  setSymbol?: (s: string) => void;
+  setProvider?: (p: string) => void;
+  setTimeframe?: (tf: string) => void;
+}
+
+export default function StrategyPage({
+  onSelectTab,
+  setSymbol,
+  setProvider,
+  setTimeframe,
+}: StrategyPageProps = {}) {
   const { strategies, activeStrategy, indicators, evaluateResult, isLoading, error } =
     useStrategyStore();
 
@@ -74,6 +87,13 @@ export default function StrategyPage() {
 
     await strategyStore.evaluateStrategy(activeStrategy.id, request);
     setShowEvalPanel(true);
+  };
+
+  const handleNavigateToChart = () => {
+    if (setSymbol) setSymbol(evalSymbol);
+    if (setProvider) setProvider(evalProvider);
+    if (setTimeframe) setTimeframe(evalTimeframe);
+    if (onSelectTab) onSelectTab('chart');
   };
 
   const formatTimestamp = (ts: number): string => {
@@ -206,11 +226,21 @@ export default function StrategyPage() {
                     <button
                       onClick={handleEvaluate}
                       disabled={isLoading}
-                      className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all cursor-pointer shadow-md shadow-emerald-600/20"
                     >
                       <Play className="w-3.5 h-3.5" />
                       Çalıştır
                     </button>
+                    {showEvalPanel && evaluateResult && (
+                      <button
+                        onClick={handleNavigateToChart}
+                        className="flex items-center gap-1.5 px-3.5 py-1 text-xs font-semibold text-indigo-300 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 rounded-lg transition-all cursor-pointer shadow-md shadow-indigo-600/20"
+                        title="Grafiğe geç ve sinyalleri incele"
+                      >
+                        <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                        Grafikte Göster
+                      </button>
+                    )}
                   </div>
 
                   {/* Hata */}
@@ -293,7 +323,9 @@ export default function StrategyPage() {
                               {evaluateResult.signals.slice(0, 100).map((signal, i) => (
                                 <tr
                                   key={i}
-                                  className="border-t border-slate-800/30 hover:bg-slate-800/20"
+                                  onClick={handleNavigateToChart}
+                                  className="border-t border-slate-800/30 hover:bg-indigo-500/10 cursor-pointer transition-colors"
+                                  title="Tıklayarak grafiğe geçin ve sinyali görün"
                                 >
                                   <td className="px-3 py-1.5 text-slate-400 font-mono">
                                     {formatTimestamp(signal.timestamp)}

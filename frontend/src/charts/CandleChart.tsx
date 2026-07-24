@@ -17,6 +17,7 @@ import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
+import { useStrategyStore } from '../store/strategyStore';
 
 
 
@@ -189,6 +190,50 @@ export default function CandleChart({
       ? val.toFixed(4)
       : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [provider]);
+
+  // Strateji sinyallerini grafik üzerinde oklar (BUY/SELL) olarak çizdir
+  const { evaluateResult } = useStrategyStore();
+
+  useEffect(() => {
+    const targetSeries = candleSeriesRef.current || mainLineSeriesRef.current;
+    if (!targetSeries) return;
+
+    if (!evaluateResult || !evaluateResult.signals || evaluateResult.signals.length === 0) {
+      try {
+        targetSeries.setMarkers([]);
+      } catch {}
+      return;
+    }
+
+    const markers = evaluateResult.signals.map((sig) => {
+      const isBuy = sig.signal === 'BUY';
+      const priceText = sig.price ? sig.price.toFixed(2) : '';
+      let labelText = `${sig.signal}`;
+
+      if (priceText) {
+        labelText += ` @ ${priceText}`;
+      }
+      if (!isBuy && sig.pnl_percent !== undefined) {
+        labelText += ` (${sig.pnl_percent >= 0 ? '+' : ''}${sig.pnl_percent.toFixed(2)}%)`;
+      }
+
+      return {
+        time: sig.timestamp as Time,
+        position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
+        color: isBuy ? '#10b981' : '#ef4444',
+        shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
+        text: labelText,
+      };
+    });
+
+    markers.sort((a, b) => Number(a.time) - Number(b.time));
+
+    try {
+      targetSeries.setMarkers(markers);
+    } catch (err) {
+      console.warn('Set strategy markers error:', err);
+    }
+  }, [evaluateResult, symbol, data]);
 
   // Global Ctrl/Shift key listener to temporarily toggle snap/magnet and quick ruler
   useEffect(() => {

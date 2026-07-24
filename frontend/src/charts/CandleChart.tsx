@@ -1564,6 +1564,14 @@ export default function CandleChart({
 
       if (!targetSeries) return;
 
+      const isRises = alert.condition === 'rises_above';
+      const condSym = isRises ? '>' : '<';
+      const formattedVal = typeof alert.threshold_value === 'number'
+        ? alert.threshold_value.toFixed(2)
+        : alert.threshold_value;
+
+      const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${formattedVal}`;
+
       try {
         const line = targetSeries.createPriceLine({
           price: alert.threshold_value,
@@ -1571,7 +1579,8 @@ export default function CandleChart({
           lineWidth: alert.status === 'TRIGGERED' ? 2 : 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
-          title: '', // 5% opaklık ve hover silme butonu için HTML overlay kullanıyoruz
+          axisLabelColor: '#f59e0b',
+          title: labelTitle,
         });
         alertPriceLinesRef.current.push({ line, series: targetSeries });
       } catch (err) {
@@ -2004,25 +2013,25 @@ export default function CandleChart({
         </div>
       )}
 
-      {/* Grafikteki Alarm Etiketleri (Yüzde 5 Opaklık + Hover Olunca Solunda Çarpı (X) Butonu) */}
+      {/* Grafikteki Alarm Rozetleri (Sağ Tarafta X Butonu İle Anında İptal Etme) */}
       {alarmOverlays.map((item) => (
         <div
           key={item.id}
-          style={{ top: `${item.y - 11}px` }}
-          className="absolute left-[76px] z-25 flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-500/5 hover:bg-amber-500/15 border border-amber-500/40 text-amber-400 text-xs font-mono font-medium shadow-sm backdrop-blur-xs group transition-all cursor-pointer select-none"
+          style={{ top: `${item.y - 12}px` }}
+          className="absolute right-[80px] z-25 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#1e222d]/90 hover:bg-[#1e222d] border border-amber-500/50 text-amber-400 text-xs font-mono font-bold shadow-xl backdrop-blur-xs group transition-all select-none cursor-pointer"
         >
-          {/* Sol tarafta imleç üzerine gelince çıkan Alarm İptal Et (X) Butonu */}
+          {/* Sol tarafta Alarm İptal Et (X) Butonu */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               alertStore.deleteAlert(item.id);
             }}
-            className="hidden group-hover:flex items-center justify-center w-4 h-4 rounded-full bg-red-500/80 hover:bg-red-500 text-white shrink-0 transition-transform active:scale-95 cursor-pointer"
-            title="Alarmi İptal Et"
+            className="flex items-center justify-center w-4 h-4 rounded-full bg-red-500/80 hover:bg-red-500 text-white shrink-0 transition-transform active:scale-95 cursor-pointer"
+            title="Alarmı İptal Et"
           >
             <X className="w-2.5 h-2.5" />
           </button>
-          <Bell className="w-3 h-3 text-amber-400 shrink-0 group-hover:scale-105 transition-transform" />
+          <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
           <span>
             {item.symbol} {item.condSym} {item.val}
           </span>

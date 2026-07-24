@@ -1,5 +1,5 @@
 {
-  "id": "ce292370",
+  "id": "75ce03a2",
   "symbol": "BTCUSDT",
   "provider": "binance",
   "timeframe": "1d",
@@ -7,10 +7,10 @@
   "indicator_period": 14,
   "indicator_field": null,
   "condition": "rises_above",
-  "threshold_value": 78271.81848054322,
+  "threshold_value": 74804.49,
   "note": null,
   "status": "ACTIVE",
-  "created_at": "2026-07-24T11:34:58.576873Z",
+  "created_at": "2026-07-24T11:47:57.853730Z",
   "triggered_at": null,
   "last_value": null
 }

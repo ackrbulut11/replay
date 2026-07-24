@@ -562,22 +562,50 @@ export default function CandleChart({
       const logical = chart.timeScale().coordinateToLogical(x);
       if (logical !== null) {
         const barIdx = Math.round(logical);
-        const bar = series.dataByIndex(barIdx) as any;
-        if (bar && typeof bar.open === 'number' && !isNaN(bar.open)) {
-          const barTime = bar.time as number;
+        const candles = fullDataRef.current;
+        let candle: CandleData | null = null;
+        if (candles && candles.length > 0) {
+          if (barIdx >= 0 && barIdx < candles.length) {
+            candle = candles[barIdx];
+          } else if (barIdx < 0) {
+            candle = candles[0];
+          } else if (barIdx >= candles.length) {
+            candle = candles[candles.length - 1];
+          }
+        }
+
+        if (candle && typeof candle.open === 'number') {
+          const barTime = candle.time;
           const barPixelX = chart.timeScale().timeToCoordinate(barTime as Time);
           const snapPrice = series.coordinateToPrice(y);
 
           if (barPixelX !== null && snapPrice !== null) {
             const visibleRange = chart.timeScale().getVisibleLogicalRange();
-            let threshold = 20;
+            let threshold = 25;
             if (visibleRange) {
               const spacing = chart.timeScale().width() / (visibleRange.to - visibleRange.from);
-              threshold = Math.max(8, Math.min(40, spacing * 0.45));
+              threshold = Math.max(10, Math.min(50, spacing * 0.5));
             }
             if (Math.abs(x - barPixelX) <= threshold) {
-              const ohlc = [bar.open as number, bar.high as number, bar.low as number, bar.close as number];
-              const price = ohlc.reduce((best, p) =>
+              const high = candle.high;
+              const low = candle.low;
+              const open = candle.open;
+              const close = candle.close;
+              const topBody = Math.max(open, close);
+              const bottomBody = Math.min(open, close);
+
+              const mid = (high + low) / 2;
+              let candidates: number[];
+
+              if (snapPrice >= mid) {
+                // Mumun üst tarafındaysa: Üst fitil ucu (High) veya Gövde Üstü
+                candidates = [high, topBody];
+              } else {
+                // Mumun alt tarafındaysa: Alt fitil ucu (Low) veya Gövde Altı
+                candidates = [low, bottomBody];
+              }
+
+              const price = candidates.reduce((best, p) =>
                 Math.abs(p - snapPrice) < Math.abs(best - snapPrice) ? p : best
               );
               return { time: barTime, price };

@@ -571,27 +571,13 @@ export default function CandleChart({
           const snapPrice = series.coordinateToPrice(y);
 
           if (candle && snapPrice !== null) {
-            const high = candle.high;
-            const low = candle.low;
-            const open = candle.open;
-            const close = candle.close;
-            const topBody = Math.max(open, close);
-            const bottomBody = Math.min(open, close);
-
-            let price: number;
-            if (snapPrice >= high) {
-              // Mumun üzerinde ise: Üst fitil ucuna (High) yapış
-              price = high;
-            } else if (snapPrice <= low) {
-              // Mumun altında ise: Alt fitil ucuna (Low) yapış
-              price = low;
-            } else {
-              // Mum içindeyse: En yakın OHLC seviyesine yapış
-              const candidates = [high, topBody, bottomBody, low];
-              price = candidates.reduce((best, p) =>
-                Math.abs(p - snapPrice) < Math.abs(best - snapPrice) ? p : best
-              );
-            }
+            // Mumun 4 temel noktası: Başlangıç (Open), Bitiş (Close), En Yüksek (High), En Düşük (Low)
+            const points = [candle.open, candle.close, candle.high, candle.low];
+            
+            // Fare imlecinin fiyatına en yakın olan noktayı seç ve doğrudan o verinin olduğu yere yapış
+            const price = points.reduce((best, p) =>
+              Math.abs(p - snapPrice) < Math.abs(best - snapPrice) ? p : best
+            );
             return { time: candle.time, price };
           }
         }

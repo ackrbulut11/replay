@@ -176,8 +176,13 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
                         except Exception:
                             pass
 
-    if request.limit_bars and request.limit_bars > 0 and len(df) > request.limit_bars:
-        df = df.iloc[-request.limit_bars:].reset_index(drop=True)
+    # Limit bars logic
+    limit_bars = 365
+    if request.limit_bars is not None:
+        limit_bars = request.limit_bars
+
+    if limit_bars > 0 and len(df) > limit_bars:
+        df = df.tail(limit_bars).reset_index(drop=True)
 
     # Değerlendir
     try:

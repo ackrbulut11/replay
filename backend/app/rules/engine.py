@@ -89,6 +89,49 @@ class RuleEngine:
         return SignalType.NEUTRAL, []
 
     @staticmethod
+    def evaluate_bar_with_state(
+        strategy: dict,
+        df: pd.DataFrame,
+        bar_index: int,
+        in_position: bool,
+        effective_params: dict,
+        multi_tf_data: dict[str, pd.DataFrame] | None = None,
+    ) -> tuple[SignalType, list[str]]:
+        """Pozisyon durumuna göre (in_position) ilgili kuralları değerlendirir."""
+        if bar_index < 0 or bar_index >= len(df):
+            return SignalType.NEUTRAL, []
+
+        # Timeframe filtrelerini kontrol et
+        tf_filters = strategy.get("timeframe_filters", [])
+        for tf_filter in tf_filters:
+            tf_result, _ = RuleEvaluator.evaluate_group(
+                tf_filter, df, bar_index, effective_params, multi_tf_data
+            )
+            if not tf_result:
+                return SignalType.NEUTRAL, []
+
+        if not in_position:
+            # Pozisyonda değiliz -> YALNIZCA GİRİŞ (BUY) kurallarını kontrol et
+            entry_rules = strategy.get("entry_rules", {})
+            if entry_rules and entry_rules.get("conditions"):
+                entry_result, entry_met = RuleEvaluator.evaluate_group(
+                    entry_rules, df, bar_index, effective_params, multi_tf_data
+                )
+                if entry_result:
+                    return SignalType.BUY, entry_met
+        else:
+            # Pozisyondayız -> YALNIZCA ÇIKIŞ (SELL) kurallarını kontrol et
+            exit_rules = strategy.get("exit_rules", {})
+            if exit_rules and exit_rules.get("conditions"):
+                exit_result, exit_met = RuleEvaluator.evaluate_group(
+                    exit_rules, df, bar_index, effective_params, multi_tf_data
+                )
+                if exit_result:
+                    return SignalType.SELL, exit_met
+
+        return SignalType.NEUTRAL, []
+
+    @staticmethod
     def evaluate_range(
         strategy: dict,
         df: pd.DataFrame,
@@ -99,9 +142,7 @@ class RuleEngine:
     ) -> list[dict]:
         """
         Belirli bir aralıktaki tüm barları değerlendirir.
-
-        Returns:
-            Sinyal listesi: [{"bar_index": int, "timestamp": int, "signal": str, "conditions_met": [...]}]
+        Garantili BUY -> SELL -> BUY -> SELL sıralı sinyal üretimi yapar.
         """
         if params is None:
             params = {}
@@ -109,30 +150,38 @@ class RuleEngine:
         effective_params = RuleEngine._resolve_params(strategy, params)
 
         if start_index is None:
-            # İlk anlamlı bar: en büyük period kadar offset
             start_index = RuleEngine._get_warmup_period(strategy, effective_params)
         if end_index is None:
             end_index = len(df) - 1
 
-        # Sınırları koru
         start_index = max(start_index, 0)
         end_index = min(end_index, len(df) - 1)
 
         signals: list[dict] = []
-        last_signal: SignalType | None = None
+        in_position: bool = False
         last_buy_price: float | None = None
 
+        # Fiyat sütun adını büyük/küçük harf bağımsız bul
+        close_col = None
+        for col in df.columns:
+            if str(col).lower() == "close":
+                close_col = col
+                break
+
         for i in range(start_index, end_index + 1):
-            signal, conditions_met = RuleEngine.evaluate(
-                strategy, df, i, effective_params, multi_tf_data
+            signal, conditions_met = RuleEngine.evaluate_bar_with_state(
+                strategy=strategy,
+                df=df,
+                bar_index=i,
+                in_position=in_position,
+                effective_params=effective_params,
+                multi_tf_data=multi_tf_data,
             )
-            if signal != SignalType.NEUTRAL:
-                # Sinyal Sıralaması Mantığı (BUY -> SELL -> BUY -> SELL):
-                # Bir BUY sinyalinden sonra tekrar BUY üretilmez; SELL beklenir.
-                if signal == SignalType.BUY and last_signal == SignalType.BUY:
-                    continue
-                if signal == SignalType.SELL and last_signal != SignalType.BUY:
-                    continue
+
+            if signal == SignalType.BUY and not in_position:
+                in_position = True
+                close_price = float(df.iloc[i][close_col]) if close_col else 0.0
+                last_buy_price = close_price
 
                 ts_val = df.iloc[i].get("timestamp", 0)
                 if hasattr(ts_val, "timestamp"):
@@ -143,28 +192,41 @@ class RuleEngine:
                 else:
                     timestamp = int(ts_val) if ts_val else 0
 
-                close_price = float(df.iloc[i]["close"]) if "close" in df.columns else 0.0
-
-                sig_item: dict = {
+                signals.append({
                     "bar_index": i,
                     "timestamp": timestamp,
-                    "signal": signal.value,
+                    "signal": "BUY",
                     "price": round(close_price, 4),
                     "conditions_met": conditions_met,
-                }
+                })
 
-                if signal == SignalType.BUY:
-                    last_signal = SignalType.BUY
-                    last_buy_price = close_price
-                elif signal == SignalType.SELL:
-                    last_signal = SignalType.SELL
-                    if last_buy_price is not None and last_buy_price > 0:
-                        pnl = ((close_price - last_buy_price) / last_buy_price) * 100.0
-                        sig_item["entry_price"] = round(last_buy_price, 4)
-                        sig_item["pnl_percent"] = round(pnl, 2)
-                    last_buy_price = None
+            elif signal == SignalType.SELL and in_position:
+                in_position = False
+                close_price = float(df.iloc[i][close_col]) if close_col else 0.0
 
-                signals.append(sig_item)
+                ts_val = df.iloc[i].get("timestamp", 0)
+                if hasattr(ts_val, "timestamp"):
+                    timestamp = int(ts_val.timestamp())
+                elif "time" in df.columns:
+                    time_val = df.iloc[i]["time"]
+                    timestamp = int(time_val.timestamp()) if hasattr(time_val, "timestamp") else int(time_val)
+                else:
+                    timestamp = int(ts_val) if ts_val else 0
+
+                pnl = 0.0
+                if last_buy_price is not None and last_buy_price > 0:
+                    pnl = ((close_price - last_buy_price) / last_buy_price) * 100.0
+
+                signals.append({
+                    "bar_index": i,
+                    "timestamp": timestamp,
+                    "signal": "SELL",
+                    "price": round(close_price, 4),
+                    "entry_price": round(last_buy_price, 4) if last_buy_price else None,
+                    "pnl_percent": round(pnl, 2),
+                    "conditions_met": conditions_met,
+                })
+                last_buy_price = None
 
         return signals
 

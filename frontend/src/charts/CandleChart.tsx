@@ -170,8 +170,10 @@ export default function CandleChart({
   const ctrlPressedRef = useRef(false);
   const shiftPressedRef = useRef(false);
 
-  const [crosshairInfo, setCrosshairInfo] = useState<{ y: number; price: number } | null>(null);
   const [plusMenu, setPlusMenu] = useState<{ y: number; price: number } | null>(null);
+  const plusButtonRef = useRef<HTMLButtonElement | null>(null);
+  const currentCrosshairYRef = useRef<number | null>(null);
+  const currentCrosshairPriceRef = useRef<number | null>(null);
 
   const formatPriceLabel = useCallback((val?: number | null) => {
     if (val === undefined || val === null) return '—';
@@ -961,14 +963,20 @@ export default function CandleChart({
 
     chart.subscribeCrosshairMove((param) => {
       if (param.point && candleSeriesRef.current) {
-        const price = candleSeriesRef.current.coordinateToPrice(param.point.y);
+        const y = param.point.y;
+        const price = candleSeriesRef.current.coordinateToPrice(y);
         if (price !== null && !isNaN(price)) {
-          setCrosshairInfo({ y: param.point.y, price });
+          currentCrosshairYRef.current = y;
+          currentCrosshairPriceRef.current = price;
+          if (plusButtonRef.current) {
+            plusButtonRef.current.style.top = `${y - 12}px`;
+            plusButtonRef.current.style.display = 'flex';
+          }
         } else {
-          setCrosshairInfo(null);
+          if (plusButtonRef.current) plusButtonRef.current.style.display = 'none';
         }
       } else {
-        setCrosshairInfo(null);
+        if (plusButtonRef.current) plusButtonRef.current.style.display = 'none';
       }
 
       if (!param.point) return;
@@ -1928,20 +1936,22 @@ export default function CandleChart({
         </div>
       )}
 
-      {/* Fiyat Göstergesi Yanındaki (+) Butonu */}
-      {crosshairInfo && !plusMenu && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setPlusMenu({ y: crosshairInfo.y, price: crosshairInfo.price });
-          }}
-          style={{ top: `${crosshairInfo.y - 11}px` }}
-          className="absolute right-[56px] z-30 w-5.5 h-5.5 rounded-full bg-[#1e222d] border border-slate-600 hover:border-amber-400 hover:bg-slate-800 text-slate-200 hover:text-amber-400 flex items-center justify-center shadow-lg transition-all cursor-pointer group"
-          title="Alarm veya Seçenek Ekle (+)"
-        >
-          <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
-        </button>
-      )}
+      {/* Fiyat Göstergesi Yanındaki (+) Butonu - Doğrudan DOM Ref ile 0ms Gecikmesiz Konumlandırma */}
+      <button
+        ref={plusButtonRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (currentCrosshairYRef.current !== null && currentCrosshairPriceRef.current !== null) {
+            setPlusMenu({ y: currentCrosshairYRef.current, price: currentCrosshairPriceRef.current });
+            if (plusButtonRef.current) plusButtonRef.current.style.display = 'none';
+          }
+        }}
+        style={{ display: 'none' }}
+        className="absolute right-[76px] z-30 w-6 h-6 rounded-full bg-[#1e222d] border border-slate-500 hover:border-amber-400 hover:bg-slate-800 text-slate-200 hover:text-amber-400 flex items-center justify-center shadow-xl cursor-pointer group"
+        title="Alarm veya Seçenek Ekle (+)"
+      >
+        <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+      </button>
 
       {/* Popover Menü Açıkken Dışarı Tıklama Yakalayıcı Backdrop */}
       {plusMenu && (
@@ -1959,7 +1969,7 @@ export default function CandleChart({
       {plusMenu && (
         <div
           style={{ top: `${Math.max(10, plusMenu.y - 18)}px` }}
-          className="absolute right-[65px] z-40 bg-[#1e222d] border border-[#2a2e39] rounded-xl shadow-2xl py-1.5 min-w-[310px] text-xs animate-fadeIn select-none backdrop-blur-md"
+          className="absolute right-[84px] z-40 bg-[#1e222d] border border-[#2a2e39] rounded-xl shadow-2xl py-1.5 min-w-[310px] text-xs animate-fadeIn select-none backdrop-blur-md"
         >
           {/* Alarm Ekle Menü Seçeneği */}
           <button

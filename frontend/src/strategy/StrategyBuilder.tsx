@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Settings2,
   Filter,
+  Info,
 } from 'lucide-react';
 import ConditionEditor from './ConditionEditor';
 import type {
@@ -48,6 +49,7 @@ export default function StrategyBuilder({
   // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [allowShort, setAllowShort] = useState(false);
   const [parameters, setParameters] = useState<StrategyParameter[]>([]);
   const [entryRules, setEntryRules] = useState<ConditionGroup>(createEmptyConditionGroup());
   const [exitRules, setExitRules] = useState<ConditionGroup>(createEmptyConditionGroup());
@@ -55,7 +57,7 @@ export default function StrategyBuilder({
 
   // UI state
   const [showJson, setShowJson] = useState(false);
-  const [showParams, setShowParams] = useState(true);
+  const [showParams, setShowParams] = useState(false);
   const [showTfFilters, setShowTfFilters] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -65,6 +67,7 @@ export default function StrategyBuilder({
     if (strategy) {
       setName(strategy.name);
       setDescription(strategy.description);
+      setAllowShort(Boolean(strategy.allow_short));
       setParameters(strategy.parameters || []);
       setEntryRules(strategy.entry_rules || createEmptyConditionGroup());
       setExitRules(strategy.exit_rules || createEmptyConditionGroup());
@@ -72,6 +75,7 @@ export default function StrategyBuilder({
     } else {
       setName('');
       setDescription('');
+      setAllowShort(false);
       setParameters([]);
       setEntryRules(createEmptyConditionGroup());
       setExitRules(createEmptyConditionGroup());
@@ -143,6 +147,7 @@ export default function StrategyBuilder({
         const updateData: StrategyUpdateRequest = {
           name,
           description,
+          allow_short: allowShort,
           parameters,
           entry_rules: entryRules,
           exit_rules: exitRules,
@@ -153,6 +158,7 @@ export default function StrategyBuilder({
         const createData: StrategyCreateRequest = {
           name,
           description,
+          allow_short: allowShort,
           parameters,
           entry_rules: entryRules,
           exit_rules: exitRules,
@@ -178,6 +184,7 @@ export default function StrategyBuilder({
       {
         name,
         description,
+        allow_short: allowShort,
         parameters,
         entry_rules: entryRules,
         exit_rules: exitRules,
@@ -255,11 +262,11 @@ export default function StrategyBuilder({
           </div>
         </div>
 
-        {/* Parametreler */}
-        <div className="border border-slate-800/60 rounded-xl overflow-hidden">
+        {/* Parametreler (İsteğe Bağlı Değişkenler) */}
+        <div className="border border-slate-800/60 rounded-xl overflow-hidden bg-slate-900/20">
           <button
             onClick={() => setShowParams(!showParams)}
-            className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800/30 transition-colors"
+            className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-slate-800/30 transition-colors"
           >
             <div className="flex items-center gap-2">
               {showParams ? (
@@ -267,90 +274,135 @@ export default function StrategyBuilder({
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
               )}
-              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Parametreler
+              <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                Parametreler (İsteğe Bağlı)
               </span>
-              <span className="text-[10px] text-slate-500">{parameters.length}</span>
+              <span className="text-[10px] text-slate-500 bg-slate-800/80 px-1.5 py-0.2 rounded-full">{parameters.length}</span>
             </div>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 addParameter();
+                setShowParams(true);
               }}
-              className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 rounded-lg px-2 py-0.5 transition-all"
+              className="flex items-center gap-1 text-[10px] font-semibold text-indigo-300 hover:text-white bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/30 rounded-md px-2 py-0.5 transition-all"
             >
               <Plus className="w-3 h-3" />
               Ekle
             </button>
           </button>
-          {showParams && parameters.length > 0 && (
-            <div className="px-3 pb-3 space-y-2 border-t border-slate-800/40 pt-2">
-              {parameters.map((param, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-2 bg-slate-900/40 border border-slate-800/60 rounded-lg p-2"
-                >
-                  <input
-                    type="text"
-                    value={param.name}
-                    onChange={(e) => updateParameter(index, { ...param, name: e.target.value })}
-                    placeholder="Adı"
-                    className="bg-transparent border-b border-slate-700 text-slate-200 text-xs px-1 py-0.5 w-24 focus:border-indigo-500 outline-none font-mono"
-                  />
-                  <select
-                    value={param.type}
-                    onChange={(e) =>
-                      updateParameter(index, {
-                        ...param,
-                        type: e.target.value as 'int' | 'float',
-                      })
-                    }
-                    className="bg-slate-900 border border-slate-700 text-slate-300 text-[10px] rounded px-1 py-0.5 outline-none"
-                  >
-                    <option value="int">int</option>
-                    <option value="float">float</option>
-                  </select>
-                  <input
-                    type="number"
-                    value={param.default}
-                    onChange={(e) =>
-                      updateParameter(index, { ...param, default: Number(e.target.value) })
-                    }
-                    placeholder="Varsayılan"
-                    className="bg-transparent border-b border-slate-700 text-slate-200 text-xs px-1 py-0.5 w-16 focus:border-indigo-500 outline-none font-mono"
-                  />
-                  <input
-                    type="number"
-                    value={param.min ?? ''}
-                    onChange={(e) =>
-                      updateParameter(index, {
-                        ...param,
-                        min: e.target.value ? Number(e.target.value) : undefined,
-                      })
-                    }
-                    placeholder="Min"
-                    className="bg-transparent border-b border-slate-700 text-slate-400 text-xs px-1 py-0.5 w-14 focus:border-indigo-500 outline-none font-mono"
-                  />
-                  <input
-                    type="number"
-                    value={param.max ?? ''}
-                    onChange={(e) =>
-                      updateParameter(index, {
-                        ...param,
-                        max: e.target.value ? Number(e.target.value) : undefined,
-                      })
-                    }
-                    placeholder="Max"
-                    className="bg-transparent border-b border-slate-700 text-slate-400 text-xs px-1 py-0.5 w-14 focus:border-indigo-500 outline-none font-mono"
-                  />
-                  <button
-                    onClick={() => deleteParameter(index)}
-                    className="p-1 text-red-400/50 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+          {showParams && (
+            <div className="px-3 pb-3 border-t border-slate-800/40 pt-2.5 space-y-2.5">
+              {/* Bilgilendirme Kutusu */}
+              <div className="bg-indigo-950/30 border border-indigo-500/25 rounded-xl p-3 flex items-start gap-2.5 text-xs text-indigo-200/90">
+                <Info className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-indigo-300 text-xs">💡 Bu Alan Ne İşe Yarar?</p>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    <strong>Zorunlu değildir!</strong> İndikatör periyotlarınızı (örneğin RSI 14, EMA 20) aşağıdaki kurallar kısmında doğrudan sayı olarak yazabilirsiniz. Bu parametre alanı, aynı değeri birden fazla kuralda ortak kullanmak veya ileride otomatik test/optimizasyon yapmak isteyenler içindir.
+                  </p>
                 </div>
-              ))}
+              </div>
+
+              {parameters.length === 0 ? (
+                <div className="text-center py-2.5 text-[11px] text-slate-500 italic bg-slate-900/30 rounded-lg border border-slate-800/30">
+                  Henüz tanımlı parametre yok. İndikatör değerlerinizi aşağıdaki kurallar ekranından doğrudan girebilirsiniz.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Başlık Etiketleri */}
+                  <div className="grid grid-cols-12 gap-2 px-2 text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                    <span className="col-span-3">Parametre Adı</span>
+                    <span className="col-span-3">Veri Türü</span>
+                    <span className="col-span-2">Varsayılan</span>
+                    <span className="col-span-3">Sınır Aralığı (Min - Max)</span>
+                    <span className="col-span-1 text-right">Sil</span>
+                  </div>
+
+                  {parameters.map((param, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-12 gap-2 items-center bg-slate-900/60 border border-slate-800/80 rounded-lg p-2 hover:border-slate-700/80 transition-colors"
+                    >
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          value={param.name}
+                          onChange={(e) => updateParameter(index, { ...param, name: e.target.value })}
+                          placeholder="Örn: rsi_period"
+                          className="w-full bg-slate-950 border border-slate-700/80 text-slate-200 text-xs rounded px-2 py-1 focus:border-indigo-500 outline-none font-mono"
+                          title="Parametrenin adı (Örn: rsi_period)"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <select
+                          value={param.type}
+                          onChange={(e) =>
+                            updateParameter(index, {
+                              ...param,
+                              type: e.target.value as 'int' | 'float',
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-700/80 text-slate-200 text-[11px] rounded px-1.5 py-1 outline-none"
+                        >
+                          <option value="int">Tam Sayı (int)</option>
+                          <option value="float">Ondalık (float)</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          value={param.default}
+                          onChange={(e) =>
+                            updateParameter(index, { ...param, default: Number(e.target.value) })
+                          }
+                          placeholder="Değer"
+                          className="w-full bg-slate-950 border border-slate-700/80 text-slate-200 text-xs rounded px-1.5 py-1 focus:border-indigo-500 outline-none font-mono"
+                          title="Varsayılan başlangıç değeri"
+                        />
+                      </div>
+                      <div className="col-span-3 flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={param.min ?? ''}
+                          onChange={(e) =>
+                            updateParameter(index, {
+                              ...param,
+                              min: e.target.value ? Number(e.target.value) : undefined,
+                            })
+                          }
+                          placeholder="Min (1)"
+                          className="w-full bg-slate-950 border border-slate-700/80 text-slate-400 text-xs rounded px-1.5 py-1 focus:border-indigo-500 outline-none font-mono"
+                          title="En düşük değer"
+                        />
+                        <span className="text-slate-600">-</span>
+                        <input
+                          type="number"
+                          value={param.max ?? ''}
+                          onChange={(e) =>
+                            updateParameter(index, {
+                              ...param,
+                              max: e.target.value ? Number(e.target.value) : undefined,
+                            })
+                          }
+                          placeholder="Max (500)"
+                          className="w-full bg-slate-950 border border-slate-700/80 text-slate-400 text-xs rounded px-1.5 py-1 focus:border-indigo-500 outline-none font-mono"
+                          title="En yüksek değer"
+                        />
+                      </div>
+                      <div className="col-span-1 flex justify-end">
+                        <button
+                          onClick={() => deleteParameter(index)}
+                          className="p-1 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                          title="Parametreyi Sil"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

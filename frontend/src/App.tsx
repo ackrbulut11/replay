@@ -11,6 +11,7 @@ import StrategyPage from './pages/StrategyPage';
 import AlertsPanel from './components/alerts/AlertsPanel';
 import CreateAlarmModal from './components/alerts/CreateAlarmModal';
 import { useAlertStore, alertStore } from './store/alertStore';
+import ErrorBoundary from './components/ErrorBoundary';
 import type { NavigationTab } from './components/Sidebar';
 
 
@@ -45,12 +46,24 @@ function App() {
   const [alertState] = useAlertStore();
 
 
-  // Replay sekmesine geçildiğinde Replay modunu grafik üzerinde otomatik aktif et
+  // Replay sekmesine geçildiğinde Replay modunu aktif et, Grafik Analiz sekmesine dönüldüğünde ise Replay modunu otomatik kapat
   useEffect(() => {
     if (activeTab === 'replay') {
       replayStore.setState({ isReplayActive: true });
+    } else if (activeTab === 'chart') {
+      replayStore.reset();
     }
   }, [activeTab]);
+
+  const handleEnableIndicators = useCallback((keys: (keyof IndicatorsState)[]) => {
+    setIndicators(() => {
+      const next = { ...DEFAULT_INDICATORS_STATE };
+      keys.forEach((k) => {
+        next[k] = true;
+      });
+      return next;
+    });
+  }, []);
 
   const handleToggleIndicator = (key: keyof IndicatorsState) => {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -84,17 +97,6 @@ function App() {
       setLoading(false);
     }
   }, [provider, symbol, timeframe, start, end]);
-
-  // Sağlayıcı değiştiğinde varsayılan sembolü otomatik olarak değiştir
-  useEffect(() => {
-    if (provider === 'binance') {
-      setSymbol('BTCUSDT');
-    } else if (provider === 'nasdaq') {
-      setSymbol('AAPL');
-    } else if (provider === 'bist') {
-      setSymbol('THYAO');
-    }
-  }, [provider]);
 
   // Girdiler değiştiğinde grafiği otomatik olarak yükle (sembol yazımı için debounce uygulandı)
   useEffect(() => {
@@ -146,12 +148,17 @@ function App() {
   return (
     <DashboardLayout activeTab={activeTab} onSelectTab={setActiveTab}>
       {activeTab === 'strategy' ? (
-        <StrategyPage
-          onSelectTab={setActiveTab}
-          setSymbol={setSymbol}
-          setProvider={setProvider}
-          setTimeframe={setTimeframe}
-        />
+        <ErrorBoundary fallbackTitle="Strateji Ekranı Hatası">
+          <StrategyPage
+            onSelectTab={setActiveTab}
+            setSymbol={setSymbol}
+            setProvider={setProvider}
+            setTimeframe={setTimeframe}
+            onEnableIndicators={handleEnableIndicators}
+            currentSymbol={symbol}
+            currentTimeframe={timeframe}
+          />
+        </ErrorBoundary>
       ) : activeTab === 'chart' || activeTab === 'replay' ? (
         <div className="h-full w-full flex flex-col p-2 space-y-2 overflow-hidden bg-[#070b13]">
           {/* Ana İçerik Alanı: Grafik + Favoriler (Watchlist) Yan Paneli + Sağ Araç Çubuğu */}

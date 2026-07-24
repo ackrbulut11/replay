@@ -7,6 +7,7 @@ export interface IndicatorsState {
   ema200: boolean;
   rsi: boolean;
   macd: boolean;
+  bb: boolean;
 }
 
 export const DEFAULT_INDICATORS_STATE: IndicatorsState = {
@@ -16,6 +17,7 @@ export const DEFAULT_INDICATORS_STATE: IndicatorsState = {
   ema200: false,
   rsi: false,
   macd: false,
+  bb: false,
 };
 
 interface IndicatorToolbarProps {
@@ -31,6 +33,7 @@ export default function IndicatorToolbar({ state, onToggle }: IndicatorToolbarPr
     { key: 'ema200', label: 'EMA 200', badgeColor: 'border-pink-500/60 text-pink-400 bg-pink-500/10' },
     { key: 'rsi', label: 'RSI (14)', badgeColor: 'border-slate-300/60 text-slate-200 bg-slate-500/10' },
     { key: 'macd', label: 'MACD (12,26,9)', badgeColor: 'border-emerald-500/60 text-emerald-400 bg-emerald-500/10' },
+    { key: 'bb', label: 'Bollinger (20,2)', badgeColor: 'border-yellow-500/60 text-yellow-400 bg-yellow-500/10' },
   ];
 
   return (

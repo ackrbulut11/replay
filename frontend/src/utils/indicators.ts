@@ -149,3 +149,46 @@ export function calculateMACD(
     histogram,
   };
 }
+
+export interface BollingerBandsResult {
+  upper: TimeValue[];
+  middle: TimeValue[];
+  lower: TimeValue[];
+}
+
+/**
+ * Bollinger Bands (BB)
+ */
+export function calculateBollingerBands(
+  data: CandleInput[],
+  period = 20,
+  stdDevMult = 2
+): BollingerBandsResult {
+  if (data.length < period) return { upper: [], middle: [], lower: [] };
+
+  const upper: TimeValue[] = [];
+  const middle: TimeValue[] = [];
+  const lower: TimeValue[] = [];
+
+  for (let i = period - 1; i < data.length; i++) {
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      sum += data[j].close;
+    }
+    const sma = sum / period;
+
+    let varianceSum = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const diff = data[j].close - sma;
+      varianceSum += diff * diff;
+    }
+    const stdDev = Math.sqrt(varianceSum / period);
+
+    const time = data[i].time;
+    middle.push({ time, value: sma });
+    upper.push({ time, value: sma + stdDevMult * stdDev });
+    lower.push({ time, value: sma - stdDevMult * stdDev });
+  }
+
+  return { upper, middle, lower };
+}

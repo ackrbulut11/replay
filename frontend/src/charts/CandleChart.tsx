@@ -9,15 +9,15 @@ import {
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY,
 } from './drawings/types';
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
-import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
+import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2 } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
-import { useStrategyStore } from '../store/strategyStore';
+import { useStrategyStore, strategyStore } from '../store/strategyStore';
 
 
 
@@ -117,6 +117,10 @@ export default function CandleChart({
   const macdSignalRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const macdHistRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
 
+  const bbUpperRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const bbMiddleRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const bbLowerRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+
   const alertPriceLinesRef = useRef<Array<{ line: any; series: any }>>([]);
   const [alertState] = useAlertStore();
 
@@ -198,7 +202,7 @@ export default function CandleChart({
     const targetSeries = candleSeriesRef.current || mainLineSeriesRef.current;
     if (!targetSeries) return;
 
-    if (!evaluateResult || !evaluateResult.signals || evaluateResult.signals.length === 0) {
+    if (!evaluateResult || !Array.isArray(evaluateResult.signals) || evaluateResult.signals.length === 0) {
       try {
         targetSeries.setMarkers([]);
       } catch {}
@@ -215,9 +219,10 @@ export default function CandleChart({
       return;
     }
 
-    const markers: any[] = [];
+    const markersMap = new Map<Time, any>();
 
     evaluateResult.signals.forEach((sig) => {
+      if (!sig) return;
       let targetTime: Time | null = null;
 
       // Tam zaman eşleşmesi
@@ -243,26 +248,26 @@ export default function CandleChart({
       if (!targetTime) return;
 
       const isBuy = sig.signal === 'BUY';
-      const priceText = sig.price ? sig.price.toFixed(2) : '';
-      let labelText = `${sig.signal}`;
+      const priceText = typeof sig.price === 'number' && !isNaN(sig.price) ? sig.price.toFixed(2) : '';
+      let labelText = `${sig.signal || ''}`;
 
       if (priceText) {
         labelText += ` @ ${priceText}`;
       }
-      if (!isBuy && sig.pnl_percent !== undefined) {
+      if (!isBuy && typeof sig.pnl_percent === 'number' && !isNaN(sig.pnl_percent)) {
         labelText += ` (${sig.pnl_percent >= 0 ? '+' : ''}${sig.pnl_percent.toFixed(2)}%)`;
       }
 
-      markers.push({
+      markersMap.set(targetTime, {
         time: targetTime,
         position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
-        color: isBuy ? '#10b981' : '#ef4444',
+        color: isBuy ? '#22d3ee' : '#f97316',
         shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
         text: labelText,
       });
     });
 
-    markers.sort((a, b) => Number(a.time) - Number(b.time));
+    const markers = Array.from(markersMap.values()).sort((a, b) => Number(a.time) - Number(b.time));
 
     try {
       targetSeries.setMarkers(markers);
@@ -1263,6 +1268,9 @@ export default function CandleChart({
       macdLineRef.current = null;
       macdSignalRef.current = null;
       macdHistRef.current = null;
+      bbUpperRef.current = null;
+      bbMiddleRef.current = null;
+      bbLowerRef.current = null;
 
       chart.remove();
       chartRef.current = null;
@@ -1512,6 +1520,41 @@ export default function CandleChart({
       if (macdHistRef.current) { chart.removeSeries(macdHistRef.current); macdHistRef.current = null; }
       if (macdLineRef.current) { chart.removeSeries(macdLineRef.current); macdLineRef.current = null; }
       if (macdSignalRef.current) { chart.removeSeries(macdSignalRef.current); macdSignalRef.current = null; }
+    }
+
+    // Bollinger Bands (BB) - Sarı Üst/Alt Bant, Gri Orta Bant (20, 2)
+    if (indicators.bb) {
+      if (!bbUpperRef.current || !bbMiddleRef.current || !bbLowerRef.current) {
+        bbUpperRef.current = chart.addLineSeries({
+          color: '#eab308', // Canlı Sarı (Üst Bant)
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '',
+        });
+        bbMiddleRef.current = chart.addLineSeries({
+          color: '#94a3b8', // Gri / Slate (Orta Bant - SMA 20)
+          lineWidth: 1,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '',
+        });
+        bbLowerRef.current = chart.addLineSeries({
+          color: '#eab308', // Canlı Sarı (Alt Bant)
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: '',
+        });
+      }
+      const bb = calculateBollingerBands(visibleData, 20, 2);
+      bbUpperRef.current.setData(bb.upper.map(d => ({ time: d.time as Time, value: d.value })));
+      bbMiddleRef.current.setData(bb.middle.map(d => ({ time: d.time as Time, value: d.value })));
+      bbLowerRef.current.setData(bb.lower.map(d => ({ time: d.time as Time, value: d.value })));
+    } else {
+      if (bbUpperRef.current) { chart.removeSeries(bbUpperRef.current); bbUpperRef.current = null; }
+      if (bbMiddleRef.current) { chart.removeSeries(bbMiddleRef.current); bbMiddleRef.current = null; }
+      if (bbLowerRef.current) { chart.removeSeries(bbLowerRef.current); bbLowerRef.current = null; }
     }
   }, [visibleData, indicators]);
 
@@ -1892,6 +1935,21 @@ export default function CandleChart({
             <RotateCcw className={`w-3.5 h-3.5 ${replayState.isReplayActive ? 'text-amber-400' : 'text-indigo-400'}`} />
             <span>Replay</span>
           </button>
+
+          {/* Strateji Sinyalleri Temizleme Rozeti */}
+          {evaluateResult && Array.isArray(evaluateResult.signals) && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 shadow-sm">
+              <Zap className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Strateji ({evaluateResult.signals.length} Sinyal)</span>
+              <button
+                onClick={() => strategyStore.clearEvaluateResult()}
+                className="ml-1 p-0.5 hover:bg-indigo-500/30 text-indigo-300 hover:text-white rounded transition-colors"
+                title="Strateji sinyallerini grafikten kaldır ve grafiği eski temiz haline getir"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Sağ Taraf: Göstergeler popover, Tarih aralığı popover, Log scale, Loading spinner */}
@@ -1925,6 +1983,7 @@ export default function CandleChart({
                     ema200: 'EMA 200',
                     rsi: 'RSI (14)',
                     macd: 'MACD (12, 26, 9)',
+                    bb: 'Bollinger Bands (20, 2)',
                   };
                   const colors: Record<string, string> = {
                     ema20: 'bg-amber-500',
@@ -1933,6 +1992,7 @@ export default function CandleChart({
                     ema200: 'bg-pink-500',
                     rsi: 'bg-slate-300',
                     macd: 'bg-emerald-500',
+                    bb: 'bg-yellow-400',
                   };
                   return (
                     <label

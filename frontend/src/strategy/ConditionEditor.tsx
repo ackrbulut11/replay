@@ -24,6 +24,14 @@ interface OperandEditorProps {
   label: string;
 }
 
+const PRICE_FIELD_MAP: Record<string, string> = {
+  close: 'Kapanış (Close)',
+  open: 'Açılış (Open)',
+  high: 'En Yüksek (High)',
+  low: 'En Düşük (Low)',
+  volume: 'Hacim (Volume)',
+};
+
 function OperandEditor({ operand, onChange, indicators, label }: OperandEditorProps) {
   const type = operand.type;
 
@@ -48,7 +56,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
         >
           <option value="indicator">İndikatör</option>
           <option value="price">Fiyat</option>
-          <option value="value">Sabit Değer</option>
+          <option value="value">Sabit Sayı / Değer</option>
         </select>
 
         {/* İndikatör seçici */}
@@ -83,9 +91,9 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                   period: val.startsWith('$') ? val : (parseInt(val) || operand.period),
                 });
               }}
-              placeholder="Period"
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-20 focus:border-indigo-500 outline-none transition-colors font-mono"
-              title="Sayı veya parametre referansı ($fast_ema)"
+              placeholder="Periyot (ör: 20)"
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-24 focus:border-indigo-500 outline-none transition-colors font-mono"
+              title="İndikatör periyodu (örneğin: 14 veya 20). Gelişmiş kullanıcılar: $param_adı"
             />
             {/* Çoklu çıktılı indikatörlerde alan seçimi */}
             {indicators.find((i) => i.name === operand.name)?.fields?.length ? (
@@ -94,7 +102,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                 onChange={(e) => onChange({ ...operand, field: e.target.value || undefined })}
                 className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
               >
-                <option value="">Varsayılan</option>
+                <option value="">Varsayılan Çıktı</option>
                 {indicators
                   .find((i) => i.name === operand.name)
                   ?.fields.map((f) => (
@@ -109,7 +117,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
               value={operand.timeframe || ''}
               onChange={(e) => onChange({ ...operand, timeframe: e.target.value || undefined })}
               className="bg-slate-900 border border-slate-700 text-slate-400 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
-              title="Farklı timeframe (opsiyonel)"
+              title="Farklı zaman dilimi (Opsiyonel)"
             >
               <option value="">Ana TF</option>
               {TIMEFRAMES.map((tf) => (
@@ -131,7 +139,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
             >
               {PRICE_FIELDS.map((f) => (
                 <option key={f} value={f}>
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                  {PRICE_FIELD_MAP[f] || f}
                 </option>
               ))}
             </select>
@@ -162,9 +170,9 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                 value: val.startsWith('$') ? val : (parseFloat(val) || 0),
               });
             }}
-            placeholder="Değer veya $param"
+            placeholder="Sayı (ör: 70)"
             className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-28 focus:border-indigo-500 outline-none transition-colors font-mono"
-            title="Sayı veya parametre referansı ($rsi_threshold)"
+            title="Sabit sayısal değer (örneğin: 30, 70, 0)"
           />
         )}
       </div>
@@ -328,15 +336,16 @@ export default function ConditionEditor({
                   ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
                   : 'bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30'
               }`}
+              title="Tıkla: Tüm koşullar mı uymalı, yoksa herhangi biri uyması yeterli mi?"
             >
-              {group.logic}
+              {group.logic === 'AND' ? 'Tümü Uymalı (VE)' : 'Biri Uymalı (VEYA)'}
             </button>
           )}
 
           {/* Koşul ekle */}
           <button
             onClick={handleAddCondition}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 rounded-lg px-2.5 py-1 transition-all"
+            className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             Koşul Ekle
@@ -347,8 +356,8 @@ export default function ConditionEditor({
       {/* Koşul listesi */}
       <div className="flex flex-col gap-2">
         {group.conditions.length === 0 ? (
-          <div className="text-center py-6 text-slate-500 text-xs">
-            Henüz koşul eklenmedi. "Koşul Ekle" butonuna tıklayın.
+          <div className="text-center py-6 text-slate-400 text-xs italic bg-slate-900/40 rounded-lg border border-slate-800/40">
+            Henüz koşul eklenmedi. Yukarıdaki "+ Koşul Ekle" butonuna tıklayarak ilk kuralınızı belirleyin.
           </div>
         ) : (
           group.conditions.map((condition, index) => (
@@ -356,13 +365,13 @@ export default function ConditionEditor({
               {index > 0 && (
                 <div className="flex items-center justify-center py-1">
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                       group.logic === 'AND'
-                        ? 'text-blue-400 bg-blue-500/10'
-                        : 'text-orange-400 bg-orange-500/10'
+                        ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+                        : 'text-orange-400 bg-orange-500/10 border-orange-500/20'
                     }`}
                   >
-                    {group.logic}
+                    {group.logic === 'AND' ? 'VE (Tüm Koşullar Sağlanmalı)' : 'VEYA (Herhangi Biri Sağlanabilir)'}
                   </span>
                 </div>
               )}

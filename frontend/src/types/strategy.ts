@@ -94,6 +94,7 @@ export interface Strategy {
   entry_rules: ConditionGroup;
   exit_rules: ConditionGroup;
   timeframe_filters: TimeframeFilter[];
+  allow_short?: boolean;
 }
 
 // ─── API İstek/Yanıt Tipleri ─────────────────────────────────────────────────
@@ -105,6 +106,7 @@ export interface StrategyCreateRequest {
   entry_rules?: ConditionGroup;
   exit_rules?: ConditionGroup;
   timeframe_filters?: TimeframeFilter[];
+  allow_short?: boolean;
 }
 
 export interface StrategyUpdateRequest {
@@ -114,6 +116,7 @@ export interface StrategyUpdateRequest {
   entry_rules?: ConditionGroup;
   exit_rules?: ConditionGroup;
   timeframe_filters?: TimeframeFilter[];
+  allow_short?: boolean;
 }
 
 export interface EvaluateRequest {
@@ -123,6 +126,7 @@ export interface EvaluateRequest {
   start?: string;
   end?: string;
   limit_bars?: number;
+  allow_short?: boolean;
   param_overrides?: Record<string, number>;
 }
 
@@ -207,5 +211,6 @@ export function createEmptyStrategy(): StrategyCreateRequest {
     entry_rules: createEmptyConditionGroup(),
     exit_rules: createEmptyConditionGroup(),
     timeframe_filters: [],
+    allow_short: false,
   };
 }

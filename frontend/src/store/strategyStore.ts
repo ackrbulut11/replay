@@ -153,6 +153,12 @@ export const strategyStore = {
     }
   },
 
+  // ─── Değerlendirme Temizleme ─────────────────────────────────────────
+
+  clearEvaluateResult: () => {
+    setState({ evaluateResult: null });
+  },
+
   // ─── Hata Temizleme ───────────────────────────────────────────────────
 
   clearError: () => {

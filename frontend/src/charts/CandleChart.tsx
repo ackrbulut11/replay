@@ -11,7 +11,7 @@ import {
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { calculateEMA, calculateRSI, calculateMACD } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, X } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
@@ -171,9 +171,14 @@ export default function CandleChart({
   const shiftPressedRef = useRef(false);
 
   const [plusMenu, setPlusMenu] = useState<{ y: number; price: number } | null>(null);
+  const plusMenuRef = useRef<{ y: number; price: number } | null>(null);
+  plusMenuRef.current = plusMenu;
   const plusButtonRef = useRef<HTMLButtonElement | null>(null);
   const currentCrosshairYRef = useRef<number | null>(null);
   const currentCrosshairPriceRef = useRef<number | null>(null);
+  const isHoveringPlusButtonRef = useRef(false);
+
+  const [alarmOverlays, setAlarmOverlays] = useState<Array<{ id: string; y: number; symbol: string; condSym: string; val: string }>>([]);
 
   const formatPriceLabel = useCallback((val?: number | null) => {
     if (val === undefined || val === null) return '—';
@@ -962,6 +967,10 @@ export default function CandleChart({
     });
 
     chart.subscribeCrosshairMove((param) => {
+      if (isHoveringPlusButtonRef.current) {
+        return;
+      }
+
       if (param.point && candleSeriesRef.current) {
         const y = param.point.y;
         const price = candleSeriesRef.current.coordinateToPrice(y);
@@ -970,13 +979,15 @@ export default function CandleChart({
           currentCrosshairPriceRef.current = price;
           if (plusButtonRef.current) {
             plusButtonRef.current.style.top = `${y - 12}px`;
-            plusButtonRef.current.style.display = 'flex';
+            if (!plusMenuRef.current) {
+              plusButtonRef.current.style.display = 'flex';
+            }
           }
         } else {
-          if (plusButtonRef.current) plusButtonRef.current.style.display = 'none';
+          if (plusButtonRef.current && !plusMenuRef.current) plusButtonRef.current.style.display = 'none';
         }
       } else {
-        if (plusButtonRef.current) plusButtonRef.current.style.display = 'none';
+        if (plusButtonRef.current && !plusMenuRef.current) plusButtonRef.current.style.display = 'none';
       }
 
       if (!param.point) return;
@@ -1481,6 +1492,51 @@ export default function CandleChart({
   }, [subPaneRatio, rsiMacdSplit, indicators]);
 
 
+  const updateAlarmOverlays = useCallback(() => {
+    const mainSeries = candleSeriesRef.current || mainLineSeriesRef.current;
+    if (!mainSeries) {
+      setAlarmOverlays([]);
+      return;
+    }
+
+    const matchingAlerts = alertState.alerts.filter(
+      (a) => a.symbol.toUpperCase() === symbol.toUpperCase() && (a.status === 'ACTIVE' || a.status === 'TRIGGERED')
+    );
+
+    const overlays: Array<{ id: string; y: number; symbol: string; condSym: string; val: string }> = [];
+
+    matchingAlerts.forEach((alert) => {
+      let targetSeries: any = mainSeries;
+      if (alert.target_type === 'RSI' && rsiRef.current) {
+        targetSeries = rsiRef.current;
+      }
+      if (!targetSeries) return;
+
+      try {
+        const y = targetSeries.priceToCoordinate(alert.threshold_value);
+        if (y !== null && !isNaN(y) && y >= 0) {
+          const isRises = alert.condition === 'rises_above';
+          const condSym = isRises ? '>' : '<';
+          const formattedVal = typeof alert.threshold_value === 'number'
+            ? alert.threshold_value.toFixed(2)
+            : alert.threshold_value;
+
+          overlays.push({
+            id: alert.id,
+            y,
+            symbol: alert.target_type === 'price' ? alert.symbol : alert.target_type,
+            condSym,
+            val: String(formattedVal),
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+
+    setAlarmOverlays(overlays);
+  }, [alertState.alerts, symbol]);
+
   // Render alarm price lines on the chart
   useEffect(() => {
     // Clear old alert price lines
@@ -1508,30 +1564,23 @@ export default function CandleChart({
 
       if (!targetSeries) return;
 
-      const isRises = alert.condition === 'rises_above';
-      const color = '#f59e0b'; // Sarı renk (Yellow)
-
-      const condSym = isRises ? '>' : '<';
-      const formattedVal = typeof alert.threshold_value === 'number'
-        ? alert.threshold_value.toFixed(2)
-        : alert.threshold_value;
-      const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${formattedVal}`;
-
       try {
         const line = targetSeries.createPriceLine({
           price: alert.threshold_value,
-          color: color,
+          color: '#f59e0b',
           lineWidth: alert.status === 'TRIGGERED' ? 2 : 1,
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
-          title: labelTitle,
+          title: '', // 5% opaklık ve hover silme butonu için HTML overlay kullanıyoruz
         });
         alertPriceLinesRef.current.push({ line, series: targetSeries });
       } catch (err) {
         console.warn('PriceLine create failed:', err);
       }
     });
-  }, [alertState.alerts, symbol, data, indicators]);
+
+    updateAlarmOverlays();
+  }, [alertState.alerts, symbol, data, indicators, updateAlarmOverlays]);
 
   // Check alerts against current visible price
   useEffect(() => {
@@ -1955,9 +2004,40 @@ export default function CandleChart({
         </div>
       )}
 
+      {/* Grafikteki Alarm Etiketleri (Yüzde 5 Opaklık + Hover Olunca Solunda Çarpı (X) Butonu) */}
+      {alarmOverlays.map((item) => (
+        <div
+          key={item.id}
+          style={{ top: `${item.y - 11}px` }}
+          className="absolute left-[76px] z-25 flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-500/5 hover:bg-amber-500/15 border border-amber-500/40 text-amber-400 text-xs font-mono font-medium shadow-sm backdrop-blur-xs group transition-all cursor-pointer select-none"
+        >
+          {/* Sol tarafta imleç üzerine gelince çıkan Alarm İptal Et (X) Butonu */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              alertStore.deleteAlert(item.id);
+            }}
+            className="hidden group-hover:flex items-center justify-center w-4 h-4 rounded-full bg-red-500/80 hover:bg-red-500 text-white shrink-0 transition-transform active:scale-95 cursor-pointer"
+            title="Alarmi İptal Et"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+          <Bell className="w-3 h-3 text-amber-400 shrink-0 group-hover:scale-105 transition-transform" />
+          <span>
+            {item.symbol} {item.condSym} {item.val}
+          </span>
+        </div>
+      ))}
+
       {/* Fiyat Göstergesi Yanındaki (+) Butonu - Doğrudan DOM Ref ile 0ms Gecikmesiz Konumlandırma */}
       <button
         ref={plusButtonRef}
+        onMouseEnter={() => {
+          isHoveringPlusButtonRef.current = true;
+        }}
+        onMouseLeave={() => {
+          isHoveringPlusButtonRef.current = false;
+        }}
         onClick={(e) => {
           e.stopPropagation();
           if (currentCrosshairYRef.current !== null && currentCrosshairPriceRef.current !== null) {

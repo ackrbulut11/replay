@@ -177,6 +177,7 @@ export default function CandleChart({
   const currentCrosshairYRef = useRef<number | null>(null);
   const currentCrosshairPriceRef = useRef<number | null>(null);
   const isHoveringPlusButtonRef = useRef(false);
+  const [isHoveringPlusButton, setIsHoveringPlusButton] = useState(false);
 
   const [currentCrosshairY, setCurrentCrosshairY] = useState<number | null>(null);
   const [alarmOverlays, setAlarmOverlays] = useState<Array<{ id: string; y: number; symbol: string; condSym: string; val: string }>>([]);
@@ -2056,14 +2057,24 @@ export default function CandleChart({
         );
       })}
 
+      {/* (+) Butonunun Üzerindeyken Fiyat Çizgisinin Kaybolmasını Engelleyen Yatay Çizgi Overlay'i */}
+      {(isHoveringPlusButton || plusMenu !== null) && currentCrosshairYRef.current !== null && (
+        <div
+          style={{ top: `${currentCrosshairYRef.current}px` }}
+          className="absolute left-0 right-[56px] border-b border-dashed border-slate-400/80 z-20 pointer-events-none"
+        />
+      )}
+
       {/* Fiyat Göstergesi Yanındaki (+) Butonu - Doğrudan DOM Ref ile 0ms Gecikmesiz Konumlandırma */}
       <button
         ref={plusButtonRef}
         onMouseEnter={() => {
           isHoveringPlusButtonRef.current = true;
+          setIsHoveringPlusButton(true);
         }}
         onMouseLeave={() => {
           isHoveringPlusButtonRef.current = false;
+          setIsHoveringPlusButton(false);
         }}
         onClick={(e) => {
           e.stopPropagation();

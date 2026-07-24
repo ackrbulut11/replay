@@ -113,7 +113,14 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
             raise HTTPException(status_code=400, detail="Geçersiz başlangıç tarihi formatı (YYYY-MM-DD)")
     else:
         # Akıllı varsayılan
-        if request.timeframe in ("1m", "5m", "15m"):
+        if request.limit_bars == 0:
+            if request.timeframe in ("1m", "5m", "15m"):
+                start_dt = end_dt - timedelta(days=90)
+            elif request.timeframe in ("1h", "4h"):
+                start_dt = end_dt - timedelta(days=365 * 3)
+            else:
+                start_dt = datetime(2010, 1, 1)
+        elif request.timeframe in ("1m", "5m", "15m"):
             start_dt = end_dt - timedelta(days=14)
         elif request.timeframe in ("1h", "4h"):
             start_dt = end_dt - timedelta(days=180)
@@ -191,6 +198,7 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
             df=df,
             param_overrides=request.param_overrides,
             multi_tf_data=multi_tf_data if multi_tf_data else None,
+            allow_short=request.allow_short,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Değerlendirme hatası: {e}")

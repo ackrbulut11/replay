@@ -168,6 +168,9 @@ class StrategyModel(BaseModel):
     timeframe_filters: List[TimeframeFilterModel] = Field(
         default_factory=list, description="Çoklu timeframe filtreleri"
     )
+    allow_short: bool = Field(
+        False, description="Short pozisyon açılsın mı? False ise sadece elindekini satıp nakite geçer."
+    )
 
 
 # ─── API İstek/Yanıt Modelleri ───────────────────────────────────────────────
@@ -186,6 +189,7 @@ class StrategyCreateRequest(BaseModel):
         default_factory=lambda: ConditionGroupModel(logic=LogicType.AND, conditions=[])
     )
     timeframe_filters: List[TimeframeFilterModel] = Field(default_factory=list)
+    allow_short: bool = Field(False, description="Short pozisyon açılsın mı?")
 
 
 class StrategyUpdateRequest(BaseModel):
@@ -197,6 +201,7 @@ class StrategyUpdateRequest(BaseModel):
     entry_rules: Optional[ConditionGroupModel] = None
     exit_rules: Optional[ConditionGroupModel] = None
     timeframe_filters: Optional[List[TimeframeFilterModel]] = None
+    allow_short: Optional[bool] = None
 
 
 class EvaluateRequest(BaseModel):
@@ -208,6 +213,7 @@ class EvaluateRequest(BaseModel):
     start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
     end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
     limit_bars: Optional[int] = Field(1000, description="Değerlendirilecek maksimum mum sayısı (varsayılan: 1000)")
+    allow_short: Optional[bool] = Field(None, description="Short pozisyon açılsın mı?")
     param_overrides: Dict[str, Union[int, float]] = Field(
         default_factory=dict, description="Parametre override'ları"
     )

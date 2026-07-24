@@ -25,13 +25,13 @@ def calc_sma(df: pd.DataFrame, period: int) -> pd.Series:
 
 
 def calc_rsi(df: pd.DataFrame, period: int) -> pd.Series:
-    """Relative Strength Index (RSI)."""
+    """Relative Strength Index (RSI) - Wilder's Smoothing."""
     delta = df["close"].diff()
     gain = delta.where(delta > 0, 0.0)
     loss = (-delta).where(delta < 0, 0.0)
-    avg_gain = gain.ewm(span=period, adjust=False).mean()
-    avg_loss = loss.ewm(span=period, adjust=False).mean()
-    rs = avg_gain / avg_loss
+    avg_gain = gain.ewm(alpha=1.0 / period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1.0 / period, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, float("nan"))
     return 100 - (100 / (1 + rs))
 
 
@@ -240,16 +240,11 @@ class IndicatorRegistry:
     def get_value(name: str, df: pd.DataFrame, period: int, bar_index: int, field: str | None = None) -> float:
         """
         Belirli bir bar indeksindeki indikatör değerini döndürür.
-
-        Lookahead bias koruması: sadece bar_index'e kadar olan veriyle hesap yapar.
         """
-        # Lookahead koruması: sadece bar_index'e kadar (dahil) olan veriyi kullan
-        df_slice = df.iloc[: bar_index + 1].copy()
-
-        if len(df_slice) < period:
+        if bar_index < 0 or bar_index >= len(df) or bar_index < period:
             return float("nan")
 
-        result = IndicatorRegistry.calculate(name, df_slice, period)
+        result = IndicatorRegistry.calculate(name, df, period)
 
         if isinstance(result, dict):
             # Çoklu çıktılı indikatör
@@ -263,9 +258,9 @@ class IndicatorRegistry:
                     f"İndikatör {name} için geçersiz alan: {field}. "
                     f"Mevcut alanlar: {list(result.keys())}"
                 )
-            val = series.iloc[-1]
+            val = series.iloc[bar_index]
         else:
-            val = result.iloc[-1]
+            val = result.iloc[bar_index]
 
         return float(val) if not pd.isna(val) else float("nan")
 

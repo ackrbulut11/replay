@@ -113,8 +113,12 @@ class RuleEngine:
         entry_rules = strategy.get("entry_rules", {})
         exit_rules = strategy.get("exit_rules", {})
 
+        allow_short = strategy.get("allow_short", False)
+        if "allow_short" in effective_params:
+            allow_short = bool(effective_params["allow_short"])
+
         if position_state == "none":
-            # Pozisyon yoksa önce BUY (giriş) sonra SELL (short giriş) kontrol edilir
+            # Pozisyon yoksa önce BUY (giriş) kontrol edilir
             if entry_rules and entry_rules.get("conditions"):
                 entry_result, entry_met = RuleEvaluator.evaluate_group(
                     entry_rules, df, bar_index, effective_params, multi_tf_data
@@ -122,7 +126,8 @@ class RuleEngine:
                 if entry_result:
                     return SignalType.BUY, entry_met
 
-            if exit_rules and exit_rules.get("conditions"):
+            # Eğer short pozisyona izin veriliyorsa SELL kontrol edilir
+            if allow_short and exit_rules and exit_rules.get("conditions"):
                 exit_result, exit_met = RuleEvaluator.evaluate_group(
                     exit_rules, df, bar_index, effective_params, multi_tf_data
                 )
@@ -130,7 +135,7 @@ class RuleEngine:
                     return SignalType.SELL, exit_met
 
         elif position_state == "long":
-            # Long pozisyondayız -> YALNIZCA ÇIKIŞ (SELL -> Short'a geçiş) kurallarını kontrol et
+            # Long pozisyondayız -> YALNIZCA ÇIKIŞ (SELL) kurallarını kontrol et
             if exit_rules and exit_rules.get("conditions"):
                 exit_result, exit_met = RuleEvaluator.evaluate_group(
                     exit_rules, df, bar_index, effective_params, multi_tf_data
@@ -160,7 +165,7 @@ class RuleEngine:
     ) -> list[dict]:
         """
         Belirli bir aralıktaki tüm barları değerlendirir.
-        Long ve Short pozisyon dönüşümlü sürekli işlem simülasyonu yapar.
+        allow_short durumuna göre Spot/Long-Only veya Çift yönlü (Long & Short) simülasyon yapar.
         """
         if params is None:
             params = {}
@@ -178,6 +183,10 @@ class RuleEngine:
         signals: list[dict] = []
         position_state: str = "none"  # "none", "long", "short"
         last_entry_price: float | None = None
+
+        allow_short = strategy.get("allow_short", False)
+        if "allow_short" in effective_params:
+            allow_short = bool(effective_params["allow_short"])
 
         # Fiyat sütun adını büyük/küçük harf bağımsız bul
         close_col = None
@@ -243,8 +252,13 @@ class RuleEngine:
                     sig_item["pnl_percent"] = round(long_pnl, 2)
                     sig_item["position_closed"] = "LONG"
 
-                position_state = "short"
-                last_entry_price = close_price
+                if allow_short:
+                    position_state = "short"
+                    last_entry_price = close_price
+                else:
+                    position_state = "none"
+                    last_entry_price = None
+
                 signals.append(sig_item)
 
         return signals

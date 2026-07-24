@@ -3,10 +3,26 @@ import pandas as pd
 from datetime import datetime
 from .base import IDataProvider
 
+SYMBOL_ALIASES = {
+    "NVIDIA": "NVDA",
+    "GOOGLE": "GOOGL",
+    "ALPHABET": "GOOGL",
+    "APPLE": "AAPL",
+    "AMAZON": "AMZN",
+    "MICROSOFT": "MSFT",
+    "FACEBOOK": "META",
+    "TESLA": "TSLA",
+    "NETFLIX": "NFLX",
+    "INTEL": "INTC",
+}
+
 class NasdaqProvider(IDataProvider):
     def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
+        sym = symbol.upper().strip()
+        ticker = SYMBOL_ALIASES.get(sym, sym)
+
         # Yahoo Finance adresi
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.upper()}"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
         
         # Zaman dilimini Yahoo Finance aralığına eşle
         tf_map = {
@@ -39,8 +55,15 @@ class NasdaqProvider(IDataProvider):
             response = requests.get(url, params=params, headers=headers, timeout=15)
             response.raise_for_status()
             res_data = response.json()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 404:
+                raise RuntimeError(
+                    f"Yahoo Finance sembolü bulamadı ({symbol}). "
+                    f"NASDAQ hisseleri için şirket adı yerine borsa kodunu kullandığınızdan emin olun (Örn: NVIDIA yerine NVDA, APPLE yerine AAPL, TESLA yerine TSLA)."
+                )
+            raise RuntimeError(f"Yahoo Finance HTTP hatası ({response.status_code}): {e}")
         except Exception as e:
-            raise RuntimeError(f"Error fetching data from Yahoo Finance: {str(e)}")
+            raise RuntimeError(f"Yahoo Finance veri çekme hatası: {str(e)}")
             
         chart = res_data.get("chart", {})
         result_list = chart.get("result", [])

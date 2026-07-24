@@ -35,6 +35,20 @@ def resolve_parameter(
     return value
 
 
+def _get_multi_tf_bar_index(df: pd.DataFrame, bar_index: int, target_df: pd.DataFrame) -> int:
+    """Çoklu zaman diliminde zaman damgasına göre uygun mum indeksini bulur."""
+    if bar_index < 0 or bar_index >= len(df) or target_df.empty:
+        return -1
+    if "timestamp" not in df.columns or "timestamp" not in target_df.columns:
+        return min(bar_index, len(target_df) - 1)
+    
+    current_ts = df.iloc[bar_index]["timestamp"]
+    valid = target_df[target_df["timestamp"] <= current_ts]
+    if valid.empty:
+        return -1
+    return len(valid) - 1
+
+
 def resolve_operand(
     operand: dict,
     df: pd.DataFrame,
@@ -44,18 +58,6 @@ def resolve_operand(
 ) -> float:
     """
     Bir operandın değerini çözümler.
-
-    Desteklenen operand tipleri:
-    - indicator: İndikatör değeri (ör. EMA 20, RSI 14)
-    - price: Fiyat verisi (open, high, low, close, volume)
-    - value: Sabit değer veya parametre referansı
-
-    Args:
-        operand: Operand tanımı dict'i
-        df: Ana zaman diliminin OHLCV DataFrame'i
-        bar_index: Değerlendirme yapılan mum indeksi
-        params: Parametre değerleri
-        multi_tf_data: Çoklu timeframe verileri {"4h": df_4h, "1d": df_1d}
     """
     op_type = operand.get("type", "value")
 
@@ -71,8 +73,7 @@ def resolve_operand(
 
         if timeframe and multi_tf_data and timeframe in multi_tf_data:
             target_df = multi_tf_data[timeframe]
-            # Çoklu TF'de en son mevcut bara kadar kullan
-            idx = min(bar_index, len(target_df) - 1)
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df)
             if idx < 0:
                 return float("nan")
             return float(target_df[field].iloc[idx])
@@ -93,7 +94,9 @@ def resolve_operand(
 
         if timeframe and multi_tf_data and timeframe in multi_tf_data:
             target_df = multi_tf_data[timeframe]
-            idx = min(bar_index, len(target_df) - 1)
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df)
+            if idx < 0:
+                return float("nan")
             return IndicatorRegistry.get_value(name, target_df, period, idx, field)
 
         return IndicatorRegistry.get_value(name, df, period, bar_index, field)

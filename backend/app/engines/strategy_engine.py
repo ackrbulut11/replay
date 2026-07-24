@@ -138,18 +138,10 @@ class StrategyEngine:
         df: pd.DataFrame,
         param_overrides: dict[str, Union[int, float]] | None = None,
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
+        allow_short: bool | None = None,
     ) -> dict:
         """
         Stratejiyi verilen veri üzerinde değerlendirir.
-
-        Args:
-            strategy_id: Strateji ID
-            df: OHLCV DataFrame
-            param_overrides: Parametre override'ları
-            multi_tf_data: Çoklu timeframe verileri
-
-        Returns:
-            Değerlendirme sonucu dict'i
         """
         strategy = self.get_strategy(strategy_id)
         if strategy is None:
@@ -157,6 +149,9 @@ class StrategyEngine:
 
         if param_overrides is None:
             param_overrides = {}
+
+        if allow_short is not None:
+            param_overrides["allow_short"] = allow_short
 
         signals = RuleEngine.evaluate_range(
             strategy=strategy,

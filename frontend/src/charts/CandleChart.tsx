@@ -194,7 +194,7 @@ export default function CandleChart({
   // Strateji sinyallerini grafik üzerinde oklar (BUY/SELL) olarak çizdir
   const { evaluateResult } = useStrategyStore();
 
-  useEffect(() => {
+  const applyStrategyMarkers = useCallback(() => {
     const targetSeries = candleSeriesRef.current || mainLineSeriesRef.current;
     if (!targetSeries) return;
 
@@ -205,7 +205,43 @@ export default function CandleChart({
       return;
     }
 
-    const markers = evaluateResult.signals.map((sig) => {
+    if (!data || data.length === 0) return;
+
+    // Sembol kontrolü
+    if (evaluateResult.symbol && symbol && evaluateResult.symbol.toUpperCase() !== symbol.toUpperCase()) {
+      try {
+        targetSeries.setMarkers([]);
+      } catch {}
+      return;
+    }
+
+    const markers: any[] = [];
+
+    evaluateResult.signals.forEach((sig) => {
+      let targetTime: Time | null = null;
+
+      // Tam zaman eşleşmesi
+      const exactMatch = data.find((d) => d.time === sig.timestamp);
+      if (exactMatch) {
+        targetTime = exactMatch.time as Time;
+      } else {
+        // En yakın mumu bul (en fazla 2 gün fark)
+        let minDiff = Infinity;
+        let closest: CandleData | null = null;
+        for (const candle of data) {
+          const diff = Math.abs(candle.time - sig.timestamp);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = candle;
+          }
+        }
+        if (closest && minDiff <= 86400 * 2) {
+          targetTime = closest.time as Time;
+        }
+      }
+
+      if (!targetTime) return;
+
       const isBuy = sig.signal === 'BUY';
       const priceText = sig.price ? sig.price.toFixed(2) : '';
       let labelText = `${sig.signal}`;
@@ -217,13 +253,13 @@ export default function CandleChart({
         labelText += ` (${sig.pnl_percent >= 0 ? '+' : ''}${sig.pnl_percent.toFixed(2)}%)`;
       }
 
-      return {
-        time: sig.timestamp as Time,
+      markers.push({
+        time: targetTime,
         position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
         color: isBuy ? '#10b981' : '#ef4444',
         shape: isBuy ? ('arrowUp' as const) : ('arrowDown' as const),
         text: labelText,
-      };
+      });
     });
 
     markers.sort((a, b) => Number(a.time) - Number(b.time));
@@ -234,6 +270,10 @@ export default function CandleChart({
       console.warn('Set strategy markers error:', err);
     }
   }, [evaluateResult, symbol, data]);
+
+  useEffect(() => {
+    applyStrategyMarkers();
+  }, [applyStrategyMarkers]);
 
   // Global Ctrl/Shift key listener to temporarily toggle snap/magnet and quick ruler
   useEffect(() => {
@@ -1321,6 +1361,9 @@ export default function CandleChart({
         }));
         mainLineSeriesRef.current.setData(lineData);
       }
+
+      // Re-apply strategy markers after series setData
+      applyStrategyMarkers();
 
       
       if (chart) {

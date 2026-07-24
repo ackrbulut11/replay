@@ -1564,6 +1564,14 @@ export default function CandleChart({
 
       if (!targetSeries) return;
 
+      const isRises = alert.condition === 'rises_above';
+      const condSym = isRises ? '>' : '<';
+      const formattedVal = typeof alert.threshold_value === 'number'
+        ? alert.threshold_value.toFixed(2)
+        : alert.threshold_value;
+
+      const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${formattedVal}`;
+
       try {
         const line = targetSeries.createPriceLine({
           price: alert.threshold_value,
@@ -1572,7 +1580,7 @@ export default function CandleChart({
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
           axisLabelColor: '#f59e0b',
-          title: '', // 5% opaklıklı HTML rozeti kullanıyoruz
+          title: labelTitle,
         });
         alertPriceLinesRef.current.push({ line, series: targetSeries });
       } catch (err) {
@@ -1581,8 +1589,12 @@ export default function CandleChart({
     });
 
     updateAlarmOverlays();
-    const timer = setTimeout(updateAlarmOverlays, 60);
-    return () => clearTimeout(timer);
+    const t1 = setTimeout(updateAlarmOverlays, 60);
+    const t2 = setTimeout(updateAlarmOverlays, 250);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [alertState.alerts, symbol, data, indicators, updateAlarmOverlays]);
 
   // Check alerts against current visible price

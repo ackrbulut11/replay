@@ -2007,26 +2007,26 @@ export default function CandleChart({
         </div>
       )}
 
-      {/* Grafikteki 5% Opaklıklı Alarm Rozetleri ve Solunda Kırmızı (X) İptal Butonu */}
+      {/* Grafikteki 5% Opaklıklı Alarm Rozetleri (Sağ Tarafta, Üzerine Gelince Solunda Şeffaf X Butonu Açılır) */}
       {alarmOverlays.map((item) => (
         <div
           key={item.id}
           style={{ top: `${item.y - 12}px` }}
-          className="absolute left-[70px] z-30 flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-500/5 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-mono font-bold shadow-md backdrop-blur-xs group transition-all select-none"
+          className="absolute right-[80px] z-25 flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-500/5 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-mono font-bold shadow-sm backdrop-blur-xs group transition-all select-none cursor-pointer"
         >
-          {/* Sol tarafta Alarm İptal Et (X) Butonu */}
+          {/* İmleç Üzerine Geldiğinde Sol Tarafında Açılan Şeffaf Alarm İptal Et (X) Butonu */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
               alertStore.deleteAlert(item.id);
             }}
-            className="flex items-center justify-center w-4 h-4 rounded-full bg-red-500 hover:bg-red-600 active:scale-90 text-white shrink-0 cursor-pointer transition-transform shadow-xs"
+            className="hidden group-hover:flex items-center justify-center p-0.5 rounded-md text-amber-400/80 hover:text-amber-200 hover:bg-amber-500/25 shrink-0 transition-all cursor-pointer active:scale-95"
             title="Alarmı İptal Et"
           >
-            <X className="w-2.5 h-2.5" />
+            <X className="w-3 h-3" />
           </button>
-          <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0 group-hover:scale-105 transition-transform" />
           <span>
             {item.symbol} {item.condSym} {item.val}
           </span>

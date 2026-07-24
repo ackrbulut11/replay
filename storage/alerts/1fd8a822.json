@@ -9,8 +9,8 @@
   "condition": "rises_above",
   "threshold_value": 65487.98,
   "note": null,
-  "status": "ACTIVE",
+  "status": "TRIGGERED",
   "created_at": "2026-07-24T12:15:52.051693Z",
-  "triggered_at": null,
-  "last_value": null
+  "triggered_at": "2026-07-24T12:24:23.011926Z",
+  "last_value": 65487.98
 }

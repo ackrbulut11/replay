@@ -1,0 +1,16 @@
+{
+  "id": "0c58c646",
+  "symbol": "BTCUSDT",
+  "provider": "binance",
+  "timeframe": "1d",
+  "target_type": "price",
+  "indicator_period": 14,
+  "indicator_field": null,
+  "condition": "falls_below",
+  "threshold_value": 65044.55,
+  "note": null,
+  "status": "TRIGGERED",
+  "created_at": "2026-07-24T12:21:52.709405Z",
+  "triggered_at": "2026-07-24T12:22:05.359683Z",
+  "last_value": 65038.57
+}

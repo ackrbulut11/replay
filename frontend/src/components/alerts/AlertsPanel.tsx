@@ -1,9 +1,9 @@
 import { useEffect, useCallback, useRef } from 'react';
 import {
   Bell, Plus, Trash2, Power, X,
-  TrendingUp, TrendingDown, Clock, GripVertical
+  TrendingUp, TrendingDown, Clock, GripVertical, Volume2
 } from 'lucide-react';
-import { alertStore, useAlertStore, AlertItem } from '../../store/alertStore';
+import { alertStore, useAlertStore, playBellSound, AlertItem } from '../../store/alertStore';
 import { watchlistStore, useWatchlistStore } from '../../store/watchlistStore';
 
 interface AlertsPanelProps {
@@ -108,8 +108,17 @@ export default function AlertsPanel({
 
         <div className="flex items-center gap-1">
           <button
+            onClick={() => playBellSound(5)}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-lg transition cursor-pointer"
+            title="Alarm Sesini Dinle (5 sn)"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>Sesi Dinle</span>
+          </button>
+
+          <button
             onClick={onOpenCreateModal}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-lg shadow-md transition"
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-lg shadow-md transition cursor-pointer"
             title="Yeni Alarm Ekle"
           >
             <Plus className="w-3.5 h-3.5" />

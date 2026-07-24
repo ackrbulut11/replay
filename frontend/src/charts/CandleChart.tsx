@@ -559,33 +559,30 @@ export default function CandleChart({
     if (!chart || !series) return null;
 
     if (snap) {
-      const logical = chart.timeScale().coordinateToLogical(x);
-      if (logical !== null) {
+      const time = chart.timeScale().coordinateToTime(x);
+      const snapPrice = series.coordinateToPrice(y);
+
+      if (time !== null && snapPrice !== null) {
+        const timeVal = typeof time === 'number' ? time : (time as any);
         const candles = fullDataRef.current;
-        if (candles && candles.length > 0) {
-          let barIdx = Math.round(logical);
-          if (barIdx < 0) barIdx = 0;
-          if (barIdx >= candles.length) barIdx = candles.length - 1;
+        const candle = candles.find(c => c.time === timeVal || (typeof c.time === 'object' && (c.time as any).timestamp === timeVal));
 
-          const candle = candles[barIdx];
-          const snapPrice = series.coordinateToPrice(y);
-
-          if (candle && snapPrice !== null) {
-            // Mumun 4 temel noktası: Başlangıç (Open), Bitiş (Close), En Yüksek (High), En Düşük (Low)
-            const points = [candle.open, candle.close, candle.high, candle.low];
-            
-            // Fare imlecinin fiyatına en yakın olan noktayı seç ve doğrudan o verinin olduğu yere yapış
-            const price = points.reduce((best, p) =>
-              Math.abs(p - snapPrice) < Math.abs(best - snapPrice) ? p : best
-            );
-            return { time: candle.time, price };
-          }
+        if (candle) {
+          // Mumun 4 temel noktası: Başlangıç (Open), Bitiş (Close), En Yüksek (High), En Düşük (Low)
+          const points = [candle.open, candle.close, candle.high, candle.low];
+          
+          // Fare imlecinin fiyatına en yakın olan noktayı seç ve doğrudan o verinin olduğu yere yapış
+          const price = points.reduce((best, p) =>
+            Math.abs(p - snapPrice) < Math.abs(best - snapPrice) ? p : best
+          );
+          return { time: candle.time, price };
         }
       }
-      const time = chart.timeScale().coordinateToTime(x);
-      const price = series.coordinateToPrice(y);
-      if (time === null || price === null) return null;
-      return { time: time as number, price };
+
+      const fallbackTime = chart.timeScale().coordinateToTime(x);
+      const fallbackPrice = series.coordinateToPrice(y);
+      if (fallbackTime === null || fallbackPrice === null) return null;
+      return { time: fallbackTime as number, price: fallbackPrice };
     }
 
     const logical = chart.timeScale().coordinateToLogical(x);

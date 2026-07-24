@@ -561,55 +561,38 @@ export default function CandleChart({
     if (snap) {
       const logical = chart.timeScale().coordinateToLogical(x);
       if (logical !== null) {
-        const barIdx = Math.round(logical);
         const candles = fullDataRef.current;
-        let candle: CandleData | null = null;
         if (candles && candles.length > 0) {
-          if (barIdx >= 0 && barIdx < candles.length) {
-            candle = candles[barIdx];
-          } else if (barIdx < 0) {
-            candle = candles[0];
-          } else if (barIdx >= candles.length) {
-            candle = candles[candles.length - 1];
-          }
-        }
+          let barIdx = Math.round(logical);
+          if (barIdx < 0) barIdx = 0;
+          if (barIdx >= candles.length) barIdx = candles.length - 1;
 
-        if (candle && typeof candle.open === 'number') {
-          const barTime = candle.time;
-          const barPixelX = chart.timeScale().timeToCoordinate(barTime as Time);
+          const candle = candles[barIdx];
           const snapPrice = series.coordinateToPrice(y);
 
-          if (barPixelX !== null && snapPrice !== null) {
-            const visibleRange = chart.timeScale().getVisibleLogicalRange();
-            let threshold = 25;
-            if (visibleRange) {
-              const spacing = chart.timeScale().width() / (visibleRange.to - visibleRange.from);
-              threshold = Math.max(10, Math.min(50, spacing * 0.5));
-            }
-            if (Math.abs(x - barPixelX) <= threshold) {
-              const high = candle.high;
-              const low = candle.low;
-              const open = candle.open;
-              const close = candle.close;
-              const topBody = Math.max(open, close);
-              const bottomBody = Math.min(open, close);
+          if (candle && snapPrice !== null) {
+            const high = candle.high;
+            const low = candle.low;
+            const open = candle.open;
+            const close = candle.close;
+            const topBody = Math.max(open, close);
+            const bottomBody = Math.min(open, close);
 
-              const mid = (high + low) / 2;
-              let candidates: number[];
-
-              if (snapPrice >= mid) {
-                // Mumun üst tarafındaysa: Üst fitil ucu (High) veya Gövde Üstü
-                candidates = [high, topBody];
-              } else {
-                // Mumun alt tarafındaysa: Alt fitil ucu (Low) veya Gövde Altı
-                candidates = [low, bottomBody];
-              }
-
-              const price = candidates.reduce((best, p) =>
+            let price: number;
+            if (snapPrice >= high) {
+              // Mumun üzerinde ise: Üst fitil ucuna (High) yapış
+              price = high;
+            } else if (snapPrice <= low) {
+              // Mumun altında ise: Alt fitil ucuna (Low) yapış
+              price = low;
+            } else {
+              // Mum içindeyse: En yakın OHLC seviyesine yapış
+              const candidates = [high, topBody, bottomBody, low];
+              price = candidates.reduce((best, p) =>
                 Math.abs(p - snapPrice) < Math.abs(best - snapPrice) ? p : best
               );
-              return { time: barTime, price };
             }
+            return { time: candle.time, price };
           }
         }
       }

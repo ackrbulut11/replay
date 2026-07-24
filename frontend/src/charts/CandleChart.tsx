@@ -1579,14 +1579,6 @@ export default function CandleChart({
 
       if (!targetSeries) return;
 
-      const isRises = alert.condition === 'rises_above';
-      const condSym = isRises ? '>' : '<';
-      const formattedVal = typeof alert.threshold_value === 'number'
-        ? alert.threshold_value.toFixed(2)
-        : alert.threshold_value;
-
-      const labelTitle = `🔔 ${alert.target_type === 'price' ? alert.symbol : alert.target_type} ${condSym} ${formattedVal}`;
-
       try {
         const line = targetSeries.createPriceLine({
           price: alert.threshold_value,
@@ -1595,7 +1587,7 @@ export default function CandleChart({
           lineStyle: 2, // Dashed
           axisLabelVisible: true,
           axisLabelColor: '#f59e0b',
-          title: labelTitle,
+          title: '', // Sarı metin etiketleri kaldırıldı, sadece çizgi ve eksen göstergesi kalır
         });
         alertPriceLinesRef.current.push({ line, series: targetSeries });
       } catch (err) {

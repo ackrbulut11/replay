@@ -218,7 +218,7 @@ function ConditionRow({ condition, onChange, onDelete, indicators, index }: Cond
             className="bg-indigo-950/50 border border-indigo-700/50 text-indigo-300 text-xs rounded-lg px-3 py-1.5 font-semibold focus:border-indigo-500 outline-none transition-colors"
           >
             {OPERATORS.map((op) => (
-              <option key={op.value} value={op.value}>
+              <option key={op.value} value={op.value} className="bg-[#0d1321] text-slate-100 py-1">
                 {op.label}
               </option>
             ))}

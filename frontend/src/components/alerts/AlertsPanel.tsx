@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import {
   Bell, Plus, Trash2, Power, X,
-  TrendingUp, TrendingDown, Clock
+  TrendingUp, TrendingDown, Clock, GripVertical
 } from 'lucide-react';
 import { alertStore, useAlertStore, AlertItem } from '../../store/alertStore';
 import { watchlistStore, useWatchlistStore } from '../../store/watchlistStore';
@@ -20,9 +20,36 @@ export default function AlertsPanel({
   const [watchlistState] = useWatchlistStore();
   const [alertState] = useAlertStore();
 
+  const isDraggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartWidthRef = useRef(watchlistState.panelWidth);
+
   useEffect(() => {
     alertStore.fetchAlerts();
   }, []);
+
+  // ---- Panel Resize Handlers ----
+  const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    dragStartXRef.current = e.clientX;
+    dragStartWidthRef.current = watchlistState.panelWidth;
+
+    const onMouseMove = (me: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const delta = dragStartXRef.current - me.clientX;
+      watchlistStore.setPanelWidth(dragStartWidthRef.current + delta);
+    };
+
+    const onMouseUp = () => {
+      isDraggingRef.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [watchlistState.panelWidth]);
 
   if (!watchlistState.isOpen || watchlistState.activeRightTool !== 'alerts') {
     return null;
@@ -48,7 +75,20 @@ export default function AlertsPanel({
   };
 
   return (
-    <div className="w-80 h-full bg-[#0d1321]/95 border-l border-slate-800 flex flex-col z-20 select-none shrink-0 shadow-2xl backdrop-blur-md animate-fadeIn">
+    <div
+      style={{ width: watchlistState.panelWidth }}
+      className="h-full bg-[#0d1321]/95 border-l border-slate-800 flex flex-col z-20 select-none shrink-0 shadow-2xl backdrop-blur-md animate-fadeIn relative overflow-hidden"
+    >
+      {/* Resize handle (left edge) */}
+      <div
+        onMouseDown={onResizeMouseDown}
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-amber-500/30 transition-colors"
+        title="Genişliği Ayarla"
+      >
+        <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <GripVertical className="w-3 h-3 text-amber-400" />
+        </div>
+      </div>
       {/* Panel Header */}
       <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-[#070b13]/80">
         <div className="flex items-center gap-2">

@@ -146,7 +146,12 @@ function App() {
   return (
     <DashboardLayout activeTab={activeTab} onSelectTab={setActiveTab}>
       {activeTab === 'strategy' ? (
-        <StrategyPage />
+        <StrategyPage
+          onSelectTab={setActiveTab}
+          setSymbol={setSymbol}
+          setProvider={setProvider}
+          setTimeframe={setTimeframe}
+        />
       ) : activeTab === 'chart' || activeTab === 'replay' ? (
         <div className="h-full w-full flex flex-col p-2 space-y-2 overflow-hidden bg-[#070b13]">
           {/* Ana İçerik Alanı: Grafik + Favoriler (Watchlist) Yan Paneli + Sağ Araç Çubuğu */}

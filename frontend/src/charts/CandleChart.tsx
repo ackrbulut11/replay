@@ -180,6 +180,7 @@ export default function CandleChart({
 
   const [currentCrosshairY, setCurrentCrosshairY] = useState<number | null>(null);
   const [alarmOverlays, setAlarmOverlays] = useState<Array<{ id: string; y: number; symbol: string; condSym: string; val: string }>>([]);
+  const updateAlarmOverlaysRef = useRef<(() => void) | null>(null);
 
   const formatPriceLabel = useCallback((val?: number | null) => {
     if (val === undefined || val === null) return '—';
@@ -967,7 +968,12 @@ export default function CandleChart({
       }
     });
 
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      updateAlarmOverlaysRef.current?.();
+    });
+
     chart.subscribeCrosshairMove((param) => {
+      updateAlarmOverlaysRef.current?.();
       if (param.point) {
         setCurrentCrosshairY(param.point.y);
       } else {
@@ -1543,6 +1549,8 @@ export default function CandleChart({
 
     setAlarmOverlays(overlays);
   }, [alertState.alerts, symbol]);
+
+  updateAlarmOverlaysRef.current = updateAlarmOverlays;
 
   // Render alarm price lines on the chart
   useEffect(() => {

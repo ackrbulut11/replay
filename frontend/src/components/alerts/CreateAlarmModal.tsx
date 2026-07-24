@@ -17,8 +17,10 @@ export default function CreateAlarmModal({
   currentProvider,
   currentPrice,
 }: CreateAlarmModalProps) {
-  const [targetType, setTargetType] = useState<'price' | 'EMA' | 'SMA' | 'RSI' | 'MACD' | 'ATR' | 'BollingerBands'>('price');
+  const [targetType, setTargetType] = useState<'price' | 'EMA' | 'SMA' | 'RSI' | 'MACD' | 'ATR' | 'BollingerBands' | 'EMA_CROSS' | 'PERCENT_CHANGE'>('price');
   const [indicatorPeriod, setIndicatorPeriod] = useState<number>(14);
+  const [indicatorPeriodFast, setIndicatorPeriodFast] = useState<number>(20);
+  const [indicatorPeriodSlow, setIndicatorPeriodSlow] = useState<number>(50);
   const [condition, setCondition] = useState<'rises_above' | 'falls_below'>('rises_above');
   const [thresholdValue, setThresholdValue] = useState<string>('');
   const [note, setNote] = useState<string>('');
@@ -42,6 +44,12 @@ export default function CreateAlarmModal({
       if (targetType === 'RSI') setThresholdValue('70');
     } else if (targetType === 'EMA' || targetType === 'SMA' || targetType === 'BollingerBands') {
       setIndicatorPeriod(20);
+    } else if (targetType === 'EMA_CROSS') {
+      setIndicatorPeriodFast(20);
+      setIndicatorPeriodSlow(50);
+      setThresholdValue('0');
+    } else if (targetType === 'PERCENT_CHANGE') {
+      setThresholdValue('2');
     }
   }, [targetType]);
 
@@ -50,7 +58,7 @@ export default function CreateAlarmModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(thresholdValue);
-    if (isNaN(val)) {
+    if (isNaN(val) && targetType !== 'EMA_CROSS') {
       setErrorMsg('Lütfen geçerli bir sayısal hedef değer giriniz.');
       return;
     }
@@ -63,9 +71,11 @@ export default function CreateAlarmModal({
         symbol: currentSymbol,
         provider: currentProvider,
         target_type: targetType,
-        indicator_period: targetType !== 'price' ? indicatorPeriod : undefined,
+        indicator_period: targetType !== 'price' && targetType !== 'EMA_CROSS' && targetType !== 'PERCENT_CHANGE' ? indicatorPeriod : undefined,
+        indicator_period_fast: targetType === 'EMA_CROSS' ? indicatorPeriodFast : undefined,
+        indicator_period_slow: targetType === 'EMA_CROSS' ? indicatorPeriodSlow : undefined,
         condition,
-        threshold_value: val,
+        threshold_value: targetType === 'EMA_CROSS' ? 0 : val,
         note: note.trim() || undefined,
       });
       onClose();
@@ -122,6 +132,8 @@ export default function CreateAlarmModal({
               className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-amber-500/60 transition"
             >
               <option value="price">Fiyat (Price Level)</option>
+              <option value="EMA_CROSS">⚡ EMA Kesişimi (Golden / Death Cross)</option>
+              <option value="PERCENT_CHANGE">📊 Yüzdelik Değişim (% Change)</option>
               <option value="RSI">RSI Göstergesi</option>
               <option value="EMA">EMA (Exponential Moving Average)</option>
               <option value="SMA">SMA (Simple Moving Average)</option>
@@ -131,8 +143,40 @@ export default function CreateAlarmModal({
             </select>
           </div>
 
-          {/* Indicator Period (if not price) */}
-          {targetType !== 'price' && (
+          {/* EMA Cross Fast/Slow Inputs */}
+          {targetType === 'EMA_CROSS' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Hızlı EMA (Fast)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={indicatorPeriodFast}
+                  onChange={e => setIndicatorPeriodFast(parseInt(e.target.value) || 20)}
+                  className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500/60 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Yavaş EMA (Slow)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={indicatorPeriodSlow}
+                  onChange={e => setIndicatorPeriodSlow(parseInt(e.target.value) || 50)}
+                  className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500/60 transition"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Indicator Period (if standard indicator) */}
+          {targetType !== 'price' && targetType !== 'EMA_CROSS' && targetType !== 'PERCENT_CHANGE' && (
             <div>
               <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                 İndikatör Periyodu (Period)
@@ -183,31 +227,33 @@ export default function CreateAlarmModal({
           </div>
 
           {/* Target Value / Threshold */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Hedef Seviye / Fiyat (Threshold)
-              </label>
-              {currentPrice && (
-                <button
-                  type="button"
-                  onClick={() => setThresholdValue(currentPrice.toString())}
-                  className="text-[10px] text-amber-400 hover:underline font-mono"
-                >
-                  Son Fiyatı Kullan ({currentPrice})
-                </button>
-              )}
+          {targetType !== 'EMA_CROSS' && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  {targetType === 'PERCENT_CHANGE' ? 'Yüzdelik Değişim Oranı (%)' : 'Hedef Seviye / Fiyat (Threshold)'}
+                </label>
+                {currentPrice && targetType === 'price' && (
+                  <button
+                    type="button"
+                    onClick={() => setThresholdValue(currentPrice.toString())}
+                    className="text-[10px] text-amber-400 hover:underline font-mono"
+                  >
+                    Son Fiyatı Kullan ({currentPrice})
+                  </button>
+                )}
+              </div>
+              <input
+                type="number"
+                step="any"
+                required
+                value={thresholdValue}
+                onChange={e => setThresholdValue(e.target.value)}
+                placeholder={targetType === 'PERCENT_CHANGE' ? 'Örn: 2 (%2 değişim)' : 'Örn: 70000 veya 70'}
+                className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-sm font-bold text-slate-100 font-mono focus:outline-none focus:border-amber-500/60 transition"
+              />
             </div>
-            <input
-              type="number"
-              step="any"
-              required
-              value={thresholdValue}
-              onChange={e => setThresholdValue(e.target.value)}
-              placeholder="Örn: 70000 veya 70"
-              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-sm font-bold text-slate-100 font-mono focus:outline-none focus:border-amber-500/60 transition"
-            />
-          </div>
+          )}
 
           {/* Note / Description */}
           <div>

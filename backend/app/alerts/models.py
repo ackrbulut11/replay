@@ -19,6 +19,8 @@ class AlertTargetType(str, Enum):
     MACD = "MACD"
     ATR = "ATR"
     BOLLINGER = "BollingerBands"
+    EMA_CROSS = "EMA_CROSS"
+    PERCENT_CHANGE = "PERCENT_CHANGE"
 
 
 class AlertCondition(str, Enum):
@@ -38,6 +40,8 @@ class AlertCreateRequest(BaseModel):
     timeframe: str = "1d"
     target_type: AlertTargetType = AlertTargetType.PRICE
     indicator_period: Optional[int] = 14
+    indicator_period_fast: Optional[int] = 20
+    indicator_period_slow: Optional[int] = 50
     indicator_field: Optional[str] = None  # e.g., MACD_hist, BB_upper
     condition: AlertCondition = AlertCondition.RISES_ABOVE
     threshold_value: float
@@ -57,6 +61,8 @@ class AlertModel(BaseModel):
     timeframe: str = "1d"
     target_type: AlertTargetType
     indicator_period: Optional[int] = 14
+    indicator_period_fast: Optional[int] = 20
+    indicator_period_slow: Optional[int] = 50
     indicator_field: Optional[str] = None
     condition: AlertCondition
     threshold_value: float

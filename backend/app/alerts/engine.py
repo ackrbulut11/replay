@@ -144,6 +144,26 @@ class AlertEngine:
             current_val = None
             if target_type == AlertTargetType.PRICE.value:
                 current_val = current_price
+            elif target_type == AlertTargetType.EMA_CROSS.value:
+                fast_period = alert.get("indicator_period_fast", 20)
+                slow_period = alert.get("indicator_period_slow", 50)
+                fast_val = indicator_values.get(f"EMA_{fast_period}") or indicator_values.get("EMA_fast")
+                slow_val = indicator_values.get(f"EMA_{slow_period}") or indicator_values.get("EMA_slow")
+                if fast_val is not None and slow_val is not None:
+                    current_val = fast_val - slow_val
+                    # For EMA_CROSS, threshold is 0 (or diff)
+                    if condition == AlertCondition.RISES_ABOVE.value:
+                        is_triggered = fast_val >= slow_val
+                    else:
+                        is_triggered = fast_val <= slow_val
+            elif target_type == AlertTargetType.PERCENT_CHANGE.value:
+                pct_val = indicator_values.get("percent_change") or indicator_values.get("pct_change")
+                if pct_val is not None:
+                    current_val = pct_val
+                    if condition == AlertCondition.RISES_ABOVE.value:
+                        is_triggered = pct_val >= threshold
+                    else:
+                        is_triggered = pct_val <= -abs(threshold) if threshold > 0 else pct_val <= threshold
             else:
                 # Check indicator values dictionary
                 # Key formats can be 'RSI', 'EMA_20', 'RSI_14', etc.
@@ -161,16 +181,16 @@ class AlertEngine:
                         current_val = indicator_values[key]
                         break
 
-            if current_val is None:
+            if current_val is None and target_type not in (AlertTargetType.EMA_CROSS.value, AlertTargetType.PERCENT_CHANGE.value):
                 continue
 
             alert["last_value"] = current_val
 
-            is_triggered = False
-            if condition == AlertCondition.RISES_ABOVE.value and current_val >= threshold:
-                is_triggered = True
-            elif condition == AlertCondition.FALLS_BELOW.value and current_val <= threshold:
-                is_triggered = True
+            if target_type not in (AlertTargetType.EMA_CROSS.value, AlertTargetType.PERCENT_CHANGE.value):
+                if condition == AlertCondition.RISES_ABOVE.value and current_val >= threshold:
+                    is_triggered = True
+                elif condition == AlertCondition.FALLS_BELOW.value and current_val <= threshold:
+                    is_triggered = True
 
             if is_triggered:
                 alert["status"] = AlertStatus.TRIGGERED.value

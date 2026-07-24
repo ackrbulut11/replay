@@ -5,8 +5,10 @@ export interface AlertItem {
   symbol: string;
   provider: string;
   timeframe: string;
-  target_type: 'price' | 'EMA' | 'SMA' | 'RSI' | 'MACD' | 'ATR' | 'BollingerBands';
+  target_type: 'price' | 'EMA' | 'SMA' | 'RSI' | 'MACD' | 'ATR' | 'BollingerBands' | 'EMA_CROSS' | 'PERCENT_CHANGE';
   indicator_period?: number;
+  indicator_period_fast?: number;
+  indicator_period_slow?: number;
   indicator_field?: string;
   condition: 'rises_above' | 'falls_below';
   threshold_value: number;
@@ -169,6 +171,8 @@ export const alertStore = {
     timeframe?: string;
     target_type: string;
     indicator_period?: number;
+    indicator_period_fast?: number;
+    indicator_period_slow?: number;
     condition: string;
     threshold_value: number;
     note?: string;

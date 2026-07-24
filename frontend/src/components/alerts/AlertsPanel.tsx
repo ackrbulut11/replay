@@ -1,9 +1,9 @@
 import { useEffect, useCallback, useRef } from 'react';
 import {
   Bell, Plus, Trash2, Power, X,
-  TrendingUp, TrendingDown, Clock, GripVertical, Volume2
+  TrendingUp, TrendingDown, Clock, GripVertical
 } from 'lucide-react';
-import { alertStore, useAlertStore, playBellSound, AlertItem } from '../../store/alertStore';
+import { alertStore, useAlertStore, AlertItem } from '../../store/alertStore';
 import { watchlistStore, useWatchlistStore } from '../../store/watchlistStore';
 
 interface AlertsPanelProps {
@@ -63,6 +63,14 @@ export default function AlertsPanel({
     if (alert.target_type === 'price') {
       return `${alert.symbol} Fiyatı`;
     }
+    if (alert.target_type === 'EMA_CROSS') {
+      const fast = alert.indicator_period_fast || 20;
+      const slow = alert.indicator_period_slow || 50;
+      return `EMA (${fast} / ${slow}) Kesişimi`;
+    }
+    if (alert.target_type === 'PERCENT_CHANGE') {
+      return `${alert.symbol} Yüzdelik Değişim`;
+    }
     const p = alert.indicator_period ? `(${alert.indicator_period})` : '';
     return `${alert.target_type}${p}`;
   };
@@ -70,6 +78,12 @@ export default function AlertsPanel({
   const formatThreshold = (val: number, targetType: string) => {
     if (targetType === 'price') {
       return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (targetType === 'EMA_CROSS') {
+      return 'Kesişim';
+    }
+    if (targetType === 'PERCENT_CHANGE') {
+      return `%${val}`;
     }
     return val.toString();
   };
@@ -107,15 +121,6 @@ export default function AlertsPanel({
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => playBellSound(5)}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-lg transition cursor-pointer"
-            title="Alarm Sesini Dinle (5 sn)"
-          >
-            <Volume2 className="w-3.5 h-3.5" />
-            <span>Sesi Dinle</span>
-          </button>
-
           <button
             onClick={onOpenCreateModal}
             className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-lg shadow-md transition cursor-pointer"

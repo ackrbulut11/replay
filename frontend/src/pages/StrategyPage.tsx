@@ -323,22 +323,34 @@ export default function StrategyPage({
                 </div>
               )}
 
-              {activeSubTab === 'batch_scanner' && mode === 'edit' && activeStrategy ? (
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <BatchScannerTab
-                    strategy={activeStrategy}
-                    onSelectSymbolAndShowChart={(sym, prov, tf) => {
-                      handleNavigateToChartWithSymbol(sym, prov, tf);
-                    }}
-                  />
-
-                </div>
-              ) : (
+              {mode === 'edit' && activeStrategy && (
                 <>
+                  {/* Çoklu Sembol Taraması (Arka planda çalışmaya devam etmesi için DOM'da saklanır) */}
+                  <div
+                    className={
+                      activeSubTab === 'batch_scanner'
+                        ? 'flex-1 min-h-0 overflow-hidden flex flex-col'
+                        : 'hidden'
+                    }
+                  >
+                    <BatchScannerTab
+                      strategy={activeStrategy}
+                      onSelectSymbolAndShowChart={(sym, prov, tf) => {
+                        handleNavigateToChartWithSymbol(sym, prov, tf);
+                      }}
+                    />
+                  </div>
+
                   {/* Builder */}
-                  <div className="flex-1 min-h-0 overflow-hidden">
+                  <div
+                    className={
+                      activeSubTab === 'builder'
+                        ? 'flex-1 min-h-0 overflow-hidden flex flex-col'
+                        : 'hidden'
+                    }
+                  >
                     <StrategyBuilder
-                      strategy={mode === 'edit' ? activeStrategy : null}
+                      strategy={activeStrategy}
                       indicators={indicators}
                       onSaved={handleSaved}
                       onCancel={handleCancel}
@@ -346,6 +358,19 @@ export default function StrategyPage({
                   </div>
                 </>
               )}
+
+              {mode === 'new' && (
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                  <StrategyBuilder
+                    strategy={null}
+                    indicators={indicators}
+                    onSaved={handleSaved}
+                    onCancel={handleCancel}
+                  />
+                </div>
+              )}
+
+
 
               {/* Değerlendirme Paneli (Sadece Builder sekmesindeyken gösterilir) */}
               {activeSubTab === 'builder' && mode === 'edit' && activeStrategy && (

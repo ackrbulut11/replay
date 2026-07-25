@@ -82,6 +82,9 @@ class StrategyEngine:
             entry_rules=request.entry_rules,
             exit_rules=request.exit_rules,
             timeframe_filters=request.timeframe_filters,
+            allow_short=request.allow_short,
+            take_profit_pct=request.take_profit_pct,
+            stop_loss_pct=request.stop_loss_pct,
         )
 
         data = strategy.model_dump()
@@ -111,6 +114,13 @@ class StrategyEngine:
             existing["exit_rules"] = request.exit_rules.model_dump()
         if request.timeframe_filters is not None:
             existing["timeframe_filters"] = [tf.model_dump() for tf in request.timeframe_filters]
+        if request.allow_short is not None:
+            existing["allow_short"] = request.allow_short
+        if request.take_profit_pct is not None:
+            existing["take_profit_pct"] = request.take_profit_pct
+        if request.stop_loss_pct is not None:
+            existing["stop_loss_pct"] = request.stop_loss_pct
+
 
         # Güncelleme zamanını ayarla
         existing["updated_at"] = datetime.utcnow().isoformat() + "Z"

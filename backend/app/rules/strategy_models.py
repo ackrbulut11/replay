@@ -171,6 +171,8 @@ class StrategyModel(BaseModel):
     allow_short: bool = Field(
         False, description="Short pozisyon açılsın mı? False ise sadece elindekini satıp nakite geçer."
     )
+    take_profit_pct: Optional[float] = Field(None, description="Yüzde Kar Al (Take Profit %), örn: 3.5 = %3.5 kârda sat")
+    stop_loss_pct: Optional[float] = Field(None, description="Yüzde Zarar Durdur (Stop Loss %), örn: 2.0 = %2.0 zararda sat")
 
 
 # ─── API İstek/Yanıt Modelleri ───────────────────────────────────────────────
@@ -190,6 +192,8 @@ class StrategyCreateRequest(BaseModel):
     )
     timeframe_filters: List[TimeframeFilterModel] = Field(default_factory=list)
     allow_short: bool = Field(False, description="Short pozisyon açılsın mı?")
+    take_profit_pct: Optional[float] = Field(None, description="Yüzde Kar Al (Take Profit %)")
+    stop_loss_pct: Optional[float] = Field(None, description="Yüzde Zarar Durdur (Stop Loss %)")
 
 
 class StrategyUpdateRequest(BaseModel):
@@ -202,6 +206,9 @@ class StrategyUpdateRequest(BaseModel):
     exit_rules: Optional[ConditionGroupModel] = None
     timeframe_filters: Optional[List[TimeframeFilterModel]] = None
     allow_short: Optional[bool] = None
+    take_profit_pct: Optional[float] = None
+    stop_loss_pct: Optional[float] = None
+
 
 
 class EvaluateRequest(BaseModel):

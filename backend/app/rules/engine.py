@@ -188,6 +188,14 @@ class RuleEngine:
         if "allow_short" in effective_params:
             allow_short = bool(effective_params["allow_short"])
 
+        take_profit_pct = strategy.get("take_profit_pct")
+        if "take_profit_pct" in effective_params and effective_params["take_profit_pct"] is not None:
+            take_profit_pct = float(effective_params["take_profit_pct"])
+
+        stop_loss_pct = strategy.get("stop_loss_pct")
+        if "stop_loss_pct" in effective_params and effective_params["stop_loss_pct"] is not None:
+            stop_loss_pct = float(effective_params["stop_loss_pct"])
+
         # Fiyat sütun adını büyük/küçük harf bağımsız bul
         close_col = None
         for col in df.columns:
@@ -196,16 +204,43 @@ class RuleEngine:
                 break
 
         for i in range(start_index, end_index + 1):
-            signal, conditions_met = RuleEngine.evaluate_bar_with_state(
-                strategy=strategy,
-                df=df,
-                bar_index=i,
-                position_state=position_state,
-                effective_params=effective_params,
-                multi_tf_data=multi_tf_data,
-            )
-
             close_price = float(df.iloc[i][close_col]) if close_col else 0.0
+
+            # Pozisyon kontrolü & TP/SL kontrolleri
+            tp_sl_signal = None
+            tp_sl_reason = []
+
+            if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
+                pnl_pct = ((close_price - last_entry_price) / last_entry_price) * 100.0
+                if take_profit_pct is not None and take_profit_pct > 0 and pnl_pct >= take_profit_pct:
+                    tp_sl_signal = SignalType.SELL
+                    tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
+                elif stop_loss_pct is not None and stop_loss_pct > 0 and pnl_pct <= -stop_loss_pct:
+                    tp_sl_signal = SignalType.SELL
+                    tp_sl_reason = [f"Zarar Durdur (-%{stop_loss_pct})"]
+
+            elif position_state == "short" and last_entry_price is not None and last_entry_price > 0:
+                pnl_pct = ((last_entry_price - close_price) / last_entry_price) * 100.0
+                if take_profit_pct is not None and take_profit_pct > 0 and pnl_pct >= take_profit_pct:
+                    tp_sl_signal = SignalType.BUY
+                    tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
+                elif stop_loss_pct is not None and stop_loss_pct > 0 and pnl_pct <= -stop_loss_pct:
+                    tp_sl_signal = SignalType.BUY
+                    tp_sl_reason = [f"Zarar Durdur (-%{stop_loss_pct})"]
+
+            if tp_sl_signal is not None:
+                signal = tp_sl_signal
+                conditions_met = tp_sl_reason
+            else:
+                signal, conditions_met = RuleEngine.evaluate_bar_with_state(
+                    strategy=strategy,
+                    df=df,
+                    bar_index=i,
+                    position_state=position_state,
+                    effective_params=effective_params,
+                    multi_tf_data=multi_tf_data,
+                )
+
 
             ts_val = df.iloc[i].get("timestamp", 0)
             if hasattr(ts_val, "timestamp"):

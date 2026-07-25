@@ -50,6 +50,8 @@ export default function StrategyBuilder({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [allowShort, setAllowShort] = useState(false);
+  const [takeProfitPct, setTakeProfitPct] = useState<number | null>(null);
+  const [stopLossPct, setStopLossPct] = useState<number | null>(null);
   const [parameters, setParameters] = useState<StrategyParameter[]>([]);
   const [entryRules, setEntryRules] = useState<ConditionGroup>(createEmptyConditionGroup());
   const [exitRules, setExitRules] = useState<ConditionGroup>(createEmptyConditionGroup());
@@ -68,6 +70,8 @@ export default function StrategyBuilder({
       setName(strategy.name);
       setDescription(strategy.description);
       setAllowShort(Boolean(strategy.allow_short));
+      setTakeProfitPct(strategy.take_profit_pct ?? null);
+      setStopLossPct(strategy.stop_loss_pct ?? null);
       setParameters(strategy.parameters || []);
       setEntryRules(strategy.entry_rules || createEmptyConditionGroup());
       setExitRules(strategy.exit_rules || createEmptyConditionGroup());
@@ -76,6 +80,8 @@ export default function StrategyBuilder({
       setName('');
       setDescription('');
       setAllowShort(false);
+      setTakeProfitPct(null);
+      setStopLossPct(null);
       setParameters([]);
       setEntryRules(createEmptyConditionGroup());
       setExitRules(createEmptyConditionGroup());
@@ -148,6 +154,8 @@ export default function StrategyBuilder({
           name,
           description,
           allow_short: allowShort,
+          take_profit_pct: takeProfitPct,
+          stop_loss_pct: stopLossPct,
           parameters,
           entry_rules: entryRules,
           exit_rules: exitRules,
@@ -159,6 +167,8 @@ export default function StrategyBuilder({
           name,
           description,
           allow_short: allowShort,
+          take_profit_pct: takeProfitPct,
+          stop_loss_pct: stopLossPct,
           parameters,
           entry_rules: entryRules,
           exit_rules: exitRules,
@@ -170,6 +180,7 @@ export default function StrategyBuilder({
       if (result && onSaved) {
         onSaved(result);
       }
+
     } catch (err: any) {
       setSaveError(err.message || 'Kaydetme hatası');
     } finally {
@@ -424,6 +435,65 @@ export default function StrategyBuilder({
           title="Çıkış Kuralları (SELL)"
           accentColor="red"
         />
+
+        {/* Otomatik Kar Al (% Take Profit) ve Zarar Durdur (% Stop Loss) Paneli */}
+        <div className="bg-[#0d1321]/90 border border-slate-800/80 rounded-xl p-3.5 space-y-3 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                🎯 Otomatik Kar Al & Zarar Durdur (% Hedefler)
+              </span>
+              <span className="text-[10px] text-slate-400">
+                (Pozisyon açıldıktan sonra belirlenen kâr veya zarar yüzdesinde otomatik satış tetikler)
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Kar Al % */}
+            <div className="flex items-center justify-between gap-2 bg-slate-900/80 border border-emerald-500/30 rounded-lg p-2.5">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-emerald-400">Yüzde Kar Al (% Take Profit)</span>
+                <span className="text-[10px] text-slate-400">Pozisyon bu kâr oranına ulaşınca satılır</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-emerald-400 font-mono">%</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={takeProfitPct ?? ''}
+                  onChange={(e) => setTakeProfitPct(e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder="Örn: 3.5"
+                  className="w-20 bg-slate-950 border border-slate-700 text-emerald-300 font-mono text-xs font-bold rounded px-2 py-1.5 focus:border-emerald-500 outline-none"
+                  title="Örnek: 3.5 girdiğinizde %3.5 kâr elde edildiğinde otomatik satış yapılır"
+                />
+              </div>
+            </div>
+
+            {/* Zarar Durdur % */}
+            <div className="flex items-center justify-between gap-2 bg-slate-900/80 border border-red-500/30 rounded-lg p-2.5">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-red-400">Yüzde Zarar Durdur (% Stop Loss)</span>
+                <span className="text-[10px] text-slate-400">Pozisyon bu zarar oranına düşerse satılır</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-red-400 font-mono">%</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={stopLossPct ?? ''}
+                  onChange={(e) => setStopLossPct(e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder="Örn: 2.0"
+                  className="w-20 bg-slate-950 border border-slate-700 text-red-300 font-mono text-xs font-bold rounded px-2 py-1.5 focus:border-red-500 outline-none"
+                  title="Örnek: 2.0 girdiğinizde %2.0 zarar gerçekleştiğinde pozisyon stoplanır"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
 
         {/* Timeframe Filtreleri */}
         <div className="border border-amber-600/30 bg-amber-950/15 rounded-xl overflow-hidden">

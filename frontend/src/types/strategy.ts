@@ -95,6 +95,8 @@ export interface Strategy {
   exit_rules: ConditionGroup;
   timeframe_filters: TimeframeFilter[];
   allow_short?: boolean;
+  take_profit_pct?: number | null;
+  stop_loss_pct?: number | null;
 }
 
 // ─── API İstek/Yanıt Tipleri ─────────────────────────────────────────────────
@@ -107,6 +109,8 @@ export interface StrategyCreateRequest {
   exit_rules?: ConditionGroup;
   timeframe_filters?: TimeframeFilter[];
   allow_short?: boolean;
+  take_profit_pct?: number | null;
+  stop_loss_pct?: number | null;
 }
 
 export interface StrategyUpdateRequest {
@@ -117,7 +121,10 @@ export interface StrategyUpdateRequest {
   exit_rules?: ConditionGroup;
   timeframe_filters?: TimeframeFilter[];
   allow_short?: boolean;
+  take_profit_pct?: number | null;
+  stop_loss_pct?: number | null;
 }
+
 
 export interface EvaluateRequest {
   symbol: string;

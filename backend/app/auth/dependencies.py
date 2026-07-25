@@ -30,7 +30,23 @@ def get_current_user(
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise credentials_exception
-
     return user
+
+
+def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User | None:
+    if not credentials:
+        return None
+    try:
+        token = credentials.credentials
+        payload = decode_token(token)
+        if payload is None or payload.get("type") != "access":
+            return None
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        return db.query(User).filter(User.id == user_id).first()
+    except Exception:
+        return None

@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from .base import IDataProvider
 
 
@@ -35,6 +35,21 @@ class ForexProvider(IDataProvider):
         if not interval:
             raise ValueError(f"Unsupported timeframe: {timeframe} for Forex provider.")
             
+        # Yahoo Finance zaman dilimi sınırlarını otomatik ayarla (HTTP 422 engellemek için)
+        now = datetime.now()
+        if interval == "1m":
+            max_start = now - timedelta(days=6)
+            if start_time < max_start:
+                start_time = max_start
+        elif interval in ["5m", "15m", "30m"]:
+            max_start = now - timedelta(days=58)
+            if start_time < max_start:
+                start_time = max_start
+        elif interval == "1h":
+            max_start = now - timedelta(days=700)
+            if start_time < max_start:
+                start_time = max_start
+
         params = {
             "period1": int(start_time.timestamp()),
             "period2": int(end_time.timestamp()),

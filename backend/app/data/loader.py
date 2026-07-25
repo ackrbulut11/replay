@@ -73,7 +73,8 @@ class DataLoader:
         provider_name = provider_name.lower()
         symbol = symbol.upper()
         
-        if provider_name in ["nasdaq", "bist"] and timeframe == "4h":
+        # Doğrudan desteklenmeyen hisse senedi/forex zaman dilimleri için yeniden örnekleme (örneğin 4h)
+        if provider_name in ["nasdaq", "bist", "forex", "fx"] and timeframe == "4h":
             df_1h = self.load_data(provider_name, symbol, "1h", start_time, end_time)
             df_4h = self.resample_ohlcv(df_1h, "4h")
             if not df_4h.empty:

@@ -112,5 +112,14 @@ class ForexProvider(IDataProvider):
         df['volume'] = df['volume'].fillna(0.0).astype(float)
         for col in ['open', 'high', 'low', 'close']:
             df[col] = df[col].astype(float)
-            
+
+        # Forex paritelerinde sıfır gelen hacim verisi yerine TradingView/MetaTrader standartlarında
+        # mum oynaklığına (High - Low) dayalı gerçekçi Tick Hacmi (Tick Volume Proxy) üret
+        if df['volume'].sum() == 0 or (df['volume'] == 0).all():
+            avg_price = df['close'].mean()
+            # JPY veya TRY gibi çiftlerde pip çarpanını ayarla
+            pip = 0.01 if avg_price > 20 else 0.0001
+            range_diff = (df['high'] - df['low']).abs()
+            df['volume'] = (range_diff / pip * 15.0).round().clip(lower=50.0)
+
         return df.reset_index(drop=True)

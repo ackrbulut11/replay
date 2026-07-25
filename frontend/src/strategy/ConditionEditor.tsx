@@ -36,8 +36,51 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
   const type = operand.type;
 
   return (
+
     <div className="flex flex-col gap-1.5">
-      <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{label}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{label}</span>
+        {/* Hızlı Tip Değiştirici Butonlar */}
+        <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+          <button
+            type="button"
+            onClick={() => onChange({ type: 'indicator', name: 'EMA', period: 20 })}
+            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
+              type === 'indicator'
+                ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+            title="İndikatör seç (EMA, RSI, MACD vs.)"
+          >
+            İndikatör
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ type: 'value', value: 30 })}
+            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
+              type === 'value'
+                ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+            title="Sabit Sayı / Seviye gir (30, 70 vs.)"
+          >
+            Sabit Sayı
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ type: 'price', field: 'close' })}
+            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
+              type === 'price'
+                ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+            title="Fiyat alanı seç (Kapanış, Hacim vs.)"
+          >
+            Fiyat
+          </button>
+        </div>
+      </div>
+
       <div className="flex items-center gap-1.5 flex-wrap">
         {/* Tip seçici */}
         <select
@@ -49,7 +92,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
             } else if (newType === 'price') {
               onChange({ type: 'price', field: 'close' });
             } else {
-              onChange({ type: 'value', value: 0 });
+              onChange({ type: 'value', value: 30 });
             }
           }}
           className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-colors"
@@ -58,6 +101,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
           <option value="price">Fiyat</option>
           <option value="value">Sabit Sayı / Değer</option>
         </select>
+
 
         {/* İndikatör seçici */}
         {type === 'indicator' && (
@@ -293,6 +337,31 @@ export default function ConditionEditor({
     });
   };
 
+  const handleAddLevelCondition = () => {
+    const newCond: Condition = {
+      left: { type: 'indicator', name: 'RSI', period: 14 },
+      operator: '<',
+      right: { type: 'value', value: 30 },
+    };
+    onChange({
+      ...group,
+      conditions: [...group.conditions, newCond],
+    });
+  };
+
+  const handleAddCrossCondition = () => {
+    const newCond: Condition = {
+      left: { type: 'indicator', name: 'EMA', period: 20 },
+      operator: 'cross_above',
+      right: { type: 'indicator', name: 'EMA', period: 50 },
+    };
+    onChange({
+      ...group,
+      conditions: [...group.conditions, newCond],
+    });
+  };
+
+
   const handleUpdateCondition = (index: number, condition: Condition) => {
     const newConditions = [...group.conditions];
     newConditions[index] = condition;
@@ -342,14 +411,35 @@ export default function ConditionEditor({
             </button>
           )}
 
-          {/* Koşul ekle */}
-          <button
-            onClick={handleAddCondition}
-            className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Koşul Ekle
-          </button>
+          {/* Hızlı Koşul Ekleme Butonları */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={handleAddLevelCondition}
+              className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 hover:text-white bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg px-2 py-1 transition-all cursor-pointer"
+              title="Aşırı Alım/Satım kuralı ekle (örn: RSI < 30)"
+            >
+              <Plus className="w-3 h-3 text-amber-400" />
+              + Seviye (RSI &lt; 30)
+            </button>
+
+            <button
+              onClick={handleAddCrossCondition}
+              className="flex items-center gap-1 text-[11px] font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/30 border border-indigo-500/30 rounded-lg px-2 py-1 transition-all cursor-pointer"
+              title="İndikatör kesişim kuralı ekle (örn: EMA 20 > EMA 50)"
+            >
+              <Plus className="w-3 h-3 text-indigo-400" />
+              + Kesişim (EMA 20 &gt; 50)
+            </button>
+
+            <button
+              onClick={handleAddCondition}
+              className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Özel Koşul
+            </button>
+          </div>
+
         </div>
       </div>
 

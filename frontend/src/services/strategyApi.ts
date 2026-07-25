@@ -19,10 +19,20 @@ import type {
 
 const API_BASE = '/api/strategy';
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('replay_auth_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const headers = { ...getAuthHeaders(), ...(options?.headers as Record<string, string> || {}) };
   const response = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
 
   if (!response.ok) {

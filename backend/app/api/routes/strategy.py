@@ -7,11 +7,13 @@ CRUD endpointleri ve strateji değerlendirme.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Optional
+import json
+from fastapi import APIRouter, HTTPException, Query, Depends
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, HTTPException, Query
-
+from app.database.postgres import get_db
+from app.database.models import User, Strategy
+from app.auth.dependencies import get_current_user_optional
 from app.data.loader import DataLoader
 from app.engines.scanner_engine import ScannerEngine
 from app.engines.strategy_engine import StrategyEngine
@@ -41,9 +43,10 @@ _loader = DataLoader()
 
 
 @router.get("/list")
-def list_strategies():
-    """Tüm kayıtlı stratejileri listeler."""
-    strategies = _engine.list_strategies()
+def list_strategies(current_user: Optional[User] = Depends(get_current_user_optional)):
+    """Tüm kayıtlı stratejileri listeler (kullanıcıya özel filtreli)."""
+    user_id = current_user.id if current_user else None
+    strategies = _engine.list_strategies(user_id=user_id)
     return {"strategies": strategies, "count": len(strategies)}
 
 
@@ -64,10 +67,32 @@ def get_strategy(strategy_id: str):
 
 
 @router.post("")
-def create_strategy(request: StrategyCreateRequest):
+def create_strategy(
+    request: StrategyCreateRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
     """Yeni strateji oluşturur."""
     try:
-        strategy = _engine.create_strategy(request)
+        user_id = current_user.id if current_user else request.user_id
+        strategy = _engine.create_strategy(request, user_id=user_id)
+
+        # Ayrıca SQL veritabanındaki Strategy tablosuna da kaydet
+        if user_id:
+            try:
+                sql_strat = Strategy(
+                    id=strategy["id"],
+                    user_id=user_id,
+                    name=strategy["name"],
+                    description=strategy.get("description", ""),
+                    content=json.dumps(strategy, ensure_ascii=False)
+                )
+                db.add(sql_strat)
+                db.commit()
+            except Exception as sql_err:
+                db.rollback()
+                print(f"SQL strategy save note: {sql_err}")
+
         return {"message": "Strateji oluşturuldu", "strategy": strategy}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

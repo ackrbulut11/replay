@@ -49,13 +49,17 @@ class StrategyEngine:
 
     # ─── CRUD İşlemleri ────────────────────────────────────────────────────
 
-    def list_strategies(self) -> list[dict]:
-        """Tüm kayıtlı stratejileri listeler."""
+    def list_strategies(self, user_id: str | None = None) -> list[dict]:
+        """Tüm kayıtlı stratejileri listeler. user_id verilirse kullanıcıya özel filtreler."""
         strategies = []
         for filepath in sorted(self.strategies_dir.glob("*.json")):
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                if user_id:
+                    strat_user = data.get("user_id")
+                    if strat_user and strat_user != user_id:
+                        continue
                 strategies.append(data)
             except (json.JSONDecodeError, IOError) as e:
                 # Bozuk dosyaları atla
@@ -73,11 +77,13 @@ class StrategyEngine:
         except (json.JSONDecodeError, IOError):
             return None
 
-    def create_strategy(self, request: StrategyCreateRequest) -> dict:
+    def create_strategy(self, request: StrategyCreateRequest, user_id: str | None = None) -> dict:
         """Yeni strateji oluşturur ve JSON dosyası olarak kaydeder."""
+        effective_user_id = user_id or request.user_id
         strategy = StrategyModel(
             name=request.name,
             description=request.description,
+            user_id=effective_user_id,
             parameters=request.parameters,
             entry_rules=request.entry_rules,
             exit_rules=request.exit_rules,
@@ -88,6 +94,9 @@ class StrategyEngine:
         )
 
         data = strategy.model_dump()
+        if effective_user_id:
+            data["user_id"] = effective_user_id
+
         filepath = self.strategies_dir / f"{strategy.id}.json"
 
         with open(filepath, "w", encoding="utf-8") as f:

@@ -153,6 +153,7 @@ class StrategyModel(BaseModel):
     """Tam strateji tanımı — JSON olarak storage/strategies/ altında saklanır."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8], description="Benzersiz strateji ID")
+    user_id: Optional[str] = Field(None, description="Stratejinin ait olduğu kullanıcı ID")
     name: str = Field(..., description="Strateji adı")
     description: str = Field("", description="Strateji açıklaması")
     version: int = Field(1, description="Strateji şema versiyonu")
@@ -191,6 +192,7 @@ class StrategyCreateRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100, description="Strateji adı")
     description: str = Field("", max_length=500, description="Strateji açıklaması")
+    user_id: Optional[str] = Field(None, description="Kullanıcı ID (opsiyonel)")
     parameters: List[StrategyParameterModel] = Field(default_factory=list)
     entry_rules: ConditionGroupModel = Field(
         default_factory=lambda: ConditionGroupModel(logic=LogicType.AND, conditions=[])

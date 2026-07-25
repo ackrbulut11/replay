@@ -27,20 +27,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Sayfa açıldığında otomatik silent refresh dene
+  // Sayfa açıldığında oturumu kontrol et (localStorage + silent refresh)
   useEffect(() => {
     const initAuth = async () => {
+      // 1. Önce localStorage'daki hazır oturum bilgisini yükle (Anında hızlı giriş için)
+      const storedToken = localStorage.getItem('replay_access_token');
+      const storedUserStr = localStorage.getItem('replay_user');
+
+      if (storedToken && storedUserStr) {
+        try {
+          setAccessToken(storedToken);
+          setUser(JSON.parse(storedUserStr));
+        } catch (e) {
+          console.warn("Stored user parse error:", e);
+        }
+      }
+
+      // 2. Arka planda silent refresh dene
       try {
         const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
           method: 'POST',
-          credentials: 'include', // httpOnly cookie göndermek için zorunlu
+          credentials: 'include',
         });
 
         if (res.ok) {
           const data = await res.json();
           setAccessToken(data.access_token);
-          
-          // Profil bilgisini çek
+          localStorage.setItem('replay_access_token', data.access_token);
+
           const userRes = await fetch(`${API_BASE_URL}/auth/me`, {
             headers: {
               'Authorization': `Bearer ${data.access_token}`
@@ -49,10 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (userRes.ok) {
             const userData = await userRes.json();
             setUser(userData);
+            localStorage.setItem('replay_user', JSON.stringify(userData));
           }
         }
       } catch (err) {
-        console.error("Auth init failed:", err);
+        console.error("Auth init silent refresh failed:", err);
       } finally {
         setIsLoading(false);
       }
@@ -79,6 +94,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await res.json();
+      localStorage.setItem('replay_access_token', data.access_token);
+      localStorage.setItem('replay_user', JSON.stringify(data.user));
       setAccessToken(data.access_token);
       setUser(data.user);
     } finally {
@@ -95,6 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Logout error:", err);
     } finally {
+      localStorage.removeItem('replay_access_token');
+      localStorage.removeItem('replay_user');
       setAccessToken(null);
       setUser(null);
     }

@@ -60,8 +60,16 @@ export const LoginPage: React.FC = () => {
           </div>
 
           <button
-            onClick={() => handleSuccess({ credential: "dev_mock_google_token" })}
-            className="w-full py-2.5 px-4 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 rounded-full text-xs font-semibold text-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm"
+            type="button"
+            onClick={async () => {
+              try {
+                setError(null);
+                await loginWithGoogle("dev_mock_google_token");
+              } catch (err: any) {
+                setError(err.message || 'Demo girişi sırasında bir hata oluştu.');
+              }
+            }}
+            className="w-full py-2.5 px-4 bg-slate-800/80 hover:bg-slate-800 active:scale-95 border border-slate-700/60 rounded-full text-xs font-semibold text-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
           >
             <span>🚀 Demo / Test Hesabı İle Giriş Yap</span>
           </button>

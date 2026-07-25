@@ -20,7 +20,7 @@ import type {
 const API_BASE = '/api/strategy';
 
 function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('replay_auth_token');
+  const token = localStorage.getItem('replay_access_token') || localStorage.getItem('replay_auth_token');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;

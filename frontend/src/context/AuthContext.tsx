@@ -140,6 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await res.json();
       localStorage.setItem('replay_access_token', data.access_token);
+      localStorage.setItem('replay_auth_token', data.access_token);
       localStorage.setItem('replay_user', JSON.stringify(data.user));
       setAccessToken(data.access_token);
       setUser(data.user);

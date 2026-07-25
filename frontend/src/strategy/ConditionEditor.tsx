@@ -62,7 +62,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                 ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40'
                 : 'text-slate-500 hover:text-slate-300'
             }`}
-            title="Sabit Sayı / Seviye gir (30, 70 vs.)"
+            title="Sabit Sayı / Seviye gir (30, 70, 0 vs.)"
           >
             Sabit Sayı
           </button>
@@ -92,7 +92,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
             } else if (newType === 'price') {
               onChange({ type: 'price', field: 'close' });
             } else {
-              onChange({ type: 'value', value: 30 });
+              onChange({ type: 'value', value: 0 });
             }
           }}
           className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-colors"
@@ -116,7 +116,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                   field: undefined,
                 });
               }}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors font-semibold"
             >
               {indicators.map((ind) => (
                 <option key={ind.name} value={ind.name}>
@@ -143,7 +143,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
               <select
                 value={operand.field || ''}
                 onChange={(e) => onChange({ ...operand, field: e.target.value || undefined })}
-                className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
+                className="bg-slate-900 border border-indigo-700/60 text-indigo-300 text-xs font-semibold rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
               >
                 <option value="">Varsayılan Çıktı</option>
                 {indicators
@@ -178,7 +178,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
             <select
               value={operand.field}
               onChange={(e) => onChange({ ...operand, field: e.target.value })}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors font-semibold"
             >
               {PRICE_FIELDS.map((f) => (
                 <option key={f} value={f}>
@@ -213,9 +213,9 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                 value: val.startsWith('$') ? val : parseFloat(val) || 0,
               });
             }}
-            placeholder="Sayı (ör: 30)"
-            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-28 focus:border-indigo-500 outline-none transition-colors font-mono"
-            title="Sabit sayısal değer (örneğin: 30, 70, 0)"
+            placeholder="Sayı (ör: 0)"
+            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-28 focus:border-indigo-500 outline-none transition-colors font-mono font-semibold"
+            title="Sabit sayısal değer (örneğin: 0, 30, 70)"
           />
         )}
       </div>
@@ -242,16 +242,19 @@ function ConditionRow({
   index,
   isSellGroup = false,
 }: ConditionRowProps) {
-  // Solda indikatör seçildiğinde sağ tarafı otomatik seviyeye/sabit sayıya geçir
+  // Solda indikatör seçildiğinde sağ tarafı o indikatörün mantığına göre otomatik ayarla
   const handleLeftChange = (left: Operand) => {
     let newRight = condition.right;
     let newOperator = condition.operator;
 
     if (left.type === 'indicator') {
       const name = left.name.toUpperCase();
-      if (name === 'RSI') {
+      if (name === 'MACD') {
+        newRight = { type: 'value', value: 0 };
+        newOperator = isSellGroup ? 'cross_below' : 'cross_above';
+      } else if (name === 'RSI') {
         newRight = { type: 'value', value: isSellGroup ? 70 : 30 };
-        newOperator = isSellGroup ? '>' : '<';
+        newOperator = isSellGroup ? 'cross_below' : 'cross_above';
       } else if (name === 'ADX') {
         newRight = { type: 'value', value: 25 };
         newOperator = '>';
@@ -260,9 +263,12 @@ function ConditionRow({
         newOperator = '>';
       } else if (name === 'STOCH' || name.includes('STOCH')) {
         newRight = { type: 'value', value: isSellGroup ? 80 : 20 };
-        newOperator = isSellGroup ? '>' : '<';
-      } else if (condition.right.type === 'indicator' && name !== 'EMA' && name !== 'SMA' && name !== 'MACD') {
-        newRight = { type: 'value', value: 30 };
+        newOperator = isSellGroup ? 'cross_below' : 'cross_above';
+      } else if (name === 'EMA' || name === 'SMA') {
+        newRight = { type: 'indicator', name: 'EMA', period: 50 };
+        newOperator = isSellGroup ? 'cross_below' : 'cross_above';
+      } else if (condition.right.type === 'indicator' && name !== 'BOLLINGERBANDS') {
+        newRight = { type: 'value', value: 0 };
       }
     }
 
@@ -371,11 +377,11 @@ export default function ConditionEditor({
     amber: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
   };
 
-  // Yeni eklenen koşul her zaman en üste gelir (0. indekse prepend)
+  // Yeni eklenen özel koşul her zaman en üste gelir (#1 sıraya)
   const handleAddCondition = () => {
     const defaultNewCond: Condition = {
       left: { type: 'indicator', name: 'RSI', period: 14 },
-      operator: isSellGroup ? '>' : '<',
+      operator: isSellGroup ? 'cross_below' : 'cross_above',
       right: { type: 'value', value: isSellGroup ? 70 : 30 },
     };
     onChange({
@@ -384,37 +390,68 @@ export default function ConditionEditor({
     });
   };
 
-  // Hızlı Şablon Seçildiğinde En Üste Ekle
+  // Gerçekçi Trader Şablonları (En Üste Ekler)
   const handleSelectTemplate = (templateKey: string) => {
     if (!templateKey) return;
 
     let newCond: Condition | null = null;
 
-    if (templateKey === 'rsi_level') {
+    if (templateKey === 'macd_zero') {
+      // MACD Sıfır Çizgisi Kesişimi (Kullanıcının Talep Ettiği İdeal MACD Kuralı)
+      newCond = {
+        left: { type: 'indicator', name: 'MACD', period: 12, field: 'MACD' },
+        operator: isSellGroup ? 'cross_below' : 'cross_above',
+        right: { type: 'value', value: 0 },
+      };
+    } else if (templateKey === 'macd_signal') {
+      // MACD Sinyal Çizgisi Kesişimi
+      newCond = {
+        left: { type: 'indicator', name: 'MACD', period: 12, field: 'MACD' },
+        operator: isSellGroup ? 'cross_below' : 'cross_above',
+        right: { type: 'indicator', name: 'MACD', period: 12, field: 'signal' },
+      };
+    } else if (templateKey === 'rsi_level') {
+      // RSI Aşırı Alım / Satım Seviye Kesişimi
       newCond = {
         left: { type: 'indicator', name: 'RSI', period: 14 },
-        operator: isSellGroup ? '>' : '<',
+        operator: isSellGroup ? 'cross_below' : 'cross_above',
         right: { type: 'value', value: isSellGroup ? 70 : 30 },
       };
     } else if (templateKey === 'ema_cross') {
+      // EMA Kesişimi (Golden / Death Cross)
       newCond = {
         left: { type: 'indicator', name: 'EMA', period: 20 },
         operator: isSellGroup ? 'cross_below' : 'cross_above',
         right: { type: 'indicator', name: 'EMA', period: 50 },
       };
     } else if (templateKey === 'price_ema') {
+      // Fiyat vs EMA Trend Filtresi
       newCond = {
         left: { type: 'price', field: 'close' },
         operator: isSellGroup ? '<' : '>',
         right: { type: 'indicator', name: 'EMA', period: 200 },
       };
-    } else if (templateKey === 'macd_signal') {
+    } else if (templateKey === 'bollinger_bounce') {
+      // Bollinger Bant Kırılımı / Sıçraması
       newCond = {
-        left: { type: 'indicator', name: 'MACD', period: 12, field: 'MACD' },
-        operator: isSellGroup ? '<' : '>',
-        right: { type: 'indicator', name: 'MACD', period: 12, field: 'signal' },
+        left: { type: 'price', field: 'close' },
+        operator: isSellGroup ? 'cross_below' : 'cross_above',
+        right: {
+          type: 'indicator',
+          name: 'BollingerBands',
+          period: 20,
+          field: isSellGroup ? 'upper' : 'lower',
+        },
+      };
+    } else if (templateKey === 'stoch_level') {
+      // Stochastic Seviye Kesişimi
+      newCond = {
+        left: { type: 'indicator', name: 'Stochastic', period: 14 },
+        operator: isSellGroup ? 'cross_below' : 'cross_above',
+        right: { type: 'value', value: isSellGroup ? 80 : 20 },
       };
     } else if (templateKey === 'adx_trend') {
+      // ADX Güç Filtresi
       newCond = {
         left: { type: 'indicator', name: 'ADX', period: 14 },
         operator: '>',
@@ -496,22 +533,30 @@ export default function ConditionEditor({
               <option value="" disabled>
                 ⚡ Hızlı Şablon Ekle...
               </option>
+              <option value="macd_zero" className="bg-[#0d1321] text-slate-100 font-semibold">
+                {isSellGroup ? "📉 MACD ↘ 0 (MACD 0'ı Aşağı Kesti)" : "📈 MACD ↗ 0 (MACD 0'ı Yukarı Kesti)"}
+              </option>
               <option value="rsi_level" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '📊 RSI > 70 (Aşırı Alım - SAT)' : '📊 RSI < 30 (Aşırı Satım - AL)'}
+                {isSellGroup ? '📊 RSI ↘ 70 (Aşırı Alımdan Düşüş)' : '📊 RSI ↗ 30 (Aşırı Satımdan Çıkış)'}
               </option>
               <option value="ema_cross" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '🔀 EMA 20 Aşağı Kesti EMA 50 (Death Cross)' : '🔀 EMA 20 Yukarı Kesti EMA 50 (Golden Cross)'}
-              </option>
-              <option value="price_ema" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '📈 Fiyat < EMA 200 (Düşüş Trendi)' : '📈 Fiyat > EMA 200 (Yükseliş Trendi)'}
+                {isSellGroup ? '🔀 EMA 20 ↘ EMA 50 (Death Cross)' : '🔀 EMA 20 ↗ EMA 50 (Golden Cross)'}
               </option>
               <option value="macd_signal" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '📉 MACD < Signal (MACD Düşüş)' : '📈 MACD > Signal (MACD Yükseliş)'}
+                {isSellGroup ? '📉 MACD ↘ Signal (Sinyali Aşağı Kesti)' : '📈 MACD ↗ Signal (Sinyali Yukarı Kesti)'}
+              </option>
+              <option value="price_ema" className="bg-[#0d1321] text-slate-100">
+                {isSellGroup ? '🕯️ Fiyat < EMA 200 (Düşüş Trendi)' : '🕯️ Fiyat > EMA 200 (Yükseliş Trendi)'}
+              </option>
+              <option value="bollinger_bounce" className="bg-[#0d1321] text-slate-100">
+                {isSellGroup ? '💥 Fiyat ↘ Bollinger Üst Bant (Direnç)' : '💥 Fiyat ↗ Bollinger Alt Bant (Destek)'}
+              </option>
+              <option value="stoch_level" className="bg-[#0d1321] text-slate-100">
+                {isSellGroup ? '⚡ Stoch K ↘ 80 (Aşırı Alım)' : '⚡ Stoch K ↗ 20 (Aşırı Satım)'}
               </option>
               <option value="adx_trend" className="bg-[#0d1321] text-slate-100">
                 {'🎯 ADX > 25 (Güçlü Trend Filtresi)'}
               </option>
-
             </select>
           </div>
 

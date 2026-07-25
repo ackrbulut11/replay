@@ -99,8 +99,10 @@ export default function StrategyPage({
     if (currentTimeframe) setEvalTimeframe(currentTimeframe);
   }, [currentTimeframe]);
 
-  // İlk yükleme: strateji listesi ve indikatörleri çek (otomatik seçim yapma)
+  // İlk yükleme: strateji listesi ve indikatörleri çek (otomatik seçim yapma, başlangıçta hiçbir strateji seçili olmasın)
   useEffect(() => {
+    strategyStore.setActiveStrategy(null);
+    setMode('list');
     strategyStore.fetchStrategies();
     strategyStore.fetchIndicators();
   }, []);
@@ -261,24 +263,24 @@ export default function StrategyPage({
         {/* Sağ İçerik — Builder / Editor / Result */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#070b13]">
           {mode === 'list' && !activeStrategy ? (
-            <div className="flex-1 flex items-center justify-center p-8 text-center">
+            <div className="flex-1 flex items-center justify-center p-8 text-center bg-gradient-to-b from-[#0a0e1a]/50 to-[#070b13]">
               <div className="max-w-md space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto text-indigo-400">
+                <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto text-indigo-400 shadow-xl shadow-indigo-500/10">
                   <Layers className="w-8 h-8" />
                 </div>
-                <h2 className="text-lg font-bold text-slate-100">
-                  {strategies.length > 0 ? 'Bir Strateji Seçin veya İnceleyin' : 'Strateji Oluşturun'}
+                <h2 className="text-base font-bold text-slate-100">
+                  {strategies.length > 0 ? 'Bir Strateji Seçin veya Yeni Oluşturun' : 'İlk Stratejinizi Oluşturun'}
                 </h2>
-                <p className="text-xs text-slate-400 leading-relaxed">
+                <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
                   {strategies.length > 0
-                    ? 'Sol taraftaki listeden incelemek istediğiniz stratejiyi seçebilir veya yeni bir strateji ekleyebilirsiniz.'
-                    : 'Sol taraftaki listeden yeni bir al-sat stratejisi tanımlayabilirsiniz.'}
+                    ? 'Sol menüden incelemek istediğiniz stratejiye tıklayın veya "+ Yeni" butonu ile sıfırdan yeni bir indikatör stratejisi tasarlayın.'
+                    : 'Henüz kayıtlı bir stratejiniz bulunmuyor. Yeni bir strateji ekleyerek backtest yapmaya başlayabilirsiniz.'}
                 </p>
                 <button
                   onClick={handleNewStrategy}
-                  className="flex items-center gap-1.5 px-4 py-2 mx-auto text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-lg shadow-indigo-500/20 cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2.5 mx-auto text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-lg shadow-indigo-500/25 cursor-pointer"
                 >
-                  <Zap className="w-3.5 h-3.5" />
+                  <Zap className="w-4 h-4 text-indigo-200" />
                   {strategies.length > 0 ? 'Yeni Strateji Oluştur' : 'İlk Stratejinizi Oluşturun'}
                 </button>
               </div>

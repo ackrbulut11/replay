@@ -199,37 +199,56 @@ class RuleEngine:
         if "stop_loss_pct" in effective_params and effective_params["stop_loss_pct"] is not None:
             stop_loss_pct = float(effective_params["stop_loss_pct"])
 
-        # Fiyat sütun adını büyük/küçük harf bağımsız bul
-        close_col = None
-        for col in df.columns:
-            if str(col).lower() == "close":
-                close_col = col
-                break
+
+        # Fiyat sütun adlarını büyük/küçük harf bağımsız bul
+        close_col = next((col for col in df.columns if str(col).lower() == "close"), None)
+        high_col = next((col for col in df.columns if str(col).lower() == "high"), None)
+        low_col = next((col for col in df.columns if str(col).lower() == "low"), None)
+
 
         for i in range(start_index, end_index + 1):
             close_price = float(df.iloc[i][close_col]) if close_col else 0.0
+            high_price = float(df.iloc[i][high_col]) if high_col else close_price
+            low_price = float(df.iloc[i][low_col]) if low_col else close_price
 
             # Pozisyon kontrolü & TP/SL kontrolleri
             tp_sl_signal = None
             tp_sl_reason = []
+            exec_price = close_price
 
             if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
-                pnl_pct = ((close_price - last_entry_price) / last_entry_price) * 100.0
-                if take_profit_pct is not None and take_profit_pct > 0 and pnl_pct >= take_profit_pct:
-                    tp_sl_signal = SignalType.SELL
-                    tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
-                elif stop_loss_pct is not None and stop_loss_pct > 0 and pnl_pct <= -stop_loss_pct:
+                pnl_high = ((high_price - last_entry_price) / last_entry_price) * 100.0
+                pnl_low = ((low_price - last_entry_price) / last_entry_price) * 100.0
+                pnl_close = ((close_price - last_entry_price) / last_entry_price) * 100.0
+
+                # 1. Önce Zarar Durdur (Stop Loss) kontrol et
+                if stop_loss_pct is not None and stop_loss_pct > 0 and (pnl_low <= -stop_loss_pct or pnl_close <= -stop_loss_pct):
                     tp_sl_signal = SignalType.SELL
                     tp_sl_reason = [f"Zarar Durdur (-%{stop_loss_pct})"]
+                    exec_price = last_entry_price * (1.0 - (stop_loss_pct / 100.0))
+
+                # 2. Sonra Kar Al (Take Profit) kontrol et
+                elif take_profit_pct is not None and take_profit_pct > 0 and (pnl_high >= take_profit_pct or pnl_close >= take_profit_pct):
+                    tp_sl_signal = SignalType.SELL
+                    tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
+                    exec_price = last_entry_price * (1.0 + (take_profit_pct / 100.0))
 
             elif position_state == "short" and last_entry_price is not None and last_entry_price > 0:
-                pnl_pct = ((last_entry_price - close_price) / last_entry_price) * 100.0
-                if take_profit_pct is not None and take_profit_pct > 0 and pnl_pct >= take_profit_pct:
-                    tp_sl_signal = SignalType.BUY
-                    tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
-                elif stop_loss_pct is not None and stop_loss_pct > 0 and pnl_pct <= -stop_loss_pct:
+                pnl_high_loss = ((last_entry_price - high_price) / last_entry_price) * 100.0
+                pnl_low_gain = ((last_entry_price - low_price) / last_entry_price) * 100.0
+                pnl_close = ((last_entry_price - close_price) / last_entry_price) * 100.0
+
+                # 1. Önce Zarar Durdur (Stop Loss) kontrol et
+                if stop_loss_pct is not None and stop_loss_pct > 0 and (pnl_high_loss <= -stop_loss_pct or pnl_close <= -stop_loss_pct):
                     tp_sl_signal = SignalType.BUY
                     tp_sl_reason = [f"Zarar Durdur (-%{stop_loss_pct})"]
+                    exec_price = last_entry_price * (1.0 + (stop_loss_pct / 100.0))
+
+                # 2. Sonra Kar Al (Take Profit) kontrol et
+                elif take_profit_pct is not None and take_profit_pct > 0 and (pnl_low_gain >= take_profit_pct or pnl_close >= take_profit_pct):
+                    tp_sl_signal = SignalType.BUY
+                    tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
+                    exec_price = last_entry_price * (1.0 - (take_profit_pct / 100.0))
 
             unrealized_pnl = 0.0
             if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
@@ -251,8 +270,6 @@ class RuleEngine:
                     current_pnl=unrealized_pnl,
                 )
 
-
-
             ts_val = df.iloc[i].get("timestamp", 0)
             if hasattr(ts_val, "timestamp"):
                 timestamp = int(ts_val.timestamp())
@@ -267,13 +284,13 @@ class RuleEngine:
                     "bar_index": i,
                     "timestamp": timestamp,
                     "signal": "BUY",
-                    "price": round(close_price, 4),
+                    "price": round(exec_price, 4),
                     "conditions_met": conditions_met,
                 }
 
                 if position_state == "short" and last_entry_price is not None and last_entry_price > 0:
                     # Short pozisyonunu kapat ve Short PnL % hesapla
-                    short_pnl = ((last_entry_price - close_price) / last_entry_price) * 100.0
+                    short_pnl = ((last_entry_price - exec_price) / last_entry_price) * 100.0
                     sig_item["entry_price"] = round(last_entry_price, 4)
                     sig_item["pnl_percent"] = round(short_pnl, 2)
                     sig_item["position_closed"] = "SHORT"
@@ -287,13 +304,13 @@ class RuleEngine:
                     "bar_index": i,
                     "timestamp": timestamp,
                     "signal": "SELL",
-                    "price": round(close_price, 4),
+                    "price": round(exec_price, 4),
                     "conditions_met": conditions_met,
                 }
 
                 if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
                     # Long pozisyonunu kapat ve Long PnL % hesapla
-                    long_pnl = ((close_price - last_entry_price) / last_entry_price) * 100.0
+                    long_pnl = ((exec_price - last_entry_price) / last_entry_price) * 100.0
                     sig_item["entry_price"] = round(last_entry_price, 4)
                     sig_item["pnl_percent"] = round(long_pnl, 2)
                     sig_item["position_closed"] = "LONG"
@@ -308,6 +325,7 @@ class RuleEngine:
                 signals.append(sig_item)
 
         return signals
+
 
     @staticmethod
     def _resolve_params(

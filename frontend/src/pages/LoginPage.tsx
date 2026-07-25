@@ -43,7 +43,7 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
-        <div className="flex flex-col items-center justify-center py-2">
+        <div className="flex flex-col items-center justify-center gap-4 py-2">
           <GoogleLogin
             onSuccess={handleSuccess}
             onError={handleError}
@@ -53,6 +53,19 @@ export const LoginPage: React.FC = () => {
             text="signin_with"
             locale="tr"
           />
+
+          <div className="flex items-center gap-2 w-full my-1">
+            <div className="h-[1px] bg-slate-800 flex-1"></div>
+            <span className="text-[11px] text-slate-500 font-medium uppercase">veya</span>
+            <div className="h-[1px] bg-slate-800 flex-1"></div>
+          </div>
+
+          <button
+            onClick={() => handleSuccess({ credential: "dev_mock_google_token" })}
+            className="w-full py-2.5 px-4 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 rounded-full text-xs font-semibold text-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm"
+          >
+            <span>🚀 Demo / Test Hesabı İle Giriş Yap</span>
+          </button>
         </div>
 
         <div className="mt-8 pt-6 border-t border-slate-800/80 grid grid-cols-3 gap-3 text-center text-xs text-slate-400">

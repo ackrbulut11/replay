@@ -10,3 +10,9 @@ pyarrow>=16.1.0
 python-dotenv>=1.0.1
 requests>=2.32.3
 aiohttp>=3.9.5
+psycopg2-binary>=2.9.9
+alembic>=1.13.1
+google-auth>=2.30.0
+python-jose[cryptography]>=3.3.0
+passlib>=1.7.4
+

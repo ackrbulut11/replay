@@ -43,6 +43,7 @@ const DEFAULT_LISTS: WatchlistGroup[] = [
       { id: 'nasdaq:AAPL', symbol: 'AAPL', provider: 'nasdaq', name: 'Apple Inc.', exchange: 'NASDAQ', flagColor: 'blue' },
       { id: 'nasdaq:NVDA', symbol: 'NVDA', provider: 'nasdaq', name: 'NVIDIA Corporation', exchange: 'NASDAQ', flagColor: 'blue' },
       { id: 'binance:BTCUSDT', symbol: 'BTCUSDT', provider: 'binance', name: 'Bitcoin / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
+      { id: 'forex:EUR/USD', symbol: 'EUR/USD', provider: 'forex', name: 'Euro / US Dollar', exchange: 'FOREX', flagColor: 'green' },
     ],
   },
   {
@@ -74,18 +75,22 @@ const DEFAULT_LISTS: WatchlistGroup[] = [
       { id: 'binance:BTCUSDT', symbol: 'BTCUSDT', provider: 'binance', name: 'Bitcoin / Tether', exchange: 'BINANCE', flagColor: 'yellow' },
     ],
   },
+  {
+    id: 'forex_favoriler',
+    name: 'Forex (FX)',
+    emoji: '💵',
+    color: '#10b981',
+    items: [
+      { id: 'forex:EUR/USD', symbol: 'EUR/USD', provider: 'forex', name: 'Euro / US Dollar', exchange: 'FOREX', flagColor: 'green' },
+    ],
+  },
 ];
 
 const LOCAL_STORAGE_KEY = 'replay_watchlists_v2';
 const DEFAULT_PANEL_WIDTH = 288;
 
 /**
- * Ensures strict 1-to-1 equivalence between Favoriler and Market Lists (BIST, NASDAQ, Kripto):
- * 1. Favoriler is the master source of truth.
- * 2. Every BIST symbol in Favoriler MUST exist in the BIST list.
- * 3. Every NASDAQ symbol in Favoriler MUST exist in the NASDAQ list.
- * 4. Every Kripto symbol in Favoriler MUST exist in the Kripto list.
- * 5. NO symbol that is not in Favoriler can exist in any market list.
+ * Ensures strict 1-to-1 equivalence between Favoriler and Market Lists (BIST, NASDAQ, Kripto, Forex):
  */
 function sanitizeLists(lists: WatchlistGroup[]): WatchlistGroup[] {
   const favorilerGroup = lists.find((g) => g.id === 'favoriler') || DEFAULT_LISTS[0];
@@ -94,8 +99,9 @@ function sanitizeLists(lists: WatchlistGroup[]): WatchlistGroup[] {
   const bistItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'bist');
   const nasdaqItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'nasdaq' || i.provider.toLowerCase() === 'nyse');
   const kriptoItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'binance' || i.provider.toLowerCase() === 'crypto');
+  const forexItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'forex' || i.provider.toLowerCase() === 'fx');
 
-  const defaultMarketGroupIds = new Set(['favoriler', 'bist_favoriler', 'nasdaq_favoriler', 'kripto']);
+  const defaultMarketGroupIds = new Set(['favoriler', 'bist_favoriler', 'nasdaq_favoriler', 'kripto', 'forex_favoriler']);
   const customLists = lists.filter((g) => !defaultMarketGroupIds.has(g.id));
 
   return [
@@ -103,9 +109,11 @@ function sanitizeLists(lists: WatchlistGroup[]): WatchlistGroup[] {
     { id: 'bist_favoriler', name: 'BIST', emoji: '🇹🇷', color: '#ef4444', items: bistItems },
     { id: 'nasdaq_favoriler', name: 'NASDAQ & ABD', emoji: '🇺🇸', color: '#3b82f6', items: nasdaqItems },
     { id: 'kripto', name: 'Kripto', emoji: '₿', color: '#f97316', items: kriptoItems },
+    { id: 'forex_favoriler', name: 'Forex (FX)', emoji: '💵', color: '#10b981', items: forexItems },
     ...customLists,
   ];
 }
+
 
 function loadInitialState(): WatchlistState {
   try {

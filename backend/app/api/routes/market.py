@@ -70,10 +70,11 @@ def get_market_quotes(
             results.append({
                 "provider": provider,
                 "symbol": symbol,
-                "lastPrice": round(last_close, 4 if provider == "binance" else 2),
-                "change": round(change, 4 if provider == "binance" else 2),
+                "lastPrice": round(last_close, 4 if provider in ("binance", "forex", "fx") else 2),
+                "change": round(change, 4 if provider in ("binance", "forex", "fx") else 2),
                 "changePercent": round(change_percent, 2)
             })
+
         except Exception as e:
             results.append({
                 "provider": provider,

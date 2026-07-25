@@ -42,18 +42,22 @@ function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItem
     if (p === 'nasdaq' || ex.includes('nasdaq')) {
       return 'text-blue-400 fill-blue-400/20';
     }
+    if (p === 'forex' || p === 'fx' || ex.includes('forex')) {
+      return 'text-emerald-400 fill-emerald-400/20';
+    }
     return 'text-amber-400 fill-amber-400/20';
   };
 
   const formatPrice = (price?: number | null, provider?: string) => {
     if (price === undefined || price === null) return '—';
-    if (provider === 'binance') {
-      return price >= 10
+    if (provider === 'binance' || provider === 'forex' || provider === 'fx') {
+      return price >= 10 && provider === 'binance'
         ? price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : price.toFixed(4);
     }
     return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
+
 
   return (
     <div

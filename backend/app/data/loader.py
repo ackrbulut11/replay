@@ -5,6 +5,7 @@ from datetime import datetime
 from .providers.binance import BinanceProvider
 from .providers.nasdaq import NasdaqProvider
 from .providers.bist import BistProvider
+from .providers.forex import ForexProvider
 
 class DataLoader:
     def __init__(self):
@@ -22,14 +23,17 @@ class DataLoader:
         self.providers = {
             "binance": BinanceProvider(),
             "nasdaq": NasdaqProvider(),
-            "bist": BistProvider()
+            "bist": BistProvider(),
+            "forex": ForexProvider(),
+            "fx": ForexProvider(),
         }
 
     def get_provider(self, provider_name: str):
         provider = self.providers.get(provider_name.lower())
         if not provider:
-            raise ValueError(f"Unknown data provider: {provider_name}. Choose from: binance, nasdaq, bist.")
+            raise ValueError(f"Unknown data provider: {provider_name}. Choose from: binance, nasdaq, bist, forex.")
         return provider
+
 
     def _get_cache_path(self, provider_name: str, symbol: str, timeframe: str) -> str:
         return os.path.join(

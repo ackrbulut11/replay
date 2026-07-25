@@ -190,10 +190,11 @@ export default function CandleChart({
 
   const formatPriceLabel = useCallback((val?: number | null) => {
     if (val === undefined || val === null) return '—';
-    return provider === 'binance' && val < 10
+    return (provider === 'binance' || provider === 'forex' || provider === 'fx')
       ? val.toFixed(4)
       : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [provider]);
+
 
   // Strateji sinyallerini grafik üzerinde oklar (BUY/SELL) olarak çizdir
   const { evaluateResult } = useStrategyStore();
@@ -1887,7 +1888,9 @@ export default function CandleChart({
               <option value="binance" className="bg-[#070b13] text-slate-100">Binance</option>
               <option value="nasdaq" className="bg-[#070b13] text-slate-100">Nasdaq</option>
               <option value="bist" className="bg-[#070b13] text-slate-100">BIST</option>
+              <option value="forex" className="bg-[#070b13] text-emerald-300">Forex (FX)</option>
             </select>
+
           </div>
 
           {/* Zaman Dilimi Seçimi */}

@@ -393,11 +393,35 @@ BINANCE_SYMBOLS: List[Dict[str, str]] = [
     {"symbol": "OPUSDT", "name": "Optimism / Tether", "sector": "Layer 2 Ethereum", "exchange": "BINANCE", "ticker": "OPUSDT"},
 ]
 
+# Forex (FX) Parite Veritabanı (20 Ana / Çapraz / Egzotik Parite)
+FOREX_SYMBOLS: List[Dict[str, str]] = [
+    {"symbol": "EUR/USD", "name": "Euro / US Dollar", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "EURUSD=X"},
+    {"symbol": "GBP/USD", "name": "British Pound / US Dollar", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "GBPUSD=X"},
+    {"symbol": "USD/JPY", "name": "US Dollar / Japanese Yen", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDJPY=X"},
+    {"symbol": "USD/CHF", "name": "US Dollar / Swiss Franc", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDCHF=X"},
+    {"symbol": "AUD/USD", "name": "Australian Dollar / US Dollar", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "AUDUSD=X"},
+    {"symbol": "USD/CAD", "name": "US Dollar / Canadian Dollar", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDCAD=X"},
+    {"symbol": "NZD/USD", "name": "New Zealand Dollar / US Dollar", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "NZDUSD=X"},
+    {"symbol": "EUR/JPY", "name": "Euro / Japanese Yen", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "EURJPY=X"},
+    {"symbol": "EUR/GBP", "name": "Euro / British Pound", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "EURGBP=X"},
+    {"symbol": "EUR/CHF", "name": "Euro / Swiss Franc", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "EURCHF=X"},
+    {"symbol": "GBP/JPY", "name": "British Pound / Japanese Yen", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "GBPJPY=X"},
+    {"symbol": "AUD/JPY", "name": "Australian Dollar / Japanese Yen", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "AUDJPY=X"},
+    {"symbol": "USD/TRY", "name": "US Dollar / Turkish Lira", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDTRY=X"},
+    {"symbol": "EUR/TRY", "name": "Euro / Turkish Lira", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "EURTRY=X"},
+    {"symbol": "USD/CNH", "name": "US Dollar / Chinese Yuan Offshore", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDCNH=X"},
+    {"symbol": "USD/SGD", "name": "US Dollar / Singapore Dollar", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDSGD=X"},
+    {"symbol": "USD/INR", "name": "US Dollar / Indian Rupee", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDINR=X"},
+    {"symbol": "USD/MXN", "name": "US Dollar / Mexican Peso", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDMXN=X"},
+    {"symbol": "USD/ZAR", "name": "US Dollar / South African Rand", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDZAR=X"},
+    {"symbol": "USD/HKD", "name": "US Dollar / Hong Kong Dollar", "sector": "Forex Parite", "exchange": "FOREX", "ticker": "USDHKD=X"},
+]
+
 
 def get_symbols(provider: Optional[str] = None) -> List[Dict[str, str]]:
     """Returns list of all registered symbols for given provider or all providers."""
     if not provider:
-        return BIST_100_SYMBOLS + NASDAQ_SYMBOLS + BINANCE_SYMBOLS
+        return BIST_100_SYMBOLS + NASDAQ_SYMBOLS + BINANCE_SYMBOLS + FOREX_SYMBOLS
     
     p = provider.lower()
     if p == "bist":
@@ -406,7 +430,10 @@ def get_symbols(provider: Optional[str] = None) -> List[Dict[str, str]]:
         return NASDAQ_SYMBOLS
     elif p == "binance":
         return BINANCE_SYMBOLS
+    elif p in ["forex", "fx"]:
+        return FOREX_SYMBOLS
     return []
+
 
 
 def search_symbols(query: str, provider: Optional[str] = None) -> List[Dict[str, str]]:

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark } from 'lucide-react';
+import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark, Banknote } from 'lucide-react';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 
 export interface SymbolItem {
@@ -71,6 +71,7 @@ export default function SymbolSearchModal({
     if (ex === 'BIST') return 'bist';
     if (ex === 'NASDAQ' || ex === 'NYSE') return 'nasdaq';
     if (ex === 'BINANCE') return 'binance';
+    if (ex === 'FOREX' || ex === 'FX') return 'forex';
     return currentProvider;
   };
 
@@ -97,7 +98,7 @@ export default function SymbolSearchModal({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Hisse kodu, şirket adı veya sektör girin (ör: THYAO, Garanti, Apple, NVDA)..."
+            placeholder="Hisse kodu, parite veya şirket adı girin (ör: EUR/USD, THYAO, AAPL)..."
             className="w-full bg-transparent text-sm text-slate-100 placeholder-slate-500 outline-none font-medium"
           />
           {query && (
@@ -165,6 +166,18 @@ export default function SymbolSearchModal({
             <Coins className="w-3.5 h-3.5 text-amber-400" />
             Binance Crypto
           </button>
+
+          <button
+            onClick={() => setActiveTab('forex')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === 'forex'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-md shadow-emerald-500/10'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+            }`}
+          >
+            <Banknote className="w-3.5 h-3.5 text-emerald-400" />
+            Forex (FX)
+          </button>
         </div>
 
         {/* Results List */}
@@ -182,7 +195,9 @@ export default function SymbolSearchModal({
               const exchangeColor = 
                 item.exchange === 'BIST' ? 'bg-red-950/60 text-red-400 border-red-900/60' :
                 item.exchange === 'BINANCE' ? 'bg-amber-950/60 text-amber-400 border-amber-900/60' :
+                item.exchange === 'FOREX' ? 'bg-emerald-950/60 text-emerald-400 border-emerald-900/60' :
                 'bg-blue-950/60 text-blue-400 border-blue-900/60';
+
 
               const itemProvider = getProviderFromExchange(item.exchange);
               const itemId = `${itemProvider}:${item.symbol.toUpperCase()}`;

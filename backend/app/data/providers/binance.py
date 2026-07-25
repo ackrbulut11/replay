@@ -5,7 +5,17 @@ from .base import IDataProvider
 
 class BinanceProvider(IDataProvider):
     def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
-        url = "https://api.binance.com/api/v3/klines"
+        endpoints = [
+            "https://data-api.binance.vision/api/v3/klines",
+            "https://api1.binance.com/api/v3/klines",
+            "https://api2.binance.com/api/v3/klines",
+            "https://api3.binance.com/api/v3/klines",
+            "https://api.binance.com/api/v3/klines"
+        ]
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json"
+        }
         
         # Zaman dilimlerini Binance aralıklarına eşle
         tf_map = {
@@ -41,15 +51,22 @@ class BinanceProvider(IDataProvider):
                 "limit": 1000
             }
             
-            try:
-                response = requests.get(url, params=params, timeout=15)
-                response.raise_for_status()
-                data = response.json()
-            except Exception as e:
-                # Elimizde bazı mumlar varsa döndürebiliriz, yoksa hata fırlat
+            data = None
+            last_err = None
+            for url in endpoints:
+                try:
+                    response = requests.get(url, params=params, headers=headers, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        break
+                except Exception as e:
+                    last_err = e
+                    continue
+            
+            if data is None:
                 if all_candles:
                     break
-                raise RuntimeError(f"Error fetching data from Binance: {str(e)}")
+                raise RuntimeError(f"Error fetching data from Binance: {str(last_err or 'HTTP error')}")
                 
             if not data:
                 break

@@ -6,7 +6,7 @@ TradingResearchPlatform/
 ├── .gitignore
 ├── docs/
 │
-├── frontend/                         # React + TypeScript + Tauri UI
+├── frontend/                         # Modern Web Application (React + Vite + TypeScript)
 │   │
 │   ├── package.json
 │   ├── vite.config.ts
@@ -19,9 +19,13 @@ TradingResearchPlatform/
 │   │   ├── App.tsx
 │   │   │
 │   │   ├── assets/
+│   │   │   └── logo.jpg              # Official REPLAY platform brand logo
+│   │   │
+│   │   ├── context/
+│   │   │   └── AuthContext.tsx       # Google OAuth 2.0 & JWT Auth state management
 │   │   │
 │   │   ├── components/               # Ortak UI parçaları
-│   │   │   ├── ui/                   # shadcn components
+│   │   │   ├── ui/                   # Modular UI components
 │   │   │   ├── Sidebar.tsx
 │   │   │   ├── Header.tsx
 │   │   │   └── Toolbar.tsx
@@ -30,6 +34,7 @@ TradingResearchPlatform/
 │   │   │   └── DashboardLayout.tsx
 │   │   │
 │   │   ├── pages/
+│   │   │   ├── LoginPage.tsx         # Google OAuth & Demo Test Login page
 │   │   │   ├── Dashboard.tsx
 │   │   │   ├── ChartPage.tsx
 │   │   │   ├── ReplayPage.tsx
@@ -39,7 +44,7 @@ TradingResearchPlatform/
 │   │   │   └── JournalPage.tsx
 │   │   │
 │   │   ├── charts/
-│   │   │   ├── CandleChart.tsx       # Lightweight Charts
+│   │   │   ├── CandleChart.tsx       # Lightweight Charts integration
 │   │   │   ├── ChartManager.ts
 │   │   │   ├── Indicators.ts
 │   │   │   └── Drawings.ts
@@ -82,29 +87,21 @@ TradingResearchPlatform/
 │   │   │
 │   │   └── utils/
 │   │
-│   ├── e2e/                          # Playwright / test senaryoları
-│   │
-│   └── src-tauri/                    # Tauri Rust tarafı
-│       │
-│       ├── Cargo.toml
-│       ├── tauri.conf.json
-│       ├── capabilities/
-│       │
-│       ├── src/
-│       │   ├── main.rs
-│       │   └── commands.rs
-│       │
-│       └── binaries/
-│           └── backend.exe           # Python sidecar
+│   └── e2e/                          # Playwright test senaryoları
 │
 │
-├── backend/                          # Python FastAPI
+├── backend/                          # Python FastAPI (Web REST & Auth Engine)
 │   │
 │   ├── requirements.txt
 │   ├── pyproject.toml
 │   ├── main.py
 │   │
 │   ├── app/
+│   │   │
+│   │   ├── auth/                     # Google OAuth 2.0 & JWT Authentication
+│   │   │   ├── router.py             # Auth endpoints (/google, /refresh, /me, /logout)
+│   │   │   ├── jwt.py                # Token creation & verification
+│   │   │   └── dependencies.py       # FastAPI current_user dependency
 │   │   │
 │   │   ├── api/
 │   │   │   ├── routes/
@@ -128,9 +125,15 @@ TradingResearchPlatform/
 │   │   │   │   ├── base.py
 │   │   │   │   ├── binance.py
 │   │   │   │   ├── bist.py
-│   │   │   │   └── nasdaq.py
+│   │   │   │   ├── nasdaq.py
+│   │   │   │   └── forex.py          # Tick volume & Intraday Yahoo FX provider
 │   │   │   │
-│   │   │   └── loader.py
+│   │   │   └── loader.py             # L1 RAM Cache, Parquet storage & thread safety
+│   │   │
+│   │   ├── database/                 # PostgreSQL & SQLite ORM Models
+│   │   │   ├── postgres.py           # SQLAlchemy Engine & Session
+│   │   │   ├── models.py             # User, Strategy, ReplaySession, JournalTrade, ChartLayout
+│   │   │   └── migrations/
 │   │   │
 │   │   ├── indicators/
 │   │   │   ├── base.py
@@ -138,9 +141,9 @@ TradingResearchPlatform/
 │   │   │   ├── momentum.py
 │   │   │   └── volatility.py
 │   │   │
-│   │   ├── rules/                    # Rule/Strategy Engine — kod yazmadan JSON tabanlı strateji
-│   │   │   ├── engine.py             # JSON kural ağacını parse edip değerlendirir
-│   │   │   ├── conditions.py         # >, <, cross_above, cross_below vb. operatörler
+│   │   ├── rules/                    # Rule/Strategy Engine — JSON kural ağacı
+│   │   │   ├── engine.py
+│   │   │   ├── conditions.py
 │   │   │   └── evaluator.py
 │   │   │
 │   │   ├── engines/
@@ -150,16 +153,10 @@ TradingResearchPlatform/
 │   │   │   └── backtest_engine.py
 │   │   │
 │   │   ├── journal/
-│   │   │   ├── trade_journal.py
-│   │   │   └── models.py             # Trade, Note, Screenshot
+│   │   │   └── trade_journal.py
 │   │   │
 │   │   ├── reports/
-│   │   │   └── performance_report.py # Win Rate, Profit Factor, Sharpe, Drawdown
-│   │   │
-│   │   ├── database/
-│   │   │   ├── sqlite.py
-│   │   │   ├── models.py
-│   │   │   └── migrations/
+│   │   │   └── performance_report.py
 │   │   │
 │   │   ├── optimizer/
 │   │   │   └── parameter_search.py
@@ -174,28 +171,27 @@ TradingResearchPlatform/
 │   │   │
 │   │   └── utils/
 │   │
-│   └── tests/
+│   └── tests/                        # Automated Auth & Market API integration tests
+│       └── test_auth_api.py
 │
 │
 ├── storage/
 │   │
-│   ├── market_data/
+│   ├── market_data/                  # Parquet Caches
 │   │   ├── binance/
 │   │   ├── bist/
-│   │   └── nasdaq/
+│   │   ├── nasdaq/
+│   │   └── forex/
 │   │
 │   ├── strategies/                   # Kullanıcı stratejileri (JSON)
 │   │
-│   ├── parquet/
-│   │
 │   └── database/
-│       └── app.db
+│       └── app.db                    # Local SQLite Database
 │
 │
 ├── scripts/
 │   ├── download_data.py
-│   ├── update_market.py
-│   └── build_sidecar.py
+│   └── update_market.py
 │
 └── .github/
     └── workflows/

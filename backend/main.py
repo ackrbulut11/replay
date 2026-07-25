@@ -21,7 +21,7 @@ origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:1420",
-    "https://replay-nine-gold.vercel.app/"
+    "https://replay-nine-gold.vercel.app",
     settings.FRONTEND_URL
 ]
 

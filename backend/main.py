@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.database.postgres import engine, Base
 from app.database import models
 from app.auth.router import router as auth_router
-from app.api.routes import alerts, market, strategy
+from app.api.routes import alerts, market, strategy, admin
 
 
 # Veritabanı tablolarını otomatik oluştur
@@ -37,6 +37,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(market.router, prefix="/api")
 app.include_router(strategy.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 
 @app.get("/")

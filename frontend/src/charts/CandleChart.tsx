@@ -1329,7 +1329,7 @@ export default function CandleChart({
       const currentLen = uniqueData.length;
       prevVisibleLengthRef.current = currentLen;
 
-      const paddedCandles: any[] = uniqueData.map((d) => ({
+      const candles: any[] = uniqueData.map((d) => ({
         time: d.time as Time,
         open: d.open,
         high: d.high,
@@ -1337,30 +1337,14 @@ export default function CandleChart({
         close: d.close,
       }));
 
-      const paddedVolume: any[] = uniqueData.map((d) => ({
+      const volumeData: any[] = uniqueData.map((d) => ({
         time: d.time as Time,
         value: d.volume,
         color: d.close >= d.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)',
       }));
 
-      if (uniqueData.length > 1) {
-        const lastBar = uniqueData[uniqueData.length - 1];
-        const prevBar = uniqueData[uniqueData.length - 2];
-        const interval = lastBar.time - prevBar.time;
-
-        for (let i = 1; i <= 1000; i++) {
-          const futureTime = (lastBar.time + interval * i) as Time;
-          paddedCandles.push({
-            time: futureTime,
-          });
-          paddedVolume.push({
-            time: futureTime,
-          });
-        }
-      }
-
-      candleSeriesRef.current.setData(paddedCandles);
-      volumeSeriesRef.current.setData(paddedVolume);
+      candleSeriesRef.current.setData(candles);
+      volumeSeriesRef.current.setData(volumeData);
       primitiveRef.current?.setCandles(uniqueData);
 
       if (mainLineSeriesRef.current) {

@@ -2,6 +2,14 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.database.postgres import engine, Base
+from app.database import models
+from app.auth.router import router as auth_router
+from app.api.routes import alerts, market, strategy
+
+
+# Veritabanı tablolarını otomatik oluştur
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Trading Research Platform API",
@@ -9,16 +17,21 @@ app = FastAPI(
     description="Backend services for Replay, Strategy, Scanner and Journal"
 )
 
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    settings.FRONTEND_URL
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-from app.api.routes import alerts, market, strategy
-
+app.include_router(auth_router, prefix="/api")
 app.include_router(market.router, prefix="/api")
 app.include_router(strategy.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
@@ -30,3 +43,4 @@ def read_root():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=settings.HOST, port=settings.PORT, reload=settings.RELOAD)
+

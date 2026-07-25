@@ -270,7 +270,10 @@ export default function WatchlistPanel({
             onClick={() => setIsListDropdownOpen(!isListDropdownOpen)}
             className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/40 text-xs font-bold text-slate-100 transition-all select-none"
           >
-            <span style={{ color: getListHeaderColor() }} className="text-sm leading-none">
+            <span 
+              style={{ color: getListHeaderColor() }} 
+              className="w-5 h-4 flex items-center justify-center shrink-0 text-xs font-bold leading-none select-none"
+            >
               {getListHeaderEmoji()}
             </span>
             <span className="max-w-[110px] truncate">{activeGroup?.name || 'Watchlist'}</span>
@@ -280,10 +283,10 @@ export default function WatchlistPanel({
           {/* List Selector Dropdown */}
           {isListDropdownOpen && (
             <div
-              className="absolute top-9 left-0 w-56 bg-[#0d1321] border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-0.5 animate-fadeIn"
+              className="absolute top-9 left-0 w-60 bg-[#0d1321] border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-0.5 animate-fadeIn"
               onMouseLeave={() => setIsListDropdownOpen(false)}
             >
-              <div className="text-[9px] text-slate-500 font-bold uppercase px-2 py-1 select-none">
+              <div className="text-[9px] text-slate-500 font-bold uppercase px-2.5 py-1 select-none">
                 İzleme Listelerim
               </div>
               <div className="w-full h-px bg-slate-800/60 my-1" />
@@ -300,11 +303,16 @@ export default function WatchlistPanel({
                       : 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-100'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span style={{ color: group.color }} className="text-sm leading-none">{group.emoji}</span>
-                    <span>{group.name}</span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span 
+                      style={{ color: group.color }} 
+                      className="w-6 h-5 flex items-center justify-center shrink-0 text-xs font-bold leading-none text-center select-none"
+                    >
+                      {group.emoji}
+                    </span>
+                    <span className="truncate">{group.name}</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono">({group.items.length})</span>
+                  <span className="text-[10px] text-slate-500 font-mono ml-2 shrink-0">({group.items.length})</span>
                 </button>
               ))}
 
@@ -314,14 +322,17 @@ export default function WatchlistPanel({
                   setIsListDropdownOpen(false);
                   setIsNewListModalOpen(true);
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded-lg font-bold transition-all"
+                className="w-full flex items-center gap-3 px-2.5 py-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded-lg font-bold transition-all"
               >
-                <Plus className="w-3.5 h-3.5" />
-                Yeni Liste Oluştur
+                <div className="w-6 h-5 flex items-center justify-center shrink-0">
+                  <Plus className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
+                <span>Yeni Liste Oluştur</span>
               </button>
             </div>
           )}
         </div>
+
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-1">

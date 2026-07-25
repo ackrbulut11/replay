@@ -422,56 +422,35 @@ export const watchlistStore = {
 
     try {
       const itemsToFetch = activeGroup.items;
-      const updatedItems = await Promise.all(
-        itemsToFetch.map(async (item) => {
-          try {
-            const end = new Date().toISOString().split('T')[0];
-            const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            const res = await fetch(
-              `/api/market/data?provider=${item.provider}&symbol=${item.symbol}&timeframe=1d&start=${start}&end=${end}`
-            );
-            if (!res.ok) return item;
-            const data = await res.json();
-            if (!data || data.length === 0) return item;
+      const itemKeys = itemsToFetch.map((i) => `${i.provider}:${i.symbol}`).join(',');
+      const res = await fetch(`/api/market/quotes?items=${encodeURIComponent(itemKeys)}`);
+      if (res.ok) {
+        const quotes: Array<{ provider: string; symbol: string; lastPrice: number | null; change: number | null; changePercent: number | null }> = await res.json();
+        const quoteMap = new Map(quotes.map((q) => [`${q.provider.toLowerCase()}:${q.symbol.toUpperCase()}`, q]));
 
-            const lastCandle = data[data.length - 1];
-            const prevCandle = data.length > 1 ? data[data.length - 2] : null;
-
-            const lastPrice = lastCandle.close;
-            let change: number | null = null;
-            let changePercent: number | null = null;
-
-            if (prevCandle && prevCandle.close) {
-              change = lastPrice - prevCandle.close;
-              changePercent = (change / prevCandle.close) * 100;
-            } else if (lastCandle.open) {
-              change = lastPrice - lastCandle.open;
-              changePercent = (change / lastCandle.open) * 100;
-            }
-
+        const newLists = currentState.lists.map((group) => ({
+          ...group,
+          items: group.items.map((item) => {
+            const q = quoteMap.get(item.id);
+            if (!q) return item;
             return {
               ...item,
-              lastPrice,
-              change,
-              changePercent,
+              lastPrice: q.lastPrice !== null ? q.lastPrice : item.lastPrice,
+              change: q.change !== null ? q.change : item.change,
+              changePercent: q.changePercent !== null ? q.changePercent : item.changePercent,
             };
-          } catch {
-            return item;
-          }
-        })
-      );
+          }),
+        }));
 
-      const itemMap = new Map(updatedItems.map((i) => [i.id, i]));
-      const newLists = currentState.lists.map((group) => ({
-        ...group,
-        items: group.items.map((item) => itemMap.get(item.id) || item),
-      }));
-
-      applyState({ lists: sanitizeLists(newLists), quotesLoading: false });
+        applyState({ lists: sanitizeLists(newLists), quotesLoading: false });
+      } else {
+        applyState({ quotesLoading: false });
+      }
     } catch {
       applyState({ quotesLoading: false });
     }
   },
+
 };
 
 export function useWatchlistStore(): [WatchlistState, (partial: Partial<WatchlistState> | ((prev: WatchlistState) => Partial<WatchlistState>)) => void] {

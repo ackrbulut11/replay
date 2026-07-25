@@ -23,21 +23,23 @@ def search_market_symbols(
     return search_symbols(q, provider)
 
 
+from concurrent.futures import ThreadPoolExecutor
+
 @router.get("/quotes")
 def get_market_quotes(
     items: str = Query(..., description="Comma-separated provider:symbol pairs, e.g. bist:THYAO,nasdaq:AAPL,binance:BTCUSDT")
 ) -> List[Dict]:
-    """Returns latest price and daily change percentage for a list of symbols."""
-    results = []
+    """Returns latest price and daily change percentage for a list of symbols concurrently."""
     from datetime import timedelta
     end_dt = datetime.now()
     start_dt = end_dt - timedelta(days=14)
 
     item_pairs = [i.strip() for i in items.split(",") if i.strip()]
-    for item in item_pairs:
+
+    def fetch_single_quote(item: str) -> Dict:
         parts = item.split(":")
         if len(parts) != 2:
-            continue
+            return {"provider": "", "symbol": item, "lastPrice": None, "change": None, "changePercent": None}
         provider, symbol = parts[0].lower(), parts[1].upper()
         try:
             df = loader.load_data(
@@ -48,14 +50,13 @@ def get_market_quotes(
                 end_time=end_dt
             )
             if df.empty or len(df) == 0:
-                results.append({
+                return {
                     "provider": provider,
                     "symbol": symbol,
                     "lastPrice": None,
                     "change": None,
                     "changePercent": None
-                })
-                continue
+                }
 
             if len(df) >= 2:
                 last_close = float(df.iloc[-1]["close"])
@@ -67,23 +68,25 @@ def get_market_quotes(
             change = last_close - prev_close
             change_percent = (change / prev_close * 100.0) if prev_close != 0 else 0.0
 
-            results.append({
+            return {
                 "provider": provider,
                 "symbol": symbol,
                 "lastPrice": round(last_close, 4 if provider in ("binance", "forex", "fx") else 2),
                 "change": round(change, 4 if provider in ("binance", "forex", "fx") else 2),
                 "changePercent": round(change_percent, 2)
-            })
-
-        except Exception as e:
-            results.append({
+            }
+        except Exception:
+            return {
                 "provider": provider,
                 "symbol": symbol,
                 "lastPrice": None,
                 "change": None,
-                "changePercent": None,
-                "error": str(e)
-            })
+                "changePercent": None
+            }
+
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        results = list(executor.map(fetch_single_quote, item_pairs))
+
     return results
 
 

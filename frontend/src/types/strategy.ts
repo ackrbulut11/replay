@@ -168,6 +168,21 @@ export interface EvaluateResponse {
   total_pnl_percent?: number;
 }
 
+export interface SingleEvaluationLogItem {
+  id: string;
+  strategy_id: string;
+  strategy_name: string;
+  symbol: string;
+  provider: string;
+  timeframe: string;
+  executed_at: string;
+  total_bars: number;
+  total_trades: number;
+  win_rate: number;
+  total_pnl_percent: number;
+  result: EvaluateResponse;
+}
+
 // ─── İndikatör Bilgisi ───────────────────────────────────────────────────────
 
 export interface IndicatorInfo {

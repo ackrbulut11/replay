@@ -16,6 +16,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
+  GripVertical,
 } from 'lucide-react';
 import type { Strategy } from '../types/strategy';
 import { strategyStore } from '../store/strategyStore';
@@ -37,12 +38,37 @@ export default function StrategyList({
 }: StrategyListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const filteredStrategies = strategies.filter(
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    setDragOverIndex(null);
+    if (draggedIndex !== null && draggedIndex !== dropIndex) {
+      strategyStore.reorderStrategies(draggedIndex, dropIndex);
+    }
+    setDraggedIndex(null);
+  };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -136,25 +162,46 @@ export default function StrategyList({
             )}
           </div>
         ) : (
-          filteredStrategies.map((strategy) => {
+          filteredStrategies.map((strategy, index) => {
             const isActive = strategy.id === activeStrategyId;
             const isDeleting = deletingId === strategy.id;
+            const isDragged = draggedIndex === index;
+            const isDragOver = dragOverIndex === index;
             const entryCount = strategy.entry_rules?.conditions?.length || 0;
             const exitCount = strategy.exit_rules?.conditions?.length || 0;
             const paramCount = strategy.parameters?.length || 0;
             const tfCount = strategy.timeframe_filters?.length || 0;
 
             return (
-              <button
+              <div
                 key={strategy.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={(e) => handleDrop(e, index)}
+                onDragEnd={() => {
+                  setDraggedIndex(null);
+                  setDragOverIndex(null);
+                }}
                 onClick={() => onSelect(strategy)}
-                className={`w-full text-left p-3 rounded-xl border transition-all group ${
+                className={`w-full text-left p-3 rounded-xl border transition-all group relative cursor-pointer ${
+                  isDragged ? 'opacity-40 scale-95 border-dashed border-indigo-500/80' : ''
+                } ${
+                  isDragOver ? 'border-t-2 border-t-indigo-400 bg-indigo-950/20' : ''
+                } ${
                   isActive
                     ? 'bg-indigo-950/40 border-indigo-600/50 shadow-lg shadow-indigo-500/10'
                     : 'bg-slate-900/40 border-slate-800/40 hover:bg-slate-800/40 hover:border-slate-700/60'
                 }`}
               >
-                <div className="flex items-start justify-between mb-1.5">
+                <div className="flex items-start justify-between mb-1.5 gap-1.5">
+                  <div
+                    className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 mt-0.5 p-0.5 rounded transition-colors"
+                    title="Sürükleyip bırakarak yerini değiştirin"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <GripVertical className="w-3.5 h-3.5" />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <h3
                       className={`text-xs font-semibold truncate ${
@@ -227,7 +274,7 @@ export default function StrategyList({
                     </button>
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })
         )}

@@ -79,7 +79,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const loginDemoUser = () => {
+  const loginDemoUser = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: 'dev_mock_google_token' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('replay_access_token', data.access_token);
+        localStorage.setItem('replay_user', JSON.stringify(data.user));
+        setAccessToken(data.access_token);
+        setUser(data.user);
+        setIsLoading(false);
+        return;
+      }
+    } catch (e) {
+      console.warn("Demo backend sync fallback:", e);
+    }
+
     const mockUser: User = {
       id: '2494589c-21fb-4b8e-b00a-53f93efbce73',
       email: 'demo.trader@example.com',

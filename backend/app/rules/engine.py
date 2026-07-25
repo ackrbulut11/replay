@@ -96,7 +96,9 @@ class RuleEngine:
         position_state: str,
         effective_params: dict,
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
+        current_pnl: float = 0.0,
     ) -> tuple[SignalType, list[str]]:
+
         """Pozisyon durumuna (none, long, short) göre ilgili kuralları değerlendirir."""
         if bar_index < 0 or bar_index >= len(df):
             return SignalType.NEUTRAL, []
@@ -105,7 +107,7 @@ class RuleEngine:
         tf_filters = strategy.get("timeframe_filters", [])
         for tf_filter in tf_filters:
             tf_result, _ = RuleEvaluator.evaluate_group(
-                tf_filter, df, bar_index, effective_params, multi_tf_data
+                tf_filter, df, bar_index, effective_params, multi_tf_data, current_pnl
             )
             if not tf_result:
                 return SignalType.NEUTRAL, []
@@ -121,7 +123,7 @@ class RuleEngine:
             # Pozisyon yoksa önce BUY (giriş) kontrol edilir
             if entry_rules and entry_rules.get("conditions"):
                 entry_result, entry_met = RuleEvaluator.evaluate_group(
-                    entry_rules, df, bar_index, effective_params, multi_tf_data
+                    entry_rules, df, bar_index, effective_params, multi_tf_data, current_pnl
                 )
                 if entry_result:
                     return SignalType.BUY, entry_met
@@ -129,7 +131,7 @@ class RuleEngine:
             # Eğer short pozisyona izin veriliyorsa SELL kontrol edilir
             if allow_short and exit_rules and exit_rules.get("conditions"):
                 exit_result, exit_met = RuleEvaluator.evaluate_group(
-                    exit_rules, df, bar_index, effective_params, multi_tf_data
+                    exit_rules, df, bar_index, effective_params, multi_tf_data, current_pnl
                 )
                 if exit_result:
                     return SignalType.SELL, exit_met
@@ -138,7 +140,7 @@ class RuleEngine:
             # Long pozisyondayız -> YALNIZCA ÇIKIŞ (SELL) kurallarını kontrol et
             if exit_rules and exit_rules.get("conditions"):
                 exit_result, exit_met = RuleEvaluator.evaluate_group(
-                    exit_rules, df, bar_index, effective_params, multi_tf_data
+                    exit_rules, df, bar_index, effective_params, multi_tf_data, current_pnl
                 )
                 if exit_result:
                     return SignalType.SELL, exit_met
@@ -147,12 +149,13 @@ class RuleEngine:
             # Short pozisyondayız -> YALNIZCA GİRİŞ (BUY -> Long'a geçiş) kurallarını kontrol et
             if entry_rules and entry_rules.get("conditions"):
                 entry_result, entry_met = RuleEvaluator.evaluate_group(
-                    entry_rules, df, bar_index, effective_params, multi_tf_data
+                    entry_rules, df, bar_index, effective_params, multi_tf_data, current_pnl
                 )
                 if entry_result:
                     return SignalType.BUY, entry_met
 
         return SignalType.NEUTRAL, []
+
 
     @staticmethod
     def evaluate_range(
@@ -228,6 +231,12 @@ class RuleEngine:
                     tp_sl_signal = SignalType.BUY
                     tp_sl_reason = [f"Zarar Durdur (-%{stop_loss_pct})"]
 
+            unrealized_pnl = 0.0
+            if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
+                unrealized_pnl = ((close_price - last_entry_price) / last_entry_price) * 100.0
+            elif position_state == "short" and last_entry_price is not None and last_entry_price > 0:
+                unrealized_pnl = ((last_entry_price - close_price) / last_entry_price) * 100.0
+
             if tp_sl_signal is not None:
                 signal = tp_sl_signal
                 conditions_met = tp_sl_reason
@@ -239,7 +248,9 @@ class RuleEngine:
                     position_state=position_state,
                     effective_params=effective_params,
                     multi_tf_data=multi_tf_data,
+                    current_pnl=unrealized_pnl,
                 )
+
 
 
             ts_val = df.iloc[i].get("timestamp", 0)

@@ -21,7 +21,7 @@ export type LogicType = 'AND' | 'OR';
 
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
 
-export type OperandType = 'indicator' | 'price' | 'value';
+export type OperandType = 'indicator' | 'price' | 'value' | 'pnl';
 
 export type ParameterType = 'int' | 'float';
 
@@ -46,7 +46,12 @@ export interface ValueOperand {
   value: number | string; // sayı veya parametre referansı "$rsi_threshold"
 }
 
-export type Operand = IndicatorOperand | PriceOperand | ValueOperand;
+export interface PnlOperand {
+  type: 'pnl';
+}
+
+export type Operand = IndicatorOperand | PriceOperand | ValueOperand | PnlOperand;
+
 
 // ─── Koşul Tipleri ───────────────────────────────────────────────────────────
 

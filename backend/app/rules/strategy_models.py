@@ -53,6 +53,7 @@ class OperandType(str, Enum):
     INDICATOR = "indicator"
     PRICE = "price"
     VALUE = "value"
+    PNL = "pnl"
 
 
 class ParameterType(str, Enum):
@@ -90,8 +91,15 @@ class ValueOperand(BaseModel):
     value: Union[float, int, str] = Field(..., description="Sabit değer veya parametre referansı ($rsi_threshold)")
 
 
+class PnlOperand(BaseModel):
+    """Pozisyon Kar/Zarar yüzdesi operandı (ör. %3.5 kâr, -%2.0 zarar)."""
+
+    type: OperandType = OperandType.PNL
+
+
 # Birleşik operand tipi
-Operand = Union[IndicatorOperand, PriceOperand, ValueOperand]
+Operand = Union[IndicatorOperand, PriceOperand, ValueOperand, PnlOperand]
+
 
 
 # ─── Koşul Modelleri ──────────────────────────────────────────────────────────

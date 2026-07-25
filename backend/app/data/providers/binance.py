@@ -4,6 +4,49 @@ from datetime import datetime
 from .base import IDataProvider
 
 class BinanceProvider(IDataProvider):
+    def _fetch_kucoin_fallback(self, symbol: str, timeframe: str) -> pd.DataFrame:
+        tf_map = {
+            "1m": "1min",
+            "5m": "5min",
+            "15m": "15min",
+            "1h": "1hour",
+            "4h": "4hour",
+            "1d": "1day",
+            "1w": "1week",
+        }
+        k_tf = tf_map.get(timeframe, "1day")
+        s = symbol.upper()
+        if s.endswith("USDT") and "-" not in s:
+            s = s[:-4] + "-USDT"
+        
+        url = f"https://api.kucoin.com/api/v1/market/candles?symbol={s}&type={k_tf}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
+        try:
+            res = requests.get(url, headers=headers, timeout=10)
+            if res.status_code == 200:
+                body = res.json()
+                data = body.get("data")
+                if data and isinstance(data, list):
+                    rows = []
+                    for item in data:
+                        rows.append({
+                            "timestamp": pd.to_datetime(int(item[0]), unit="s"),
+                            "open": float(item[1]),
+                            "close": float(item[2]),
+                            "high": float(item[3]),
+                            "low": float(item[4]),
+                            "volume": float(item[5])
+                        })
+                    df = pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
+                    return df
+        except Exception as e:
+            print("KuCoin fallback error:", e)
+            
+        return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+
     def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
         endpoints = [
             "https://data-api.binance.vision/api/v3/klines",
@@ -52,21 +95,20 @@ class BinanceProvider(IDataProvider):
             }
             
             data = None
-            last_err = None
             for url in endpoints:
                 try:
                     response = requests.get(url, params=params, headers=headers, timeout=10)
                     if response.status_code == 200:
                         data = response.json()
                         break
-                except Exception as e:
-                    last_err = e
+                except Exception:
                     continue
             
             if data is None:
                 if all_candles:
                     break
-                raise RuntimeError(f"Error fetching data from Binance: {str(last_err or 'HTTP error')}")
+                # Binance bulut IP engeline takıldıysa KuCoin yedek API servisinden çek
+                return self._fetch_kucoin_fallback(symbol, timeframe)
                 
             if not data:
                 break
@@ -82,7 +124,7 @@ class BinanceProvider(IDataProvider):
             current_start = last_open_time + 1
             
         if not all_candles:
-            return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            return self._fetch_kucoin_fallback(symbol, timeframe)
             
         # Sonucu standart DataFrame olarak ayrıştır
         df = pd.DataFrame(all_candles)

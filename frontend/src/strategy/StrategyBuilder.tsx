@@ -29,7 +29,7 @@ import type {
   IndicatorInfo,
 } from '../types/strategy';
 import { createEmptyConditionGroup, TIMEFRAMES } from '../types/strategy';
-import { strategyStore } from '../store/strategyStore';
+import { strategyStore, useStrategyStore } from '../store/strategyStore';
 
 interface StrategyBuilderProps {
   strategy: Strategy | null; // null = yeni strateji oluşturma
@@ -45,6 +45,11 @@ export default function StrategyBuilder({
   onCancel,
 }: StrategyBuilderProps) {
   const isEditing = strategy !== null;
+  const { singleEvalHistory, evaluateResult } = useStrategyStore();
+
+  const currentStrategyLogs = strategy
+    ? singleEvalHistory.filter((item) => item.strategy_id === strategy.id)
+    : [];
 
   // Form state
   const [name, setName] = useState('');
@@ -582,24 +587,96 @@ export default function StrategyBuilder({
         )}
       </div>
 
-      {/* Kaydet Butonu */}
-      <div className="sticky bottom-0 px-4 py-3 bg-[#0a0e1a]/95 backdrop-blur-md border-t border-slate-800/60 flex items-center justify-end gap-2">
-        {onCancel && (
+      {/* Alt Bar: Sol Taraf Test Geçmişi, Sağ Taraf İptal & Güncelle */}
+      <div className="sticky bottom-0 px-4 py-2.5 bg-[#0a0e1a]/95 backdrop-blur-md border-t border-slate-800/60 flex items-center justify-between gap-3 select-none">
+        {/* Sol Taraf: Test Geçmişi (Sadece bu stratejiye ait) */}
+        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar flex-1 min-w-0">
+          <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap flex-shrink-0">
+            📜 Test Geçmişi:
+          </span>
+
+          {currentStrategyLogs.length === 0 ? (
+            <span className="text-[11px] text-slate-500 italic truncate">
+              {strategy ? `"${strategy.name}" için henüz test kaydı yok.` : 'Henüz test kaydı yok.'}
+            </span>
+          ) : (
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5">
+              {currentStrategyLogs.map((item) => {
+                const isCurrent =
+                  evaluateResult?.symbol === item.symbol &&
+                  evaluateResult?.timeframe === item.timeframe &&
+                  evaluateResult?.strategy_id === item.strategy_id;
+                const isPositive = item.total_pnl_percent >= 0;
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      strategyStore.loadSingleEvalHistoryItem(item);
+                    }}
+                    className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer whitespace-nowrap border ${
+                      isCurrent
+                        ? 'bg-indigo-950/90 border-indigo-500 text-white shadow-md shadow-indigo-500/20 font-bold'
+                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/80 text-slate-300'
+                    }`}
+                    title={`${item.strategy_name} • ${item.executed_at} tarihinde çalıştırıldı. Tıklayarak sonuçlarını inceleyin.`}
+                  >
+                    <span className="font-bold text-slate-200">{item.symbol}</span>
+                    <span className="text-[10px] text-slate-400">({item.timeframe})</span>
+                    <span
+                      className={`text-[11px] font-bold ${
+                        isPositive ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
+                      {isPositive ? '+' : ''}
+                      {item.total_pnl_percent.toFixed(1)}%
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        strategyStore.deleteSingleEvalHistoryItem(item.id);
+                      }}
+                      className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors ml-0.5"
+                      title="Bu testi geçmişten sil"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {currentStrategyLogs.length > 1 && (
+                <button
+                  onClick={() => strategyStore.clearSingleEvalHistory(strategy?.id)}
+                  className="text-[10px] text-slate-500 hover:text-red-400 underline ml-1.5 whitespace-nowrap"
+                  title="Bu stratejiye ait tüm geçmişi temizle"
+                >
+                  Temizle
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Sağ Taraf: İptal & Güncelle */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 rounded-xl transition-all"
+            >
+              İptal
+            </button>
+          )}
           <button
-            onClick={onCancel}
-            className="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 rounded-xl transition-all"
+            onClick={handleSave}
+            disabled={isSaving || !name.trim()}
+            className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-lg shadow-indigo-500/20"
           >
-            İptal
+            <Save className="w-3.5 h-3.5" />
+            {isSaving ? 'Kaydediliyor...' : isEditing ? 'Güncelle' : 'Oluştur'}
           </button>
-        )}
-        <button
-          onClick={handleSave}
-          disabled={isSaving || !name.trim()}
-          className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-lg shadow-indigo-500/20"
-        >
-          <Save className="w-3.5 h-3.5" />
-          {isSaving ? 'Kaydediliyor...' : isEditing ? 'Güncelle' : 'Oluştur'}
-        </button>
+        </div>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import logoImg from '../assets/logo.jpg';
 import {
   LineChart,
   SlidersHorizontal,
@@ -26,8 +27,15 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
 
   return (
     <aside className="w-14 bg-[#0a0e1a] border-r border-slate-800/80 flex flex-col justify-between items-center py-3 px-1.5 select-none flex-shrink-0">
-      {/* Nav Items List */}
-      <nav className="space-y-2 w-full flex flex-col items-center pt-1">
+      {/* Brand Logo & Nav Items List */}
+      <div className="w-full flex flex-col items-center">
+        {/* Brand Logo Icon */}
+        <div className="w-10 h-10 mb-3 rounded-xl overflow-hidden border border-indigo-500/40 shadow-lg shadow-indigo-500/20 flex items-center justify-center bg-slate-900 group cursor-pointer" title="REPLAY Platform">
+          <img src={logoImg} alt="REPLAY Logo" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        </div>
+
+        {/* Nav Items List */}
+        <nav className="space-y-2 w-full flex flex-col items-center">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -54,6 +62,7 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
           );
         })}
       </nav>
+      </div>
 
       {/* Footer Status Indicator */}
       <div

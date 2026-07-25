@@ -31,7 +31,7 @@ export const LoginPage: React.FC = () => {
 
       <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl z-10">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-20 h-20 rounded-2xl overflow-hidden border border-indigo-500/40 shadow-xl shadow-indigo-500/20 bg-slate-900 flex items-center justify-center">
+          <div className="w-20 h-20 rounded-2xl overflow-hidden border border-indigo-500/40 shadow-xl shadow-indigo-500/20 bg-slate-900 flex items-center justify-center pointer-events-none select-none">
             <img src={logoImg} alt="REPLAY Logo" className="w-full h-full object-cover" />
           </div>
         </div>

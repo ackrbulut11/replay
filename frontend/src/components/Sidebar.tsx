@@ -30,8 +30,8 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
       {/* Brand Logo & Nav Items List */}
       <div className="w-full flex flex-col items-center">
         {/* Brand Logo Icon */}
-        <div className="w-10 h-10 mb-3 rounded-xl overflow-hidden border border-indigo-500/40 shadow-lg shadow-indigo-500/20 flex items-center justify-center bg-slate-900 group cursor-pointer" title="REPLAY Platform">
-          <img src={logoImg} alt="REPLAY Logo" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        <div className="w-10 h-10 mb-3 rounded-xl overflow-hidden border border-indigo-500/40 shadow-lg shadow-indigo-500/20 flex items-center justify-center bg-slate-900 pointer-events-none select-none">
+          <img src={logoImg} alt="REPLAY Logo" className="w-full h-full object-cover" />
         </div>
 
         {/* Nav Items List */}

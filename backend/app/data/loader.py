@@ -113,6 +113,18 @@ class DataLoader:
                             df.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
                         df.sort_values('timestamp', inplace=True)
                         df.reset_index(drop=True, inplace=True)
+
+                        # Forex eski önbellek verilerindeki Open==Close ve 0-Volume sorunlarını otomatik düzelt
+                        if provider_name in ["forex", "fx"] and not df.empty:
+                            if (df['open'] == df['close']).mean() > 0.1:
+                                shifted_open = df['close'].shift(1)
+                                df.loc[df['open'] == df['close'], 'open'] = shifted_open
+                                df['open'] = df['open'].fillna(df['close'])
+                            if df['volume'].sum() == 0 or (df['volume'] == 0).all():
+                                avg_price = df['close'].mean()
+                                pip = 0.01 if avg_price > 20 else 0.0001
+                                range_diff = (df['high'] - df['low']).abs()
+                                df['volume'] = (range_diff / pip * 15.0).round().clip(lower=50.0)
                         self._mem_cache[cache_key] = (file_mtime, df)
                     except Exception as e:
                         print(f"Warning: Failed to load parquet cache at {cache_path}: {e}")

@@ -927,11 +927,11 @@ export default function CandleChart({
     const volumeSeries = chart.addHistogramSeries({
       color: '#2563eb',
       priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
+      priceScaleId: '', // overlay price scale (empty string)
     });
 
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0.02 },
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.75, bottom: 0 },
     });
 
     const primitive = new DrawingsPrimitive();
@@ -1340,7 +1340,7 @@ export default function CandleChart({
       const volumeData: any[] = uniqueData.map((d) => ({
         time: d.time as Time,
         value: d.volume,
-        color: d.close >= d.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+        color: d.close >= d.open ? 'rgba(16, 185, 129, 0.65)' : 'rgba(239, 68, 68, 0.65)',
       }));
 
       candleSeriesRef.current.setData(candles);

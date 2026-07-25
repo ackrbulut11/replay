@@ -30,6 +30,12 @@ class AdminStatsResponse(BaseModel):
     total_replay_sessions: int
     latest_users: List[AdminUserItem]
 
+def _count_user_strategies(engine: StrategyEngine, db: Session, user_id: str) -> int:
+    all_json = engine.list_strategies()
+    user_json = [s for s in all_json if s.get("user_id") == user_id or not s.get("user_id")]
+    sql_cnt = db.query(Strategy).filter(Strategy.user_id == user_id).count()
+    return max(len(user_json), sql_cnt)
+
 @router.get("/users", response_model=List[AdminUserItem])
 def get_all_users(
     db: Session = Depends(get_db),
@@ -40,14 +46,12 @@ def get_all_users(
     """
     from app.engines.strategy_engine import StrategyEngine
     engine = StrategyEngine()
-    json_count = len(engine.list_strategies())
 
     users = db.query(User).order_by(User.created_at.desc()).all()
     
     result = []
     for u in users:
-        sql_strat_cnt = db.query(Strategy).filter(Strategy.user_id == u.id).count()
-        strat_cnt = max(json_count, sql_strat_cnt)
+        strat_cnt = _count_user_strategies(engine, db, u.id)
         trade_cnt = db.query(JournalTrade).filter(JournalTrade.user_id == u.id).count()
         replay_cnt = db.query(ReplaySession).filter(ReplaySession.user_id == u.id).count()
 
@@ -83,8 +87,7 @@ def get_admin_stats(db: Session = Depends(get_db)):
     users = db.query(User).order_by(User.created_at.desc()).limit(5).all()
     latest = []
     for u in users:
-        sql_strat_cnt = db.query(Strategy).filter(Strategy.user_id == u.id).count()
-        strat_cnt = max(json_count, sql_strat_cnt)
+        strat_cnt = _count_user_strategies(engine, db, u.id)
         trade_cnt = db.query(JournalTrade).filter(JournalTrade.user_id == u.id).count()
         replay_cnt = db.query(ReplaySession).filter(ReplaySession.user_id == u.id).count()
 

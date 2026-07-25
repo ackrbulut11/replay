@@ -230,13 +230,17 @@ export const strategyStore = {
     setState({ singleEvalHistory: updated });
   },
 
-  clearSingleEvalHistory: () => {
+  clearSingleEvalHistory: (strategyId?: string) => {
+    let updated: SingleEvaluationLogItem[] = [];
+    if (strategyId) {
+      updated = currentState.singleEvalHistory.filter((h) => h.strategy_id !== strategyId);
+    }
     try {
-      localStorage.removeItem('replay_single_eval_history');
+      localStorage.setItem('replay_single_eval_history', JSON.stringify(updated));
     } catch (e) {
       console.warn('Failed to clear single eval history:', e);
     }
-    setState({ singleEvalHistory: [] });
+    setState({ singleEvalHistory: updated });
   },
 
   // ─── İndikatörler ─────────────────────────────────────────────────────

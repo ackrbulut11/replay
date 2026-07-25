@@ -477,79 +477,89 @@ export default function StrategyPage({
                       )}
                     </div>
 
-                    {/* Test Geçmişi Şeridi (Geçmiş Parite Çalıştırma Kayıtları - Her Zaman Görünür) */}
+                    {/* Test Geçmişi Şeridi (Sadece Seçili Stratejiye Ait Kayıtlar) */}
                     <div className="px-4 py-1.5 flex items-center gap-2 overflow-x-auto custom-scrollbar border-b border-slate-800/40 bg-slate-950/60 flex-shrink-0 select-none">
                       <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
-                        📜 Test Geçmişi:
+                        📜 Test Geçmişi ({activeStrategy.name}):
                       </span>
 
-                      {singleEvalHistory.length === 0 ? (
-                        <span className="text-[11px] text-slate-500 italic">
-                          Henüz kayıtlı test yok. Yukarıdaki "▶ Çalıştır" butonuna bastığınız pariteler buraya eklenecektir.
-                        </span>
-                      ) : (
-                        <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5">
-                          {singleEvalHistory.map((item) => {
-                            const isCurrent =
-                              evaluateResult?.symbol === item.symbol &&
-                              evaluateResult?.timeframe === item.timeframe &&
-                              evaluateResult?.strategy_id === item.strategy_id;
-                            const isPositive = item.total_pnl_percent >= 0;
+                      {(() => {
+                        const activeStrategyHistory = singleEvalHistory.filter(
+                          (item) => item.strategy_id === activeStrategy.id
+                        );
 
-                            return (
-                              <div
-                                key={item.id}
-                                onClick={() => {
-                                  strategyStore.loadSingleEvalHistoryItem(item);
-                                  setEvalSymbol(item.symbol);
-                                  setEvalTimeframe(item.timeframe);
-                                  setShowEvalPanel(true);
-                                  if (setSymbol) setSymbol(item.symbol);
-                                  if (setTimeframe) setTimeframe(item.timeframe);
-                                  if (setProvider) setProvider(item.provider);
-                                }}
-                                className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer whitespace-nowrap border ${
-                                  isCurrent
-                                    ? 'bg-indigo-950/90 border-indigo-500 text-white shadow-md shadow-indigo-500/20 font-bold'
-                                    : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/80 text-slate-300'
-                                }`}
-                                title={`${item.strategy_name} • ${item.executed_at} tarihinde çalıştırıldı. Tıklayarak sonuçlarını inceleyin.`}
-                              >
-                                <span className="font-bold text-slate-200">{item.symbol}</span>
-                                <span className="text-[10px] text-slate-400">({item.timeframe})</span>
-                                <span
-                                  className={`text-[11px] font-bold ${
-                                    isPositive ? 'text-emerald-400' : 'text-red-400'
-                                  }`}
-                                >
-                                  {isPositive ? '+' : ''}
-                                  {item.total_pnl_percent.toFixed(1)}%
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    strategyStore.deleteSingleEvalHistoryItem(item.id);
+                        if (activeStrategyHistory.length === 0) {
+                          return (
+                            <span className="text-[11px] text-slate-500 italic">
+                              "{activeStrategy.name}" stratejisi için henüz test geçmişi yok. ▶ Çalıştır butonuna tıkladığınız pariteler buraya eklenecektir.
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5">
+                            {activeStrategyHistory.map((item) => {
+                              const isCurrent =
+                                evaluateResult?.symbol === item.symbol &&
+                                evaluateResult?.timeframe === item.timeframe &&
+                                evaluateResult?.strategy_id === item.strategy_id;
+                              const isPositive = item.total_pnl_percent >= 0;
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() => {
+                                    strategyStore.loadSingleEvalHistoryItem(item);
+                                    setEvalSymbol(item.symbol);
+                                    setEvalTimeframe(item.timeframe);
+                                    setShowEvalPanel(true);
+                                    if (setSymbol) setSymbol(item.symbol);
+                                    if (setTimeframe) setTimeframe(item.timeframe);
+                                    if (setProvider) setProvider(item.provider);
                                   }}
-                                  className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors ml-0.5"
-                                  title="Bu testi geçmişten sil"
+                                  className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer whitespace-nowrap border ${
+                                    isCurrent
+                                      ? 'bg-indigo-950/90 border-indigo-500 text-white shadow-md shadow-indigo-500/20 font-bold'
+                                      : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/80 text-slate-300'
+                                  }`}
+                                  title={`${item.strategy_name} • ${item.executed_at} tarihinde çalıştırıldı. Tıklayarak sonuçlarını inceleyin.`}
                                 >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            );
-                          })}
+                                  <span className="font-bold text-slate-200">{item.symbol}</span>
+                                  <span className="text-[10px] text-slate-400">({item.timeframe})</span>
+                                  <span
+                                    className={`text-[11px] font-bold ${
+                                      isPositive ? 'text-emerald-400' : 'text-red-400'
+                                    }`}
+                                  >
+                                    {isPositive ? '+' : ''}
+                                    {item.total_pnl_percent.toFixed(1)}%
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      strategyStore.deleteSingleEvalHistoryItem(item.id);
+                                    }}
+                                    className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors ml-0.5"
+                                    title="Bu testi geçmişten sil"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
 
-                          {singleEvalHistory.length > 1 && (
-                            <button
-                              onClick={() => strategyStore.clearSingleEvalHistory()}
-                              className="text-[10px] text-slate-500 hover:text-red-400 underline ml-2 whitespace-nowrap"
-                              title="Tüm geçmişi temizle"
-                            >
-                              Temizle
-                            </button>
-                          )}
-                        </div>
-                      )}
+                            {activeStrategyHistory.length > 1 && (
+                              <button
+                                onClick={() => strategyStore.clearSingleEvalHistory(activeStrategy.id)}
+                                className="text-[10px] text-slate-500 hover:text-red-400 underline ml-2 whitespace-nowrap"
+                                title="Bu stratejiye ait tüm geçmişi temizle"
+                              >
+                                Temizle
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Hata */}

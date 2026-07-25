@@ -66,13 +66,16 @@ Thumbs.db
 desktop.ini
 
 # Storage
-storage/market_data/*
-!storage/market_data/.gitkeep
-storage/parquet/*
-!storage/parquet/.gitkeep
-storage/database/*.db
-storage/strategies/*
-!storage/strategies/.gitkeep
-storage/scans/*
-!storage/scans/.gitkeep
+**/storage/market_data/*
+!**/storage/market_data/.gitkeep
+**/storage/parquet/*
+!**/storage/parquet/.gitkeep
+**/storage/database/*.db
+**/storage/strategies/*
+!**/storage/strategies/.gitkeep
+**/storage/scans/*
+!**/storage/scans/.gitkeep
+**/storage/**/*.parquet
+**/storage/**/*.db
+
 

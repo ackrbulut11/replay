@@ -1876,24 +1876,8 @@ export default function CandleChart({
           </div>
 
 
-
-          {/* Sağlayıcı Seçimi */}
-          <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
-            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Provider</span>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              className="bg-transparent border-none outline-none text-xs font-medium text-slate-300 cursor-pointer focus:ring-0"
-            >
-              <option value="binance" className="bg-[#070b13] text-slate-100">Binance</option>
-              <option value="nasdaq" className="bg-[#070b13] text-slate-100">Nasdaq</option>
-              <option value="bist" className="bg-[#070b13] text-slate-100">BIST</option>
-              <option value="forex" className="bg-[#070b13] text-emerald-300">Forex (FX)</option>
-            </select>
-
-          </div>
-
           {/* Zaman Dilimi Seçimi */}
+
           <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
             <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Interval</span>
             <select

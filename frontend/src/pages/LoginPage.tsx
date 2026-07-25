@@ -5,7 +5,7 @@ import { ShieldCheck, BarChart2, Zap } from 'lucide-react';
 import logoImg from '../assets/logo.jpg';
 
 export const LoginPage: React.FC = () => {
-  const { loginWithGoogle } = useAuth();
+  const { loginWithGoogle, loginDemoUser } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
 
   const handleSuccess = async (credentialResponse: any) => {
@@ -61,12 +61,12 @@ export const LoginPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={async () => {
+            onClick={() => {
               try {
                 setError(null);
-                await loginWithGoogle("dev_mock_google_token");
+                loginDemoUser();
               } catch (err: any) {
-                setError(err.message || 'Demo girişi sırasında bir hata oluştu.');
+                setError('Demo girişi sırasında bir hata oluştu.');
               }
             }}
             className="w-full py-2.5 px-4 bg-slate-800/80 hover:bg-slate-800 active:scale-95 border border-slate-700/60 rounded-full text-xs font-semibold text-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"

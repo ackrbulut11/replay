@@ -56,18 +56,6 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
           </button>
           <button
             type="button"
-            onClick={() => onChange({ type: 'pnl' })}
-            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
-              type === 'pnl'
-                ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-            title="Pozisyon Kar/Zarar Yüzdesi (PnL %)"
-          >
-            Kar/Zarar %
-          </button>
-          <button
-            type="button"
             onClick={() => onChange({ type: 'value', value: 30 })}
             className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
               type === 'value'
@@ -103,8 +91,6 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
               onChange({ type: 'indicator', name: 'EMA', period: 20 });
             } else if (newType === 'price') {
               onChange({ type: 'price', field: 'close' });
-            } else if (newType === 'pnl') {
-              onChange({ type: 'pnl' });
             } else {
               onChange({ type: 'value', value: 0 });
             }
@@ -112,17 +98,10 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
           className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-colors"
         >
           <option value="indicator">İndikatör</option>
-          <option value="pnl">Kar/Zarar % (PnL)</option>
           <option value="price">Fiyat</option>
           <option value="value">Sabit Sayı / Değer</option>
         </select>
 
-        {/* PnL Etiketi */}
-        {type === 'pnl' && (
-          <div className="bg-purple-950/60 border border-purple-700/60 text-purple-300 text-xs font-mono font-bold rounded-lg px-2.5 py-1.5 flex items-center gap-1">
-            <span>🎯 Pozisyon Kar/Zarar (%)</span>
-          </div>
-        )}
 
 
         {/* İndikatör seçici */}
@@ -567,16 +546,7 @@ export default function ConditionEditor({
               <option value="" disabled>
                 ⚡ Hızlı Şablon Ekle...
               </option>
-              {isSellGroup && (
-                <>
-                  <option value="take_profit" className="bg-[#0d1321] text-emerald-300 font-semibold">
-                    🎯 % Kar Al (Kar/Zarar % &gt;= 3.5%)
-                  </option>
-                  <option value="stop_loss" className="bg-[#0d1321] text-red-300 font-semibold">
-                    🛡️ % Zarar Durdur (Kar/Zarar % &lt;= -2.0%)
-                  </option>
-                </>
-              )}
+
               <option value="macd_zero" className="bg-[#0d1321] text-slate-100 font-semibold">
                 {isSellGroup ? "📉 MACD ↘ 0 (MACD 0'ı Aşağı Kesti)" : "📈 MACD ↗ 0 (MACD 0'ı Yukarı Kesti)"}
               </option>

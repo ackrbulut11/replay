@@ -273,6 +273,57 @@ export default function StrategyBuilder({
           </div>
         </div>
 
+        {/* Minimal Kar Al % ve Zarar Durdur % (İsteğe Bağlı) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0d1321]/80 border border-slate-800/80 rounded-xl px-3.5 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+              🎯 Kar Al / Zarar Durdur (% Hedefler)
+            </span>
+            <span className="text-[10px] text-slate-500">
+              (İsteğe bağlı — İsteyen doldurur, istemeyen boş bırakır)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Kar Al % */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-emerald-400">Kar Al:</span>
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-700/80 rounded-lg px-2 py-1">
+                <span className="text-xs font-bold text-emerald-400 font-mono">%</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={takeProfitPct ?? ''}
+                  onChange={(e) => setTakeProfitPct(e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder="Örn: 3.5"
+                  className="w-16 bg-transparent text-slate-100 font-mono text-xs font-semibold outline-none"
+                  title="Pozisyon bu % kâra ulaşınca otomatik satılır. İstemiyorsanız boş bırakın."
+                />
+              </div>
+            </div>
+
+            {/* Zarar Durdur % */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-red-400">Zarar Durdur:</span>
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-700/80 rounded-lg px-2 py-1">
+                <span className="text-xs font-bold text-red-400 font-mono">%</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={stopLossPct ?? ''}
+                  onChange={(e) => setStopLossPct(e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder="Örn: 2.0"
+                  className="w-16 bg-transparent text-slate-100 font-mono text-xs font-semibold outline-none"
+                  title="Pozisyon bu % zarara düşerse otomatik satılır. İstemiyorsanız boş bırakın."
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+
         {/* Parametreler (İsteğe Bağlı Değişkenler) */}
         <div className="border border-slate-800/60 rounded-xl overflow-hidden bg-slate-900/20">
           <button

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./storage/database/app.db"
     
     # Auth & OAuth Settings
-    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_ID: str = "985054967666-8dbbd2hemhb2qn8k2grncd8ufcqtarqc.apps.googleusercontent.com"
     GOOGLE_CLIENT_SECRET: str = ""
     JWT_SECRET_KEY: str = "dev-secret-key-change-this-in-production-123456789"
     JWT_ALGORITHM: str = "HS256"

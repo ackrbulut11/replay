@@ -6,7 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import App from './App.tsx'
 import './index.css'
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "dev-google-client-id";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "985054967666-8dbbd2hemhb2qn8k2grncd8ufcqtarqc.apps.googleusercontent.com";
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

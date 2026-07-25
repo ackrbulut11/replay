@@ -79,6 +79,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async (credential: string) => {
     setIsLoading(true);
     try {
+      if (credential === 'dev_mock_google_token') {
+        try {
+          const res = await fetch(`${API_BASE_URL}/auth/google`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({ credential })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem('replay_access_token', data.access_token);
+            localStorage.setItem('replay_user', JSON.stringify(data.user));
+            setAccessToken(data.access_token);
+            setUser(data.user);
+            return;
+          }
+        } catch (e) {
+          console.warn("Backend auth unreachable, using instant offline demo session:", e);
+        }
+
+        // Garanti Demo Oturumu (Backend kapalı veya erişilemez olsa dahi asla reddetmez)
+        const mockUser: User = {
+          id: '2494589c-21fb-4b8e-b00a-53f93efbce73',
+          email: 'demo.trader@example.com',
+          name: 'Demo Trader',
+          avatar_url: 'https://lh3.googleusercontent.com/a/default-user',
+          initial_balance: 10000.0,
+          currency: 'USD'
+        };
+        const mockToken = 'dev_mock_access_token_demo';
+
+        localStorage.setItem('replay_access_token', mockToken);
+        localStorage.setItem('replay_user', JSON.stringify(mockUser));
+        setAccessToken(mockToken);
+        setUser(mockUser);
+        return;
+      }
+
       const res = await fetch(`${API_BASE_URL}/auth/google`, {
         method: 'POST',
         headers: {

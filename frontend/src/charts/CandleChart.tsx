@@ -1563,9 +1563,13 @@ export default function CandleChart({
         borderColor: '#1e293b',
         scaleMargins: { top: 0.02, bottom: 0.08 },
       });
-      chart.priceScale('volume').applyOptions({
-        scaleMargins: { top: 0.82, bottom: 0.02 },
-      });
+      try {
+        chart.priceScale('volume_overlay').applyOptions({
+          scaleMargins: { top: 0.82, bottom: 0.02 },
+        });
+      } catch (e) {
+        console.warn('Volume price scale error:', e);
+      }
     } else {
       // Ana grafiğin alt marjı tam olarak subPaneRatio kadardır
       chart.priceScale('right').applyOptions({
@@ -1577,9 +1581,13 @@ export default function CandleChart({
       // Hacim, ana grafik alanının alt %15'ini kaplar.
       // Orantılı üst marj, top + bottom >= 1.0 çökmesini önler.
       const volumeTop = (1 - subPaneRatio) * 0.85;
-      chart.priceScale('volume').applyOptions({
-        scaleMargins: { top: volumeTop, bottom: subPaneRatio },
-      });
+      try {
+        chart.priceScale('volume_overlay').applyOptions({
+          scaleMargins: { top: volumeTop, bottom: subPaneRatio },
+        });
+      } catch (e) {
+        console.warn('Volume price scale error:', e);
+      }
 
       // Alt panel alanı tam olarak ana grafiğin bittiği yerde başlar
       const subTop = 1 - subPaneRatio;

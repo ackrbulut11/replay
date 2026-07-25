@@ -6,6 +6,7 @@
  */
 
 import { Plus, Trash2, GripVertical } from 'lucide-react';
+
 import type {
   Condition,
   ConditionGroup,
@@ -13,7 +14,7 @@ import type {
   OperatorType,
   IndicatorInfo,
 } from '../types/strategy';
-import { OPERATORS, PRICE_FIELDS, TIMEFRAMES, createEmptyCondition } from '../types/strategy';
+import { OPERATORS, PRICE_FIELDS, TIMEFRAMES } from '../types/strategy';
 
 // ─── Operand Editörü ─────────────────────────────────────────────────────────
 
@@ -36,7 +37,6 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
   const type = operand.type;
 
   return (
-
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{label}</span>
@@ -102,7 +102,6 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
           <option value="value">Sabit Sayı / Değer</option>
         </select>
 
-
         {/* İndikatör seçici */}
         {type === 'indicator' && (
           <>
@@ -132,7 +131,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                 const val = e.target.value;
                 onChange({
                   ...operand,
-                  period: val.startsWith('$') ? val : (parseInt(val) || operand.period),
+                  period: val.startsWith('$') ? val : parseInt(val) || operand.period,
                 });
               }}
               placeholder="Periyot (ör: 20)"
@@ -211,10 +210,10 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
               const val = e.target.value;
               onChange({
                 ...operand,
-                value: val.startsWith('$') ? val : (parseFloat(val) || 0),
+                value: val.startsWith('$') ? val : parseFloat(val) || 0,
               });
             }}
-            placeholder="Sayı (ör: 70)"
+            placeholder="Sayı (ör: 30)"
             className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-28 focus:border-indigo-500 outline-none transition-colors font-mono"
             title="Sabit sayısal değer (örneğin: 30, 70, 0)"
           />
@@ -232,9 +231,49 @@ interface ConditionRowProps {
   onDelete: () => void;
   indicators: IndicatorInfo[];
   index: number;
+  isSellGroup?: boolean;
 }
 
-function ConditionRow({ condition, onChange, onDelete, indicators, index }: ConditionRowProps) {
+function ConditionRow({
+  condition,
+  onChange,
+  onDelete,
+  indicators,
+  index,
+  isSellGroup = false,
+}: ConditionRowProps) {
+  // Solda indikatör seçildiğinde sağ tarafı otomatik seviyeye/sabit sayıya geçir
+  const handleLeftChange = (left: Operand) => {
+    let newRight = condition.right;
+    let newOperator = condition.operator;
+
+    if (left.type === 'indicator') {
+      const name = left.name.toUpperCase();
+      if (name === 'RSI') {
+        newRight = { type: 'value', value: isSellGroup ? 70 : 30 };
+        newOperator = isSellGroup ? '>' : '<';
+      } else if (name === 'ADX') {
+        newRight = { type: 'value', value: 25 };
+        newOperator = '>';
+      } else if (name === 'ATR') {
+        newRight = { type: 'value', value: 2.5 };
+        newOperator = '>';
+      } else if (name === 'STOCH' || name.includes('STOCH')) {
+        newRight = { type: 'value', value: isSellGroup ? 80 : 20 };
+        newOperator = isSellGroup ? '>' : '<';
+      } else if (condition.right.type === 'indicator' && name !== 'EMA' && name !== 'SMA' && name !== 'MACD') {
+        newRight = { type: 'value', value: 30 };
+      }
+    }
+
+    onChange({
+      ...condition,
+      left,
+      right: newRight,
+      operator: newOperator,
+    });
+  };
+
   return (
     <div className="group relative flex flex-col gap-3 bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 hover:border-slate-700/80 transition-colors">
       {/* Satır başlığı */}
@@ -256,7 +295,7 @@ function ConditionRow({ condition, onChange, onDelete, indicators, index }: Cond
         {/* Sol operand */}
         <OperandEditor
           operand={condition.left}
-          onChange={(left) => onChange({ ...condition, left })}
+          onChange={handleLeftChange}
           indicators={indicators}
           label="Sol"
         />
@@ -316,6 +355,8 @@ export default function ConditionEditor({
   title,
   accentColor = 'indigo',
 }: ConditionEditorProps) {
+  const isSellGroup = accentColor === 'red';
+
   const colorMap: Record<string, string> = {
     indigo: 'border-indigo-600/40 bg-indigo-950/20',
     emerald: 'border-emerald-600/40 bg-emerald-950/20',
@@ -330,37 +371,64 @@ export default function ConditionEditor({
     amber: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
   };
 
+  // Yeni eklenen koşul her zaman en üste gelir (0. indekse prepend)
   const handleAddCondition = () => {
-    onChange({
-      ...group,
-      conditions: [...group.conditions, createEmptyCondition()],
-    });
-  };
-
-  const handleAddLevelCondition = () => {
-    const newCond: Condition = {
+    const defaultNewCond: Condition = {
       left: { type: 'indicator', name: 'RSI', period: 14 },
-      operator: '<',
-      right: { type: 'value', value: 30 },
+      operator: isSellGroup ? '>' : '<',
+      right: { type: 'value', value: isSellGroup ? 70 : 30 },
     };
     onChange({
       ...group,
-      conditions: [...group.conditions, newCond],
+      conditions: [defaultNewCond, ...group.conditions],
     });
   };
 
-  const handleAddCrossCondition = () => {
-    const newCond: Condition = {
-      left: { type: 'indicator', name: 'EMA', period: 20 },
-      operator: 'cross_above',
-      right: { type: 'indicator', name: 'EMA', period: 50 },
-    };
-    onChange({
-      ...group,
-      conditions: [...group.conditions, newCond],
-    });
-  };
+  // Hızlı Şablon Seçildiğinde En Üste Ekle
+  const handleSelectTemplate = (templateKey: string) => {
+    if (!templateKey) return;
 
+    let newCond: Condition | null = null;
+
+    if (templateKey === 'rsi_level') {
+      newCond = {
+        left: { type: 'indicator', name: 'RSI', period: 14 },
+        operator: isSellGroup ? '>' : '<',
+        right: { type: 'value', value: isSellGroup ? 70 : 30 },
+      };
+    } else if (templateKey === 'ema_cross') {
+      newCond = {
+        left: { type: 'indicator', name: 'EMA', period: 20 },
+        operator: isSellGroup ? 'cross_below' : 'cross_above',
+        right: { type: 'indicator', name: 'EMA', period: 50 },
+      };
+    } else if (templateKey === 'price_ema') {
+      newCond = {
+        left: { type: 'price', field: 'close' },
+        operator: isSellGroup ? '<' : '>',
+        right: { type: 'indicator', name: 'EMA', period: 200 },
+      };
+    } else if (templateKey === 'macd_signal') {
+      newCond = {
+        left: { type: 'indicator', name: 'MACD', period: 12, field: 'MACD' },
+        operator: isSellGroup ? '<' : '>',
+        right: { type: 'indicator', name: 'MACD', period: 12, field: 'signal' },
+      };
+    } else if (templateKey === 'adx_trend') {
+      newCond = {
+        left: { type: 'indicator', name: 'ADX', period: 14 },
+        operator: '>',
+        right: { type: 'value', value: 25 },
+      };
+    }
+
+    if (newCond) {
+      onChange({
+        ...group,
+        conditions: [newCond, ...group.conditions],
+      });
+    }
+  };
 
   const handleUpdateCondition = (index: number, condition: Condition) => {
     const newConditions = [...group.conditions];
@@ -384,8 +452,8 @@ export default function ConditionEditor({
 
   return (
     <div className={`border rounded-xl p-4 ${colorMap[accentColor] || colorMap.indigo}`}>
-      {/* Başlık */}
-      <div className="flex items-center justify-between mb-3">
+      {/* Başlık ve Butonlar */}
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badgeMap[accentColor] || badgeMap.indigo}`}>
             {title}
@@ -395,7 +463,7 @@ export default function ConditionEditor({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* AND/OR toggle */}
           {group.conditions.length > 1 && (
             <button
@@ -411,35 +479,50 @@ export default function ConditionEditor({
             </button>
           )}
 
-          {/* Hızlı Koşul Ekleme Butonları */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={handleAddLevelCondition}
-              className="flex items-center gap-1 text-[11px] font-semibold text-amber-300 hover:text-white bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg px-2 py-1 transition-all cursor-pointer"
-              title="Aşırı Alım/Satım kuralı ekle (örn: RSI < 30)"
+          {/* Hızlı Şablon Listesi Dropdown */}
+          <div className="relative inline-flex items-center">
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                handleSelectTemplate(e.target.value);
+                e.target.value = '';
+              }}
+              className={`text-xs font-semibold rounded-lg px-2.5 py-1 outline-none cursor-pointer border transition-all ${
+                isSellGroup
+                  ? 'bg-red-950/40 border-red-500/40 text-red-300 hover:bg-red-900/50'
+                  : 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/50'
+              }`}
             >
-              <Plus className="w-3 h-3 text-amber-400" />
-              + Seviye (RSI &lt; 30)
-            </button>
+              <option value="" disabled>
+                ⚡ Hızlı Şablon Ekle...
+              </option>
+              <option value="rsi_level" className="bg-[#0d1321] text-slate-100">
+                {isSellGroup ? '📊 RSI > 70 (Aşırı Alım - SAT)' : '📊 RSI < 30 (Aşırı Satım - AL)'}
+              </option>
+              <option value="ema_cross" className="bg-[#0d1321] text-slate-100">
+                {isSellGroup ? '🔀 EMA 20 Aşağı Kesti EMA 50 (Death Cross)' : '🔀 EMA 20 Yukarı Kesti EMA 50 (Golden Cross)'}
+              </option>
+              <option value="price_ema" className="bg-[#0d1321] text-slate-100">
+                {isSellGroup ? '📈 Fiyat < EMA 200 (Düşüş Trendi)' : '📈 Fiyat > EMA 200 (Yükseliş Trendi)'}
+              </option>
+              <option value="macd_signal" className="bg-[#0d1321] text-slate-100">
+                {isSellGroup ? '📉 MACD < Signal (MACD Düşüş)' : '📈 MACD > Signal (MACD Yükseliş)'}
+              </option>
+              <option value="adx_trend" className="bg-[#0d1321] text-slate-100">
+                {'🎯 ADX > 25 (Güçlü Trend Filtresi)'}
+              </option>
 
-            <button
-              onClick={handleAddCrossCondition}
-              className="flex items-center gap-1 text-[11px] font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/30 border border-indigo-500/30 rounded-lg px-2 py-1 transition-all cursor-pointer"
-              title="İndikatör kesişim kuralı ekle (örn: EMA 20 > EMA 50)"
-            >
-              <Plus className="w-3 h-3 text-indigo-400" />
-              + Kesişim (EMA 20 &gt; 50)
-            </button>
-
-            <button
-              onClick={handleAddCondition}
-              className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Özel Koşul
-            </button>
+            </select>
           </div>
 
+          {/* Özel Koşul Ekle (En Üste Ekler) */}
+          <button
+            onClick={handleAddCondition}
+            className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            + Özel Koşul
+          </button>
         </div>
       </div>
 
@@ -447,7 +530,7 @@ export default function ConditionEditor({
       <div className="flex flex-col gap-2">
         {group.conditions.length === 0 ? (
           <div className="text-center py-6 text-slate-400 text-xs italic bg-slate-900/40 rounded-lg border border-slate-800/40">
-            Henüz koşul eklenmedi. Yukarıdaki "+ Koşul Ekle" butonuna tıklayarak ilk kuralınızı belirleyin.
+            Henüz koşul eklenmedi. Yukarıdaki "⚡ Hızlı Şablon Ekle" veya "+ Özel Koşul" butonuna tıklayarak ilk kuralınızı ekleyin.
           </div>
         ) : (
           group.conditions.map((condition, index) => (
@@ -471,6 +554,7 @@ export default function ConditionEditor({
                 onDelete={() => handleDeleteCondition(index)}
                 indicators={indicators}
                 index={index}
+                isSellGroup={isSellGroup}
               />
             </div>
           ))

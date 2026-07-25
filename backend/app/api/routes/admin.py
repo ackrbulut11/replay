@@ -38,11 +38,16 @@ def get_all_users(
     """
     Tüm kaydolan kullanıcıların listesini ve kullanıcı istatistiklerini getirir.
     """
+    from app.engines.strategy_engine import StrategyEngine
+    engine = StrategyEngine()
+    json_count = len(engine.list_strategies())
+
     users = db.query(User).order_by(User.created_at.desc()).all()
     
     result = []
     for u in users:
-        strat_cnt = db.query(Strategy).filter(Strategy.user_id == u.id).count()
+        sql_strat_cnt = db.query(Strategy).filter(Strategy.user_id == u.id).count()
+        strat_cnt = max(json_count, sql_strat_cnt)
         trade_cnt = db.query(JournalTrade).filter(JournalTrade.user_id == u.id).count()
         replay_cnt = db.query(ReplaySession).filter(ReplaySession.user_id == u.id).count()
 
@@ -64,15 +69,22 @@ def get_admin_stats(db: Session = Depends(get_db)):
     """
     Platform genel istatistik özeti ve son katılan 5 kullanıcıyı getirir.
     """
+    from app.engines.strategy_engine import StrategyEngine
+    engine = StrategyEngine()
+    json_count = len(engine.list_strategies())
+
     total_u = db.query(User).count()
-    total_s = db.query(Strategy).count()
+    sql_strat_count = db.query(Strategy).count()
+    total_s = max(json_count, sql_strat_count)
+
     total_t = db.query(JournalTrade).count()
     total_r = db.query(ReplaySession).count()
 
     users = db.query(User).order_by(User.created_at.desc()).limit(5).all()
     latest = []
     for u in users:
-        strat_cnt = db.query(Strategy).filter(Strategy.user_id == u.id).count()
+        sql_strat_cnt = db.query(Strategy).filter(Strategy.user_id == u.id).count()
+        strat_cnt = max(json_count, sql_strat_cnt)
         trade_cnt = db.query(JournalTrade).filter(JournalTrade.user_id == u.id).count()
         replay_cnt = db.query(ReplaySession).filter(ReplaySession.user_id == u.id).count()
 

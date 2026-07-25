@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Plus, RefreshCw, X, ChevronDown, Flag, Trash2,
+  Plus, RefreshCw, ChevronDown, Flag, Trash2,
   Sparkles, ArrowUpDown, GripVertical,
 } from 'lucide-react';
 import {
@@ -354,15 +354,6 @@ export default function WatchlistPanel({
             title="Yeni Hisse / Sembol Ekle"
           >
             <Plus className="w-4 h-4" />
-          </button>
-
-          {/* Close Panel */}
-          <button
-            onClick={() => watchlistStore.togglePanel()}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition-all"
-            title="Paneli Kapat"
-          >
-            <X className="w-4 h-4" />
           </button>
         </div>
       </div>

@@ -1,12 +1,12 @@
-import { Bookmark, Bell, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
+import { Bookmark, Bell, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useWatchlistStore, watchlistStore } from '../../store/watchlistStore';
 import { useAlertStore } from '../../store/alertStore';
 
 interface RightActionBarProps {
-  onOpenSearchModal: () => void;
+  onOpenSearchModal?: () => void;
 }
 
-export default function RightActionBar({ onOpenSearchModal }: RightActionBarProps) {
+export default function RightActionBar(_props: RightActionBarProps) {
   const [state] = useWatchlistStore();
   const [alertState] = useAlertStore();
 
@@ -61,15 +61,6 @@ export default function RightActionBar({ onOpenSearchModal }: RightActionBarProp
             )}
           </button>
         </div>
-
-        {/* Quick Add Symbol Button */}
-        <button
-          onClick={onOpenSearchModal}
-          className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800/50 rounded-xl transition-all"
-          title="Listeye Sembol Ekle (+)"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
 
         {/* Alarm / Alerts Button */}
         <div className="relative">

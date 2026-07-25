@@ -692,6 +692,7 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
   private _preview: Drawing | null = null;
   private _selectedId: string | null = null;
   private _hoveredId: string | null = null;
+  private _candles: CandleData[] = [];
 
   attached(param: SeriesAttachedParameter<Time, SeriesType>): void {
     this._chart = param.chart;
@@ -775,6 +776,7 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
   }
 
   setCandles(candles: CandleData[]) {
+    this._candles = candles;
     this._renderer.setCandles(candles);
     this._requestUpdate?.();
   }
@@ -784,9 +786,35 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
 
   pointToPixel(time: number, price: number): PixelPoint | null {
     if (!this._chart || !this._series) return null;
-    const x = this._chart.timeScale().timeToCoordinate(time as any);
     const y = this._series.priceToCoordinate(price);
-    if (x === null || y === null) return null;
+    if (y === null) return null;
+
+    let x = this._chart.timeScale().timeToCoordinate(time as any);
+    if (x === null) {
+      // Future or past timestamp handling via logical index extrapolation
+      const candles = this._candles;
+      if (candles && candles.length > 0) {
+        const lastCandle = candles[candles.length - 1];
+        const prevCandle = candles[Math.max(0, candles.length - 2)];
+        const step = (candles.length > 1 && lastCandle.time > prevCandle.time)
+          ? (lastCandle.time - prevCandle.time)
+          : 86400;
+
+        const lastIdx = candles.length - 1;
+        if (time > lastCandle.time) {
+          const barsAhead = (time - lastCandle.time) / step;
+          const targetLogical = lastIdx + barsAhead;
+          x = this._chart.timeScale().logicalToCoordinate(targetLogical as any);
+        } else if (time < candles[0].time) {
+          const firstCandle = candles[0];
+          const barsBefore = (firstCandle.time - time) / step;
+          const targetLogical = -barsBefore;
+          x = this._chart.timeScale().logicalToCoordinate(targetLogical as any);
+        }
+      }
+    }
+
+    if (x === null) return null;
     return { x, y };
   }
 
@@ -810,10 +838,9 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
     if (!this._chart || !this._series) return null;
     const points: PixelPoint[] = [];
     for (const p of d.points) {
-      const x = this._chart.timeScale().timeToCoordinate(p.time as any);
-      const y = this._series.priceToCoordinate(p.price);
-      if (x === null || y === null) return null;
-      points.push({ x, y });
+      const pt = this.pointToPixel(p.time, p.price);
+      if (pt === null) return null;
+      points.push(pt);
     }
     return {
       id: d.id,

@@ -1,4 +1,5 @@
 import logoImg from '../assets/logo.jpg';
+import { useAuth } from '../context/AuthContext';
 import {
   LineChart,
   SlidersHorizontal,
@@ -6,6 +7,7 @@ import {
   Search,
   History,
   BookOpen,
+  LogOut,
 } from 'lucide-react';
 
 export type NavigationTab = 'chart' | 'strategy' | 'replay' | 'scanner' | 'backtest' | 'journal';
@@ -16,6 +18,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
+  const { logout } = useAuth();
   const navItems: { id: NavigationTab; label: string; icon: any }[] = [
     { id: 'chart', label: 'Grafik & Analiz', icon: LineChart },
     { id: 'strategy', label: 'Strateji Motoru', icon: SlidersHorizontal },
@@ -64,12 +67,25 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
       </nav>
       </div>
 
-      {/* Footer Status Indicator */}
-      <div
-        className="w-8 h-8 rounded-xl bg-[#070b13]/60 border border-slate-800/60 flex items-center justify-center"
-        title="Engine Status: Online"
-      >
-        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+      {/* Footer Controls: Logout & Status Indicator */}
+      <div className="flex flex-col items-center gap-2">
+        <button
+          onClick={() => logout()}
+          className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 flex items-center justify-center transition-all cursor-pointer group relative"
+          title="Çıkış Yap / Giriş Ekranına Dön"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-900 text-red-300 text-xs rounded border border-red-500/30 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
+            Çıkış Yap
+          </div>
+        </button>
+
+        <div
+          className="w-8 h-8 rounded-xl bg-[#070b13]/60 border border-slate-800/60 flex items-center justify-center"
+          title="Engine Status: Online"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        </div>
       </div>
     </aside>
   );

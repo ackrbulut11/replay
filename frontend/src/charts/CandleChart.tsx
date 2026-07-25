@@ -669,58 +669,66 @@ export default function CandleChart({
     const series = candleSeriesRef.current;
     if (!chart || !series) return null;
 
+    const candles = fullDataRef.current;
+    if (!candles || candles.length === 0) return null;
+
+    const snapPrice = series.coordinateToPrice(y);
+    if (snapPrice === null) return null;
+
     if (snap) {
       const time = chart.timeScale().coordinateToTime(x);
-      const snapPrice = series.coordinateToPrice(y);
-
-      if (time !== null && snapPrice !== null) {
+      if (time !== null) {
         const timeVal = typeof time === 'number' ? time : (time as any);
-        const candles = fullDataRef.current;
         const candle = candles.find(c => c.time === timeVal || (typeof c.time === 'object' && (c.time as any).timestamp === timeVal));
 
         if (candle) {
-          // Mumun 4 temel noktası: Başlangıç (Open), Bitiş (Close), En Yüksek (High), En Düşük (Low)
           const points = [candle.open, candle.close, candle.high, candle.low];
-          
-          // Fare imlecinin fiyatına en yakın olan noktayı seç ve doğrudan o verinin olduğu yere yapış
           const price = points.reduce((best, p) =>
             Math.abs(p - snapPrice) < Math.abs(best - snapPrice) ? p : best
           );
           return { time: candle.time, price };
         }
       }
-
-      const fallbackTime = chart.timeScale().coordinateToTime(x);
-      const fallbackPrice = series.coordinateToPrice(y);
-      if (fallbackTime === null || fallbackPrice === null) return null;
-      return { time: fallbackTime as number, price: fallbackPrice };
     }
 
     const logical = chart.timeScale().coordinateToLogical(x);
-    const price = series.coordinateToPrice(y);
-    if (logical === null || price === null) return null;
+    if (logical === null) return null;
 
-    const barIdx = Math.floor(logical);
-    const nextIdx = barIdx + 1;
-    const fraction = logical - barIdx;
+    const totalBars = candles.length;
+    const lastIdx = totalBars - 1;
+    const lastCandle = candles[lastIdx];
+    const prevCandle = candles[Math.max(0, lastIdx - 1)];
+    const step = (totalBars > 1 && lastCandle.time > prevCandle.time)
+      ? (lastCandle.time - prevCandle.time)
+      : 86400;
 
-    const bar = series.dataByIndex(barIdx) as any;
-    const nextBar = series.dataByIndex(nextIdx) as any;
     let time: number;
-    if (bar && nextBar) {
-      const t1 = bar.time as number;
-      const t2 = nextBar.time as number;
-      time = t1 + (t2 - t1) * fraction;
-    } else if (bar) {
-      const prevBar = series.dataByIndex(Math.max(0, barIdx - 1)) as any;
-      const step = (prevBar && bar) ? ((bar.time as number) - (prevBar.time as number)) : 86400;
-      time = (bar.time as number) + step * fraction;
+
+    if (logical > lastIdx) {
+      // Future bars extrapolation (up to 1000+ bars ahead)
+      const barsAhead = logical - lastIdx;
+      time = Math.round(lastCandle.time + step * barsAhead);
+    } else if (logical < 0) {
+      // Past bars extrapolation
+      const firstCandle = candles[0];
+      time = Math.round(firstCandle.time + step * logical);
     } else {
-      const snapped = chart.timeScale().coordinateToTime(x);
-      if (snapped === null) return null;
-      time = snapped as number;
+      // In-range bar interpolation
+      const barIdx = Math.floor(logical);
+      const fraction = logical - barIdx;
+      const c1 = candles[barIdx];
+      const c2 = candles[Math.min(lastIdx, barIdx + 1)];
+
+      if (c1 && c2 && barIdx < lastIdx) {
+        time = Math.round(c1.time + (c2.time - c1.time) * fraction);
+      } else if (c1) {
+        time = Math.round(c1.time + step * fraction);
+      } else {
+        time = lastCandle.time;
+      }
     }
-    return { time, price };
+
+    return { time, price: snapPrice };
   }, []);
 
   const selectDrawing = useCallback((drawingId: string) => {
@@ -887,6 +895,7 @@ export default function CandleChart({
         borderColor: '#1e293b',
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 25,
       },
       crosshair: {
         mode: CrosshairMode.Magnet,

@@ -10,6 +10,10 @@ import type {
   StrategyUpdateRequest,
   EvaluateRequest,
   EvaluateResponse,
+  BatchEvaluateRequest,
+  BatchEvaluateResponse,
+  ScanHistoryItem,
+  SaveScanRequest,
   IndicatorInfo,
 } from '../types/strategy';
 
@@ -77,6 +81,32 @@ export async function evaluateStrategy(
   });
 }
 
+export async function batchEvaluateStrategy(
+  id: string,
+  params: BatchEvaluateRequest
+): Promise<BatchEvaluateResponse> {
+  return request(`${API_BASE}/${id}/batch-evaluate`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function getScanHistory(
+  id: string
+): Promise<{ strategy_id: string; scans: ScanHistoryItem[]; latest: ScanHistoryItem | null }> {
+  return request(`${API_BASE}/${id}/scans`);
+}
+
+export async function saveScanResult(
+  id: string,
+  data: SaveScanRequest
+): Promise<{ message: string; scan: ScanHistoryItem }> {
+  return request(`${API_BASE}/${id}/scans`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── İndikatörler ────────────────────────────────────────────────────────────
 
 export async function getAvailableIndicators(): Promise<IndicatorInfo[]> {
@@ -91,5 +121,9 @@ export const strategyApi = {
   updateStrategy,
   deleteStrategy,
   evaluateStrategy,
+  batchEvaluateStrategy,
+  getScanHistory,
+  saveScanResult,
   getAvailableIndicators,
 };
+

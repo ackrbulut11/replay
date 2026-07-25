@@ -259,3 +259,67 @@ class IndicatorInfo(BaseModel):
     min_period: int = Field(1, description="Minimum period")
     max_period: int = Field(500, description="Maksimum period")
     fields: List[str] = Field(default_factory=list, description="Alt alanlar (ör. MACD -> MACD, signal, hist)")
+
+
+class BatchEvaluateRequest(BaseModel):
+    """Çoklu sembol strateji tarama isteği."""
+
+    symbols: List[str] = Field(..., description="Taranacak sembol listesi (ör. ['BTCUSDT', 'ETHUSDT'])")
+    provider: str = Field("binance", description="Veri sağlayıcı (binance, bist, nasdaq)")
+    timeframe: str = Field("1d", description="Zaman dilimi (15m, 1h, 1d)")
+    start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
+    end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
+    limit_bars: Optional[int] = Field(1000, description="Maksimum mum sayısı")
+    allow_short: Optional[bool] = Field(None, description="Short pozisyon izni")
+    param_overrides: Dict[str, Union[int, float]] = Field(default_factory=dict)
+
+
+class BatchEvaluateResultItem(BaseModel):
+    """Tek bir sembol için tarama sonucu."""
+
+    symbol: str
+    total_bars: int = 0
+    buy_count: int = 0
+    sell_count: int = 0
+    total_trades: int = 0
+    winning_trades: int = 0
+    losing_trades: int = 0
+    win_rate: float = 0.0
+    total_pnl_percent: float = 0.0
+    last_signal: Optional[str] = None
+    last_signal_time: Optional[int] = None
+    error: Optional[str] = None
+
+
+class BatchEvaluateResponse(BaseModel):
+    """Çoklu sembol tarama yanıtı."""
+
+    strategy_id: str
+    strategy_name: str
+    provider: str
+    timeframe: str
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    scanned_count: int
+    results: List[BatchEvaluateResultItem]
+
+
+class ScanHistoryItem(BaseModel):
+    """Kayıtlı tarama geçmişi ötesi."""
+
+    scan_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    strategy_id: str
+    strategy_name: str
+    provider: str
+    timeframe: str
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    scanned_count: int
+    results: List[BatchEvaluateResultItem]
+
+
+class SaveScanRequest(BaseModel):
+    """Tarama sonucunu kaydetme isteği."""
+
+    provider: str
+    timeframe: str
+    results: List[BatchEvaluateResultItem]
+

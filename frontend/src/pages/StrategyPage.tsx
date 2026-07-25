@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import StrategyList from '../strategy/StrategyList';
 import StrategyBuilder from '../strategy/StrategyBuilder';
+import BatchScannerTab from '../strategy/BatchScannerTab';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import type { Strategy, EvaluateRequest } from '../types/strategy';
 import { TIMEFRAMES } from '../types/strategy';
@@ -45,6 +46,8 @@ export default function StrategyPage({
     useStrategyStore();
 
   const [mode, setMode] = useState<'list' | 'edit' | 'new'>('list');
+  const [activeSubTab, setActiveSubTab] = useState<'builder' | 'batch_scanner'>('builder');
+
 
   // Evaluate form state — varsayılan olarak grafikte seçili sembolden başlar
   const [evalSymbol, setEvalSymbol] = useState(currentSymbol || 'BTCUSDT');
@@ -163,53 +166,77 @@ export default function StrategyPage({
     setShowEvalPanel(true);
   };
 
-  const handleNavigateToChart = () => {
-    if (setSymbol) setSymbol(evalSymbol);
-    if (setProvider) setProvider(autoDetectProvider(evalSymbol));
-    if (setTimeframe) setTimeframe(evalTimeframe);
+  const handleNavigateToChartWithSymbol = async (
+    targetSymbol: string,
+    targetProvider?: string,
+    targetTimeframe?: string
+  ) => {
+    const prov = targetProvider || autoDetectProvider(targetSymbol);
+    const tf = targetTimeframe || evalTimeframe;
 
-    // Stratejide kullanılan indikatörleri otomatik olarak aktif et
-    if (activeStrategy && onEnableIndicators) {
-      const keysToEnable: (keyof IndicatorsState)[] = [];
-      const checkOperand = (op: any) => {
-        if (!op || op.type !== 'indicator') return;
-        const name = String(op.name || '').toUpperCase();
-        const period = Number(op.period) || 20;
+    if (setSymbol) setSymbol(targetSymbol);
+    if (setProvider) setProvider(prov);
+    if (setTimeframe) setTimeframe(tf);
 
-        if (name === 'RSI') keysToEnable.push('rsi');
-        else if (name === 'MACD') keysToEnable.push('macd');
-        else if (name === 'EMA' || name === 'SMA') {
-          if (period <= 30) keysToEnable.push('ema20');
-          else if (period <= 75) keysToEnable.push('ema50');
-          else if (period <= 150) keysToEnable.push('ema100');
-          else keysToEnable.push('ema200');
-        } else if (name.includes('BOLLINGER') || name === 'BB' || name.includes('BAND')) {
-          keysToEnable.push('bb');
+    // 1. Stratejiyi bu sembol için de tekli evaluate et (CandleChart üzerinde BUY/SELL sinyal oklarının görünmesi için)
+    if (activeStrategy) {
+      const request: EvaluateRequest = {
+        symbol: targetSymbol,
+        provider: prov,
+        timeframe: tf,
+        limit_bars: 1000,
+        allow_short: Boolean(activeStrategy.allow_short),
+      };
+      await strategyStore.evaluateStrategy(activeStrategy.id, request);
+
+      // 2. Stratejide kullanılan indikatörleri otomatik olarak grafik üzerinde aktif et
+      if (onEnableIndicators) {
+        const keysToEnable: (keyof IndicatorsState)[] = [];
+        const checkOperand = (op: any) => {
+          if (!op || op.type !== 'indicator') return;
+          const name = String(op.name || '').toUpperCase();
+          const period = Number(op.period) || 20;
+
+          if (name === 'RSI') keysToEnable.push('rsi');
+          else if (name === 'MACD') keysToEnable.push('macd');
+          else if (name === 'EMA' || name === 'SMA') {
+            if (period <= 30) keysToEnable.push('ema20');
+            else if (period <= 75) keysToEnable.push('ema50');
+            else if (period <= 150) keysToEnable.push('ema100');
+            else keysToEnable.push('ema200');
+          } else if (name.includes('BOLLINGER') || name === 'BB' || name.includes('BAND')) {
+            keysToEnable.push('bb');
+          }
+        };
+
+        const checkGroup = (group: any) => {
+          if (!group || !Array.isArray(group.conditions)) return;
+          group.conditions.forEach((c: any) => {
+            checkOperand(c.left);
+            checkOperand(c.right);
+            checkOperand(c.right2);
+          });
+        };
+
+        checkGroup(activeStrategy.entry_rules);
+        checkGroup(activeStrategy.exit_rules);
+        if (Array.isArray(activeStrategy.timeframe_filters)) {
+          activeStrategy.timeframe_filters.forEach((tfItem) => checkGroup(tfItem));
         }
-      };
 
-      const checkGroup = (group: any) => {
-        if (!group || !Array.isArray(group.conditions)) return;
-        group.conditions.forEach((c: any) => {
-          checkOperand(c.left);
-          checkOperand(c.right);
-          checkOperand(c.right2);
-        });
-      };
-
-      checkGroup(activeStrategy.entry_rules);
-      checkGroup(activeStrategy.exit_rules);
-      if (Array.isArray(activeStrategy.timeframe_filters)) {
-        activeStrategy.timeframe_filters.forEach((tf) => checkGroup(tf));
-      }
-
-      if (keysToEnable.length > 0) {
-        onEnableIndicators(keysToEnable);
+        if (keysToEnable.length > 0) {
+          onEnableIndicators(keysToEnable);
+        }
       }
     }
 
     if (onSelectTab) onSelectTab('chart');
   };
+
+  const handleNavigateToChart = () => {
+    handleNavigateToChartWithSymbol(evalSymbol, autoDetectProvider(evalSymbol), evalTimeframe);
+  };
+
 
   const formatTimestamp = (ts: number): string => {
     try {
@@ -267,24 +294,68 @@ export default function StrategyPage({
             </div>
           ) : (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* Builder */}
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <StrategyBuilder
-                  strategy={mode === 'edit' ? activeStrategy : null}
-                  indicators={indicators}
-                  onSaved={handleSaved}
-                  onCancel={handleCancel}
-                />
-              </div>
-
-              {/* Değerlendirme Paneli */}
+              {/* Alt Sekmeler Barı (Kurallar / Çoklu Sembol Taraması) */}
               {mode === 'edit' && activeStrategy && (
+                <div className="flex items-center gap-1 px-4 py-2 bg-[#0a0e1a] border-b border-slate-800/80 flex-shrink-0">
+                  <button
+                    onClick={() => setActiveSubTab('builder')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      activeSubTab === 'builder'
+                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    Kurallar & Tekli Test
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('batch_scanner')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      activeSubTab === 'batch_scanner'
+                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    Çoklu Sembol Taraması (Batch Scanner)
+                  </button>
+                </div>
+              )}
+
+              {activeSubTab === 'batch_scanner' && mode === 'edit' && activeStrategy ? (
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <BatchScannerTab
+                    strategy={activeStrategy}
+                    onSelectSymbolAndShowChart={(sym, prov, tf) => {
+                      handleNavigateToChartWithSymbol(sym, prov, tf);
+                    }}
+                  />
+
+                </div>
+              ) : (
+                <>
+                  {/* Builder */}
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <StrategyBuilder
+                      strategy={mode === 'edit' ? activeStrategy : null}
+                      indicators={indicators}
+                      onSaved={handleSaved}
+                      onCancel={handleCancel}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Değerlendirme Paneli (Sadece Builder sekmesindeyken gösterilir) */}
+              {activeSubTab === 'builder' && mode === 'edit' && activeStrategy && (
                 <>
                   {/* Sürükle-Bırak Ayırıcı Çizgi (Terminal Paneli Ayırıcı) */}
                   <div
                     onMouseDown={handleMouseDownResize}
                     onDoubleClick={() => setEvalPanelHeight(340)}
                     className="group relative h-2.5 bg-[#070b13] hover:bg-indigo-600/40 border-t border-b border-slate-800/80 cursor-row-resize flex items-center justify-center transition-colors select-none z-10 flex-shrink-0"
+
                     title="Yukarı / Aşağı sürükleyerek panel boyutunu ayarlayın (Çift tık: Varsayılan boyut)"
                   >
                     <div className="w-16 h-1 rounded-full bg-slate-700/80 group-hover:bg-indigo-400 transition-colors flex items-center justify-center">

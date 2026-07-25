@@ -183,3 +183,111 @@ class StrategyEngine:
             "win_rate": win_rate,
             "total_pnl_percent": total_pnl_percent,
         }
+
+    def evaluate_symbol(
+        self,
+        strategy_id: str,
+        symbol: str,
+        provider: str,
+        timeframe: str,
+        loader,
+        start_dt,
+        end_dt,
+        limit_bars: int = 1000,
+        param_overrides: dict | None = None,
+        allow_short: bool | None = None,
+    ) -> dict:
+        """Tek bir sembolü yükler ve değerlendirir (batch yardımcı fonksiyonu)."""
+        try:
+            df = loader.load_data(
+                provider_name=provider,
+                symbol=symbol,
+                timeframe=timeframe,
+                start_time=start_dt,
+                end_time=end_dt,
+            )
+            if df.empty:
+                return {
+                    "symbol": symbol,
+                    "error": "Veri bulunamadı",
+                }
+
+            if limit_bars > 0 and len(df) > limit_bars:
+                df = df.tail(limit_bars).reset_index(drop=True)
+
+            res = self.evaluate(
+                strategy_id=strategy_id,
+                df=df,
+                param_overrides=param_overrides,
+                allow_short=allow_short,
+            )
+
+            last_sig = res["signals"][-1] if res["signals"] else None
+
+            return {
+                "symbol": symbol,
+                "total_bars": res["total_bars"],
+                "buy_count": res["buy_count"],
+                "sell_count": res["sell_count"],
+                "total_trades": res["total_trades"],
+                "winning_trades": res["winning_trades"],
+                "losing_trades": res["losing_trades"],
+                "win_rate": res["win_rate"],
+                "total_pnl_percent": res["total_pnl_percent"],
+                "last_signal": last_sig["signal"] if last_sig else None,
+                "last_signal_time": last_sig["timestamp"] if last_sig else None,
+                "error": None,
+            }
+        except Exception as e:
+            return {
+                "symbol": symbol,
+                "error": str(e),
+            }
+
+    def evaluate_batch(
+        self,
+        strategy_id: str,
+        symbols: list[str],
+        provider: str,
+        timeframe: str,
+        loader,
+        start_dt,
+        end_dt,
+        limit_bars: int = 1000,
+        param_overrides: dict | None = None,
+        allow_short: bool | None = None,
+        max_workers: int = 10,
+    ) -> list[dict]:
+        """Tüm sembol grubunu paralel olarak değerlendirir."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        results = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    self.evaluate_symbol,
+                    strategy_id=strategy_id,
+                    symbol=sym,
+                    provider=provider,
+                    timeframe=timeframe,
+                    loader=loader,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                    limit_bars=limit_bars,
+                    param_overrides=param_overrides,
+                    allow_short=allow_short,
+                )
+                for sym in symbols
+            ]
+
+            for future in futures:
+                try:
+                    res = future.result()
+                    results.append(res)
+                except Exception as ex:
+                    print(f"Batch evaluation error: {ex}")
+
+        # PnL'e göre büyükten küçüğe sırala
+        results.sort(key=lambda x: x.get("total_pnl_percent", 0.0) if x.get("error") is None else -99999, reverse=True)
+        return results
+

@@ -73,3 +73,6 @@ storage/parquet/*
 storage/database/*.db
 storage/strategies/*
 !storage/strategies/.gitkeep
+storage/scans/*
+!storage/scans/.gitkeep
+

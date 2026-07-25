@@ -13,12 +13,18 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from app.data.loader import DataLoader
+from app.engines.scanner_engine import ScannerEngine
 from app.engines.strategy_engine import StrategyEngine
 from app.indicators.registry import IndicatorRegistry
 from app.rules.strategy_models import (
+    BatchEvaluateRequest,
+    BatchEvaluateResponse,
+    BatchEvaluateResultItem,
     EvaluateRequest,
     EvaluateResponse,
     IndicatorInfo,
+    SaveScanRequest,
+    ScanHistoryItem,
     SignalResult,
     StrategyCreateRequest,
     StrategyModel,
@@ -29,7 +35,9 @@ router = APIRouter(prefix="/strategy", tags=["strategy"])
 
 # Singleton instance'lar
 _engine = StrategyEngine()
+_scanner = ScannerEngine()
 _loader = DataLoader()
+
 
 
 @router.get("/list")
@@ -229,3 +237,117 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
         win_rate=result.get("win_rate", 0.0),
         total_pnl_percent=result.get("total_pnl_percent", 0.0),
     )
+
+
+@router.post("/{strategy_id}/batch-evaluate")
+def batch_evaluate_strategy(strategy_id: str, request: BatchEvaluateRequest):
+    """
+    Stratejiyi birden fazla sembol üzerinde paralel olarak değerlendirir.
+    """
+    strategy = _engine.get_strategy(strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
+
+    from datetime import timedelta
+
+    if request.end:
+        try:
+            end_dt = datetime.strptime(request.end, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Geçersiz bitiş tarihi formatı (YYYY-MM-DD)")
+    else:
+        end_dt = datetime.now()
+
+    if request.start:
+        try:
+            start_dt = datetime.strptime(request.start, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Geçersiz başlangıç tarihi formatı (YYYY-MM-DD)")
+    else:
+        if request.timeframe in ("1m", "5m", "15m"):
+            start_dt = end_dt - timedelta(days=30)
+        elif request.timeframe in ("1h", "4h"):
+            start_dt = end_dt - timedelta(days=180)
+        else:
+            start_dt = end_dt - timedelta(days=365 * 2)
+
+    limit_bars = request.limit_bars if request.limit_bars is not None else 1000
+
+    results_raw = _engine.evaluate_batch(
+        strategy_id=strategy_id,
+        symbols=request.symbols,
+        provider=request.provider,
+        timeframe=request.timeframe,
+        loader=_loader,
+        start_dt=start_dt,
+        end_dt=end_dt,
+        limit_bars=limit_bars,
+        param_overrides=request.param_overrides,
+        allow_short=request.allow_short,
+    )
+
+    results_items = [
+        BatchEvaluateResultItem(
+            symbol=r["symbol"],
+            total_bars=r.get("total_bars", 0),
+            buy_count=r.get("buy_count", 0),
+            sell_count=r.get("sell_count", 0),
+            total_trades=r.get("total_trades", 0),
+            winning_trades=r.get("winning_trades", 0),
+            losing_trades=r.get("losing_trades", 0),
+            win_rate=r.get("win_rate", 0.0),
+            total_pnl_percent=r.get("total_pnl_percent", 0.0),
+            last_signal=r.get("last_signal"),
+            last_signal_time=r.get("last_signal_time"),
+            error=r.get("error"),
+        )
+        for r in results_raw
+    ]
+
+    # Otomatik olarak tarama geçmişine de kaydet
+    _scanner.save_scan(
+        strategy_id=strategy_id,
+        strategy_name=strategy.get("name", "Strateji"),
+        provider=request.provider,
+        timeframe=request.timeframe,
+        results=results_items,
+    )
+
+    return BatchEvaluateResponse(
+        strategy_id=strategy_id,
+        strategy_name=strategy.get("name", ""),
+        provider=request.provider,
+        timeframe=request.timeframe,
+        scanned_count=len(results_items),
+        results=results_items,
+    )
+
+
+@router.get("/{strategy_id}/scans")
+def get_strategy_scans(strategy_id: str):
+    """Bir stratejiye ait geçmiş tarama kayıtlarını döndürür."""
+    strategy = _engine.get_strategy(strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
+
+    scans = _scanner.get_scans(strategy_id)
+    latest = _scanner.get_latest_scan(strategy_id)
+    return {"strategy_id": strategy_id, "scans": scans, "latest": latest}
+
+
+@router.post("/{strategy_id}/scans")
+def save_strategy_scan(strategy_id: str, request: SaveScanRequest):
+    """Strateji tarama sonucunu manuel olarak kaydeder."""
+    strategy = _engine.get_strategy(strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
+
+    scan_item = _scanner.save_scan(
+        strategy_id=strategy_id,
+        strategy_name=strategy.get("name", "Strateji"),
+        provider=request.provider,
+        timeframe=request.timeframe,
+        results=request.results,
+    )
+    return {"message": "Tarama kaydedildi", "scan": scan_item}
+

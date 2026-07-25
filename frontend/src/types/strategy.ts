@@ -214,3 +214,59 @@ export function createEmptyStrategy(): StrategyCreateRequest {
     allow_short: false,
   };
 }
+
+// ─── Çoklu Sembol Tarama Tipleri ──────────────────────────────────────────────
+
+export interface BatchEvaluateRequest {
+  symbols: string[];
+  provider: string;
+  timeframe: string;
+  start?: string;
+  end?: string;
+  limit_bars?: number;
+  allow_short?: boolean;
+  param_overrides?: Record<string, number>;
+}
+
+export interface BatchEvaluateResultItem {
+  symbol: string;
+  total_bars: number;
+  buy_count: number;
+  sell_count: number;
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  win_rate: number;
+  total_pnl_percent: number;
+  last_signal?: string | null;
+  last_signal_time?: number | null;
+  error?: string | null;
+}
+
+export interface BatchEvaluateResponse {
+  strategy_id: string;
+  strategy_name: string;
+  provider: string;
+  timeframe: string;
+  timestamp: string;
+  scanned_count: number;
+  results: BatchEvaluateResultItem[];
+}
+
+export interface ScanHistoryItem {
+  scan_id: string;
+  strategy_id: string;
+  strategy_name: string;
+  provider: string;
+  timeframe: string;
+  created_at: string;
+  scanned_count: number;
+  results: BatchEvaluateResultItem[];
+}
+
+export interface SaveScanRequest {
+  provider: string;
+  timeframe: string;
+  results: BatchEvaluateResultItem[];
+}
+

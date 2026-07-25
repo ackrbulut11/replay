@@ -140,9 +140,15 @@ class DataLoader:
             needed_start = start_time
             needed_end = end_time
             
-            # Eğer dosya son 5 dakika içinde güncellendiyse (veya talep edilen aralık kapsanıyorsa), doğrudan önbellekten dön
+            # Başlangıç tarihi kapsanıyor mu? (Geriye dönük geçmiş verimiz yeterli mi?)
+            has_start_covered = (needed_start >= cached_start)
+            
+            # Bitiş tarihi kapsanıyor mu veya dosya son 5 dakika içinde güncellendi mi?
             cache_age_seconds = time.time() - file_mtime
-            if (needed_start >= cached_start and needed_end <= cached_end) or (cache_age_seconds < 300):
+            has_end_covered = (needed_end <= cached_end) or (cache_age_seconds < 300)
+            
+            # Eğer HEM geçmiş (başlangıç) HEM DE güncel (bitiş) verisi kapsanıyorsa, doğrudan önbellekten dön
+            if has_start_covered and has_end_covered:
                 return df[(df['timestamp'] >= needed_start) & (df['timestamp'] <= needed_end)].reset_index(drop=True)
 
             # 4. Gerekirse sadece eksik parçayı dış API'den tamamla

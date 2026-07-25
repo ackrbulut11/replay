@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, RefreshCw, X, ChevronDown, Flag, Trash2,
-  Sparkles, ArrowUpDown, GripVertical,
+  Sparkles, ArrowUpDown, GripVertical, Bookmark,
 } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
@@ -32,6 +32,7 @@ function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItem
   };
 
   const isPositive = (item.changePercent || 0) >= 0;
+  const isFavorited = watchlistStore.isSymbolInAnyList(item.symbol, item.provider);
 
   const getItemFlagStyle = (provider?: string, exchange?: string) => {
     const p = (provider || '').toLowerCase();
@@ -109,17 +110,22 @@ function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItem
         <button
           onClick={(e) => {
             e.stopPropagation();
-            watchlistStore.removeSymbol(item.symbol, item.provider);
+            watchlistStore.toggleSymbol(item.symbol, item.provider, item.name, item.exchange);
           }}
-          className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 hover:bg-red-950/40 rounded transition-all"
-          title="Listeden Çıkar"
+          className={`p-1 rounded transition-all ${
+            isFavorited
+              ? 'text-amber-400 opacity-100 hover:bg-amber-500/10'
+              : 'text-slate-500 opacity-0 group-hover:opacity-100 hover:text-amber-300 hover:bg-slate-800'
+          }`}
+          title={isFavorited ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Bookmark className={`w-3.5 h-3.5 ${isFavorited ? 'fill-amber-400 text-amber-400' : ''}`} />
         </button>
       </div>
     </div>
   );
 }
+
 
 interface WatchlistPanelProps {
   currentSymbol: string;

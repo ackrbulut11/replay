@@ -477,12 +477,17 @@ export default function StrategyPage({
                       )}
                     </div>
 
-                    {/* Test Geçmişi Şeridi (Geçmiş Parite Çalıştırma Kayıtları) */}
-                    {singleEvalHistory.length > 0 && (
-                      <div className="px-4 py-1.5 flex items-center gap-2 overflow-x-auto custom-scrollbar border-b border-slate-800/40 bg-slate-950/40 flex-shrink-0 select-none">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
-                          📜 Test Geçmişi:
+                    {/* Test Geçmişi Şeridi (Geçmiş Parite Çalıştırma Kayıtları - Her Zaman Görünür) */}
+                    <div className="px-4 py-1.5 flex items-center gap-2 overflow-x-auto custom-scrollbar border-b border-slate-800/40 bg-slate-950/60 flex-shrink-0 select-none">
+                      <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
+                        📜 Test Geçmişi:
+                      </span>
+
+                      {singleEvalHistory.length === 0 ? (
+                        <span className="text-[11px] text-slate-500 italic">
+                          Henüz kayıtlı test yok. Yukarıdaki "▶ Çalıştır" butonuna bastığınız pariteler buraya eklenecektir.
                         </span>
+                      ) : (
                         <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5">
                           {singleEvalHistory.map((item) => {
                             const isCurrent =
@@ -505,13 +510,13 @@ export default function StrategyPage({
                                 }}
                                 className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer whitespace-nowrap border ${
                                   isCurrent
-                                    ? 'bg-indigo-950/80 border-indigo-500/80 text-white shadow-md shadow-indigo-500/20'
-                                    : 'bg-slate-900/60 border-slate-800/80 hover:bg-slate-800/60 text-slate-300'
+                                    ? 'bg-indigo-950/90 border-indigo-500 text-white shadow-md shadow-indigo-500/20 font-bold'
+                                    : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/80 text-slate-300'
                                 }`}
                                 title={`${item.strategy_name} • ${item.executed_at} tarihinde çalıştırıldı. Tıklayarak sonuçlarını inceleyin.`}
                               >
                                 <span className="font-bold text-slate-200">{item.symbol}</span>
-                                <span className="text-[10px] text-slate-500">({item.timeframe})</span>
+                                <span className="text-[10px] text-slate-400">({item.timeframe})</span>
                                 <span
                                   className={`text-[11px] font-bold ${
                                     isPositive ? 'text-emerald-400' : 'text-red-400'
@@ -525,7 +530,7 @@ export default function StrategyPage({
                                     e.stopPropagation();
                                     strategyStore.deleteSingleEvalHistoryItem(item.id);
                                   }}
-                                  className="text-slate-600 hover:text-red-400 p-0.5 rounded transition-colors ml-0.5"
+                                  className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors ml-0.5"
                                   title="Bu testi geçmişten sil"
                                 >
                                   <X className="w-3 h-3" />
@@ -533,9 +538,19 @@ export default function StrategyPage({
                               </div>
                             );
                           })}
+
+                          {singleEvalHistory.length > 1 && (
+                            <button
+                              onClick={() => strategyStore.clearSingleEvalHistory()}
+                              className="text-[10px] text-slate-500 hover:text-red-400 underline ml-2 whitespace-nowrap"
+                              title="Tüm geçmişi temizle"
+                            >
+                              Temizle
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     {/* Hata */}
                     {error && (

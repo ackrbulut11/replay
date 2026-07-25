@@ -524,12 +524,9 @@ export default function ConditionEditor({
                 handleSelectTemplate(e.target.value);
                 e.target.value = '';
               }}
-              className={`text-xs font-semibold rounded-lg px-2.5 py-1 outline-none cursor-pointer border transition-all ${
-                isSellGroup
-                  ? 'bg-red-950/40 border-red-500/40 text-red-300 hover:bg-red-900/50'
-                  : 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/50'
-              }`}
+              className="text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer outline-none"
             >
+
               <option value="" disabled>
                 ⚡ Hızlı Şablon Ekle...
               </option>

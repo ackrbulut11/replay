@@ -99,26 +99,17 @@ export default function StrategyPage({
     if (currentTimeframe) setEvalTimeframe(currentTimeframe);
   }, [currentTimeframe]);
 
-  // İlk yükleme ve aktif strateji değişiminde mod senkronizasyonu
+  // İlk yükleme: strateji listesi ve indikatörleri çek (otomatik seçim yapma)
   useEffect(() => {
-    strategyStore.fetchStrategies().then(() => {
-      const state = strategyStore.getState();
-      if (state.strategies.length > 0 && !state.activeStrategy) {
-        strategyStore.setActiveStrategy(state.strategies[0]);
-        setMode('edit');
-      }
-    });
+    strategyStore.fetchStrategies();
     strategyStore.fetchIndicators();
   }, []);
 
   useEffect(() => {
     if (activeStrategy) {
       setEvalAllowShort(Boolean(activeStrategy.allow_short));
-    } else if (strategies.length > 0 && mode === 'list') {
-      strategyStore.setActiveStrategy(strategies[0]);
-      setMode('edit');
     }
-  }, [activeStrategy, strategies]);
+  }, [activeStrategy]);
 
   const handleSelectStrategy = (strategy: Strategy) => {
     strategyStore.setActiveStrategy(strategy);

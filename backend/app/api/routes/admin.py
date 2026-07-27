@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_admin
-from app.database.models import Alert, ReplaySession, Strategy, User
+from app.database.models import Alert, Strategy, User, Watchlist
 from app.database.postgres import get_db
 
 # Tüm admin uçları ADMIN_EMAILS beyaz listesiyle korunur (router seviyesinde).
@@ -27,7 +27,8 @@ class AdminUserItem(BaseModel):
     alerts_count: int = 0
     # Kullanıcının alarm kurduğu pariteler (tekrarsız, alfabetik)
     alert_symbols: List[str] = []
-    replay_sessions_count: int = 0
+    # İzleme listelerindeki tekrarsız parite sayısı
+    watchlist_count: int = 0
 
     class Config:
         from_attributes = True
@@ -37,7 +38,7 @@ class AdminStatsResponse(BaseModel):
     total_users: int
     total_strategies: int
     total_alerts: int
-    total_replay_sessions: int
+    total_watchlist_symbols: int
     latest_users: List[AdminUserItem]
 
 
@@ -79,17 +80,36 @@ def _strategy_counts(db: Session, user_ids: List[str]) -> dict[str, int]:
     return {user_id: count for user_id, count in rows}
 
 
-def _replay_counts(db: Session, user_ids: List[str]) -> dict[str, int]:
-    """Kullanıcı başına replay oturumu sayısı (tek sorguda)."""
+def _count_watchlist_symbols(lists: Any) -> int:
+    """
+    Bir kullanıcının izleme listelerindeki tekrarsız parite sayısı.
+
+    Listeler JSON kolonunda tutulduğu için sayım SQL yerine burada yapılır.
+    Aynı sembol birden fazla listede olabilir; bir kez sayılır.
+    """
+    if not isinstance(lists, list):
+        return 0
+
+    symbols: set[str] = set()
+    for group in lists:
+        if not isinstance(group, dict):
+            continue
+        for item in group.get("items", []) or []:
+            if isinstance(item, dict) and item.get("id"):
+                symbols.add(str(item["id"]))
+    return len(symbols)
+
+
+def _watchlist_counts(db: Session, user_ids: List[str]) -> dict[str, int]:
+    """Kullanıcı başına izlenen tekrarsız parite sayısı (tek sorguda)."""
     if not user_ids:
         return {}
     rows = (
-        db.query(ReplaySession.user_id, func.count(ReplaySession.id))
-        .filter(ReplaySession.user_id.in_(user_ids))
-        .group_by(ReplaySession.user_id)
+        db.query(Watchlist.user_id, Watchlist.lists)
+        .filter(Watchlist.user_id.in_(user_ids))
         .all()
     )
-    return {user_id: count for user_id, count in rows}
+    return {user_id: _count_watchlist_symbols(lists) for user_id, lists in rows}
 
 
 def _build_items(db: Session, users: List[User]) -> List[AdminUserItem]:
@@ -97,7 +117,7 @@ def _build_items(db: Session, users: List[User]) -> List[AdminUserItem]:
     user_ids = [u.id for u in users]
     alerts = _alert_summary(db, user_ids)
     strategies = _strategy_counts(db, user_ids)
-    replays = _replay_counts(db, user_ids)
+    watchlists = _watchlist_counts(db, user_ids)
 
     items: List[AdminUserItem] = []
     for u in users:
@@ -113,7 +133,7 @@ def _build_items(db: Session, users: List[User]) -> List[AdminUserItem]:
                 strategies_count=strategies.get(u.id, 0),
                 alerts_count=alert_count,
                 alert_symbols=alert_symbols,
-                replay_sessions_count=replays.get(u.id, 0),
+                watchlist_count=watchlists.get(u.id, 0),
             )
         )
     return items
@@ -135,10 +155,23 @@ def get_admin_stats(db: Session = Depends(get_db)):
     """
     users = db.query(User).order_by(User.created_at.desc()).limit(5).all()
 
+    # Platform genelinde izlenen tekrarsız parite sayısı
+    all_watchlists = db.query(Watchlist.lists).all()
+    all_symbols: set[str] = set()
+    for (lists,) in all_watchlists:
+        if not isinstance(lists, list):
+            continue
+        for group in lists:
+            if not isinstance(group, dict):
+                continue
+            for item in group.get("items", []) or []:
+                if isinstance(item, dict) and item.get("id"):
+                    all_symbols.add(str(item["id"]))
+
     return AdminStatsResponse(
         total_users=db.query(User).count(),
         total_strategies=db.query(Strategy).count(),
         total_alerts=db.query(Alert).count(),
-        total_replay_sessions=db.query(ReplaySession).count(),
+        total_watchlist_symbols=len(all_symbols),
         latest_users=_build_items(db, users),
     )

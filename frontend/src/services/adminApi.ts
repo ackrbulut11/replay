@@ -20,14 +20,15 @@ export interface AdminUserItem {
   alerts_count: number;
   /** Kullanıcının alarm kurduğu pariteler (tekrarsız, alfabetik) */
   alert_symbols: string[];
-  replay_sessions_count: number;
+  /** İzleme listelerindeki tekrarsız parite sayısı */
+  watchlist_count: number;
 }
 
 export interface AdminStats {
   total_users: number;
   total_strategies: number;
   total_alerts: number;
-  total_replay_sessions: number;
+  total_watchlist_symbols: number;
   latest_users: AdminUserItem[];
 }
 

@@ -94,6 +94,8 @@ Only the market parquet caches still use this file layout. Strategies, scans and
 
 Alerts follow exactly the same ownership pattern as strategies: `get_owned_alert` in [alerts.py](backend/app/api/routes/alerts.py) (404, not 403), engine methods take `(db, ..., user_id)`, and `check_alerts` only ever evaluates the caller's own alerts.
 
+Watchlists are one row per user (`watchlists.lists`, a JSON array), so ownership is just the `user_id` filter — no id-based gate. Only user-editable lists are stored; the BIST/NASDAQ/Kripto/Forex lists are *derived* from "Favoriler" by `sanitizeLists` in `store/watchlistStore.ts` and must never be persisted. Quote fields (`lastPrice`/`change`/`changePercent`) are stripped before saving — they change on every refresh, and persisting them caused a PUT storm. `scheduleServerSave` also skips the write when the structural payload is unchanged.
+
 ### Auth
 Google OAuth 2.0 → `POST /api/auth/google` → app-issued JWT (access + refresh). [dependencies.py](backend/app/auth/dependencies.py) provides `get_current_user` (401 on missing/invalid token *or* a token whose user no longer exists), `get_current_user_optional` (returns `None`), and `get_current_admin` (403 unless the token's email is in `ADMIN_EMAILS`).
 

@@ -134,7 +134,7 @@ TradingResearchPlatform/
 │   │   │
 │   │   ├── database/                 # PostgreSQL & SQLite ORM Models
 │   │   │   ├── postgres.py           # SQLAlchemy Engine & Session
-│   │   │   ├── models.py             # User, Strategy, StrategyScan, Alert, ReplaySession, JournalTrade, ChartLayout
+│   │   │   ├── models.py             # User, Strategy, StrategyScan, Alert, Watchlist, ReplaySession, JournalTrade, ChartLayout
 │   │   │   └── migrations/           # Alembic
 │   │   │       ├── env.py
 │   │   │       ├── script.py.mako

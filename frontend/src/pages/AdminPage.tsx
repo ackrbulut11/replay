@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Users, SlidersHorizontal, Bell, PlayCircle, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Users, SlidersHorizontal, Bell, Star, RefreshCw, ShieldAlert } from 'lucide-react';
 import { getAdminStats, getAdminUsers, type AdminStats, type AdminUserItem } from '../services/adminApi';
 
 function formatDate(value?: string | null): string {
@@ -111,7 +111,7 @@ export default function AdminPage() {
           <StatCard label="Toplam Kullanıcı" value={stats.total_users} icon={Users} />
           <StatCard label="Toplam Strateji" value={stats.total_strategies} icon={SlidersHorizontal} />
           <StatCard label="Toplam Alarm" value={stats.total_alerts} icon={Bell} />
-          <StatCard label="Replay Oturumu" value={stats.total_replay_sessions} icon={PlayCircle} />
+          <StatCard label="İzlenen Parite" value={stats.total_watchlist_symbols} icon={Star} />
         </div>
       )}
 
@@ -133,7 +133,7 @@ export default function AdminPage() {
                   <th className="text-right font-semibold px-4 py-2.5">Strateji</th>
                   <th className="text-right font-semibold px-4 py-2.5">Alarm</th>
                   <th className="text-left font-semibold px-4 py-2.5">Alarm Pariteleri</th>
-                  <th className="text-right font-semibold px-4 py-2.5">Replay</th>
+                  <th className="text-right font-semibold px-4 py-2.5">Favori</th>
                 </tr>
               </thead>
               <tbody>
@@ -178,7 +178,7 @@ export default function AdminPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.replay_sessions_count}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.watchlist_count}</td>
                   </tr>
                 ))}
               </tbody>

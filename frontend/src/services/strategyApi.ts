@@ -17,48 +17,9 @@ import type {
   IndicatorInfo,
 } from '../types/strategy';
 
-import { TOKEN_STORAGE_KEY, notifyUnauthorized } from '../context/AuthContext';
+import { apiRequest as request } from './api';
 
 const API_BASE = '/api/strategy';
-
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
-
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const headers = { ...getAuthHeaders(), ...(options?.headers as Record<string, string> || {}) };
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    // Token yok/geçersiz/süresi dolmuş: oturumu düşür, giriş ekranına dön.
-    if (response.status === 401) {
-      notifyUnauthorized();
-      throw new Error('Oturumunuz sona erdi. Lütfen tekrar giriş yapın.');
-    }
-
-    // Yakalanmamış sunucu hataları düz metin döner; response.json() burada
-    // patlar ve hata mesajı kaybolurdu. Önce metni okuyup JSON'a çevirmeyi
-    // deniyoruz ki gerçek sebep arayüzde görünsün.
-    const raw = await response.text().catch(() => '');
-    let detail = '';
-    try {
-      detail = JSON.parse(raw)?.detail ?? '';
-    } catch {
-      detail = raw.trim();
-    }
-    throw new Error(detail || `API hatası: ${response.status}`);
-  }
-
-  return response.json();
-}
 
 // ─── Strategy CRUD ───────────────────────────────────────────────────────────
 

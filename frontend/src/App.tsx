@@ -8,6 +8,7 @@ import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';
 import StrategyPage from './pages/StrategyPage';
+import AdminPage from './pages/AdminPage';
 import AlertsPanel from './components/alerts/AlertsPanel';
 import CreateAlarmModal from './components/alerts/CreateAlarmModal';
 import { useAlertStore, alertStore } from './store/alertStore';
@@ -27,7 +28,7 @@ interface CandleData {
 }
 
 function App() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<NavigationTab>('chart');
 
@@ -48,6 +49,14 @@ function App() {
 
   const [replayState] = useReplayStore();
   const [alertState] = useAlertStore();
+
+  // Admin sekmesinde yetkisi olmayan bir hesaba geçilirse (ör. çıkış yapıp
+  // başka hesapla girince) kullanıcıyı boş bir hata ekranında bırakma.
+  useEffect(() => {
+    if (activeTab === 'admin' && !user?.is_admin) {
+      setActiveTab('chart');
+    }
+  }, [activeTab, user?.is_admin]);
 
   // Replay sekmesine geçildiğinde Replay modunu aktif et, Grafik Analiz sekmesine dönüldüğünde ise Replay modunu otomatik kapat
   useEffect(() => {
@@ -167,7 +176,11 @@ function App() {
 
   return (
     <DashboardLayout activeTab={activeTab} onSelectTab={setActiveTab}>
-      {activeTab === 'strategy' ? (
+      {activeTab === 'admin' ? (
+        <ErrorBoundary fallbackTitle="Admin Paneli Hatası">
+          <AdminPage />
+        </ErrorBoundary>
+      ) : activeTab === 'strategy' ? (
         <ErrorBoundary fallbackTitle="Strateji Ekranı Hatası">
           <StrategyPage
             onSelectTab={setActiveTab}

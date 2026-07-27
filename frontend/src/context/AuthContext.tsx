@@ -7,6 +7,8 @@ export interface User {
   avatar_url?: string;
   initial_balance: number;
   currency: string;
+  /** Sunucudaki ADMIN_EMAILS listesine göre hesaplanır; yalnızca arayüz ipucudur. */
+  is_admin?: boolean;
 }
 
 interface AuthContextType {

@@ -7,10 +7,11 @@ import {
   Search,
   History,
   BookOpen,
+  ShieldCheck,
   LogOut,
 } from 'lucide-react';
 
-export type NavigationTab = 'chart' | 'strategy' | 'replay' | 'scanner' | 'backtest' | 'journal';
+export type NavigationTab = 'chart' | 'strategy' | 'replay' | 'scanner' | 'backtest' | 'journal' | 'admin';
 
 interface SidebarProps {
   activeTab: NavigationTab;
@@ -18,7 +19,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navItems: { id: NavigationTab; label: string; icon: any }[] = [
     { id: 'chart', label: 'Grafik & Analiz', icon: LineChart },
     { id: 'strategy', label: 'Strateji Motoru', icon: SlidersHorizontal },
@@ -27,6 +28,12 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
     { id: 'backtest', label: 'Backtest', icon: History },
     { id: 'journal', label: 'Trade Journal', icon: BookOpen },
   ];
+
+  // Admin sekmesi yalnızca yetkili hesaba görünür. Bu sadece görsel bir
+  // filtre; uçların yetkisi her istekte sunucuda ayrıca kontrol edilir.
+  if (user?.is_admin) {
+    navItems.push({ id: 'admin', label: 'Admin Paneli', icon: ShieldCheck });
+  }
 
   return (
     <aside className="w-14 bg-[#0a0e1a] border-r border-slate-800/80 flex flex-col justify-between items-center py-3 px-1.5 select-none flex-shrink-0">

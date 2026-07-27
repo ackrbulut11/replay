@@ -45,9 +45,19 @@ export const TOKEN_STORAGE_KEY = 'replay_access_token';
 /** API katmanı 401 aldığında yayınlanır; AuthProvider dinleyip oturumu düşürür. */
 export const UNAUTHORIZED_EVENT = 'replay:unauthorized';
 
+/**
+ * Oturum temizlendiğinde yayınlanır. Store'lar kullanıcıya özel durumlarını
+ * bununla sıfırlar. Doğrudan import yerine event kullanılıyor: aksi halde
+ * AuthContext -> store -> services/api -> AuthContext döngüsü oluşuyor.
+ */
+export const SESSION_CLEARED_EVENT = 'replay:session-cleared';
+
 /** Oturum verisini tarayıcıdan tamamen siler. */
 export function clearStoredSession(): void {
   SESSION_KEYS.forEach((key) => localStorage.removeItem(key));
+  // Store'lar kullanıcıya özel durumlarını sıfırlasın; aksi halde bir sonraki
+  // kullanıcının izleme listesi öncekinin hesabına yazılabilir.
+  window.dispatchEvent(new Event(SESSION_CLEARED_EVENT));
 }
 
 /** Token geçersizse (401) oturumu düşürmek için API katmanından çağrılır. */

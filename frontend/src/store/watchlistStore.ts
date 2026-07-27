@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { apiRequest } from '../services/api';
+import { TOKEN_STORAGE_KEY } from '../context/AuthContext';
 
 export type FlagColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple';
 
@@ -170,9 +172,75 @@ function saveToLocalStorage() {
   }
 }
 
+// ─── Sunucu senkronizasyonu ────────────────────────────────────────────────
+//
+// Listeler artık kullanıcıya bağlı olarak veritabanında saklanıyor; localStorage
+// yalnızca ilk boyamada anında içerik göstermek için önbellek olarak kullanılıyor.
+// Panel genişliği / açık-kapalı gibi cihaza özel tercihler sunucuya gitmez.
+
+/** Sunucuda saklanan listeler: türetilmiş piyasa listeleri hariç tutulur. */
+const DERIVED_LIST_IDS = new Set(['bist_favoriler', 'nasdaq_favoriler', 'kripto', 'forex_favoriler']);
+
+/**
+ * Sunucuya gidecek biçimi üretir.
+ *
+ * Fiyat alanları (lastPrice/change/changePercent) bilinçli olarak dışarıda
+ * bırakılır: bunlar her fiyat yenilemesinde değişen geçici verilerdir,
+ * kullanıcının listesi değil. Dahil edilseydi her fiyat güncellemesi sunucuya
+ * gereksiz bir yazma tetiklerdi.
+ */
+function persistableLists(lists: WatchlistGroup[]): WatchlistGroup[] {
+  return lists
+    .filter((g) => !DERIVED_LIST_IDS.has(g.id))
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      emoji: g.emoji,
+      color: g.color,
+      items: g.items.map((i) => ({
+        id: i.id,
+        symbol: i.symbol,
+        provider: i.provider,
+        name: i.name,
+        exchange: i.exchange,
+        flagColor: i.flagColor,
+      })),
+    }));
+}
+
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+let syncedOnce = false;
+let syncInFlight = false;
+// Son sunucuya yazılan içerik; aynı içerik tekrar gönderilmesin.
+let lastPersistedJson = '';
+
+function scheduleServerSave(delayMs = 800) {
+  // Kullanıcı henüz senkronize olmadıysa yazma: sunucudaki kaydı
+  // varsayılanlarla ezme riski olur.
+  if (!syncedOnce) return;
+
+  const payload = JSON.stringify(persistableLists(currentState.lists));
+  // Yalnızca fiyatlar değiştiyse (liste yapısı aynıysa) sunucuya gitme.
+  if (payload === lastPersistedJson) return;
+
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    try {
+      await apiRequest('/api/watchlist', { method: 'PUT', body: `{"lists":${payload}}` });
+      lastPersistedJson = payload;
+    } catch (e) {
+      // Ağ hatasında yerel kopya korunur; bir sonraki değişiklikte tekrar denenir.
+      console.warn('İzleme listesi sunucuya kaydedilemedi:', e);
+    }
+  }, delayMs);
+}
+
 function applyState(partial: Partial<WatchlistState>) {
   currentState = { ...currentState, ...partial };
   saveToLocalStorage();
+  if (partial.lists) {
+    scheduleServerSave();
+  }
   listeners.forEach((listener) => listener(currentState));
 }
 
@@ -196,6 +264,62 @@ export const watchlistStore = {
     return () => {
       listeners.delete(listener);
     };
+  },
+
+  /**
+   * Giriş yapıldıktan sonra listeleri sunucudan yükler.
+   *
+   * Sunucuda kayıt yoksa (ilk geçiş veya yeni kullanıcı) yereldeki listeler
+   * bir kez yukarı gönderilir; böylece mevcut favoriler kaybolmaz.
+   */
+  syncFromServer: async () => {
+    // Token henüz yerleşmediyse istek 401 alır ve oturumu düşürür; bekle.
+    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) return;
+    // Aynı anda birden fazla senkronizasyon çalışmasın (React StrictMode
+    // geliştirmede effect'leri iki kez çağırır).
+    if (syncInFlight) return;
+    syncInFlight = true;
+
+    try {
+      const data = await apiRequest<{ lists: WatchlistGroup[] }>('/api/watchlist');
+      const serverLists = data?.lists ?? [];
+
+      if (serverLists.length > 0) {
+        // Sunucudaki kayıt esastır.
+        lastPersistedJson = JSON.stringify(persistableLists(serverLists));
+        syncedOnce = true;
+        applyState({ lists: sanitizeLists(serverLists) });
+      } else {
+        // Sunucu boş (yeni kullanıcı veya ilk geçiş): yereldekini yukarı taşı.
+        const payload = JSON.stringify(persistableLists(currentState.lists));
+        await apiRequest('/api/watchlist', { method: 'PUT', body: `{"lists":${payload}}` });
+        lastPersistedJson = payload;
+        syncedOnce = true;
+      }
+      watchlistStore.fetchQuotes();
+    } catch (e) {
+      // Sunucuya ulaşılamazsa yerel kopyayla çalışmaya devam edilir.
+      console.warn('İzleme listesi sunucudan alınamadı:', e);
+    } finally {
+      syncInFlight = false;
+    }
+  },
+
+  /**
+   * Oturum kapandığında senkronizasyon durumunu sıfırlar.
+   *
+   * Aksi halde çıkış ile bir sonraki kullanıcının senkronizasyonu arasındaki
+   * kısa aralıkta yapılan bir değişiklik, önceki kullanıcının listelerini yeni
+   * hesaba yazabilir.
+   */
+  resetForLogout: () => {
+    syncedOnce = false;
+    syncInFlight = false;
+    lastPersistedJson = '';
+    if (syncTimer) {
+      clearTimeout(syncTimer);
+      syncTimer = null;
+    }
   },
 
   togglePanel: () => {
@@ -357,6 +481,13 @@ export const watchlistStore = {
   },
 
 };
+
+// Oturum kapandığında senkronizasyon durumunu sıfırla (bkz. SESSION_CLEARED_EVENT).
+if (typeof window !== 'undefined') {
+  window.addEventListener('replay:session-cleared', () => {
+    watchlistStore.resetForLogout();
+  });
+}
 
 export function useWatchlistStore(): [WatchlistState, (partial: Partial<WatchlistState> | ((prev: WatchlistState) => Partial<WatchlistState>)) => void] {
   const [state, setState] = useState<WatchlistState>(watchlistStore.getState());

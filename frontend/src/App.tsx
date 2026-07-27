@@ -5,6 +5,7 @@ import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToo
 import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
+import { watchlistStore } from './store/watchlistStore';
 import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';
 import StrategyPage from './pages/StrategyPage';
@@ -49,6 +50,14 @@ function App() {
 
   const [replayState] = useReplayStore();
   const [alertState] = useAlertStore();
+
+  // İzleme listesi kullanıcıya bağlı olarak sunucuda tutuluyor; giriş
+  // yapıldığında sunucudaki kopyayı yükle. Kullanıcı değişince tekrar çalışır.
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      watchlistStore.syncFromServer();
+    }
+  }, [isAuthenticated, user?.id]);
 
   // Admin sekmesinde yetkisi olmayan bir hesaba geçilirse (ör. çıkış yapıp
   // başka hesapla girince) kullanıcıyı boş bir hata ekranında bırakma.

@@ -19,6 +19,8 @@ class User(Base):
     currency = Column(String(10), default="USD")
     default_risk_percentage = Column(Float, default=1.0)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Her basarili girisde guncellenir; admin panelinde son aktiflik gostergesi.
+    last_login_at = Column(DateTime, nullable=True)
 
     # Relationships
     strategies = relationship("Strategy", back_populates="user", cascade="all, delete-orphan")

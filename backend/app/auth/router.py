@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -122,7 +124,8 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
             google_id=user_info["google_id"],
             email=user_info["email"],
             name=user_info["name"],
-            avatar_url=user_info["avatar_url"]
+            avatar_url=user_info["avatar_url"],
+            last_login_at=datetime.utcnow(),
         )
         db.add(user)
         db.commit()
@@ -133,6 +136,7 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
         user.avatar_url = user_info.get("avatar_url", user.avatar_url)
         if not user.google_id:
             user.google_id = user_info.get("google_id")
+        user.last_login_at = datetime.utcnow()
         db.commit()
 
     # Access ve Refresh token üret

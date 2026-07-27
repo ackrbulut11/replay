@@ -5,7 +5,7 @@
  * timeframe filtreleri ve JSON önizleme.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Save,
   X,
@@ -17,6 +17,7 @@ import {
   Settings2,
   Filter,
   Info,
+  Trophy,
 } from 'lucide-react';
 import ConditionEditor from './ConditionEditor';
 import type {
@@ -47,9 +48,19 @@ export default function StrategyBuilder({
   const isEditing = strategy !== null;
   const { singleEvalHistory, evaluateResult } = useStrategyStore();
 
-  const currentStrategyLogs = strategy
-    ? singleEvalHistory.filter((item) => item.strategy_id === strategy.id)
-    : [];
+  // Store geçmişi zaten en yeni en üstte olacak şekilde tutuyor.
+  const currentStrategyLogs = useMemo(
+    () => (strategy ? singleEvalHistory.filter((item) => item.strategy_id === strategy.id) : []),
+    [singleEvalHistory, strategy]
+  );
+
+  // En başarılı test (en yüksek toplam PnL %) — önizlemede seçili gösterilir.
+  const bestLog = useMemo(() => {
+    if (currentStrategyLogs.length === 0) return null;
+    return currentStrategyLogs.reduce((best, item) =>
+      item.total_pnl_percent > best.total_pnl_percent ? item : best
+    );
+  }, [currentStrategyLogs]);
 
   // Form state
   const [name, setName] = useState('');
@@ -68,6 +79,8 @@ export default function StrategyBuilder({
   const [showTfFilters, setShowTfFilters] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   // Mevcut stratejiyi forma yükle
   useEffect(() => {
@@ -94,6 +107,28 @@ export default function StrategyBuilder({
     }
     setSaveError(null);
   }, [strategy]);
+
+  // Dışarı tıklanınca geçmiş listesini kapat
+  useEffect(() => {
+    if (!showHistory) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showHistory]);
+
+  // Strateji değiştiğinde en başarılı testi önizlemeye yükle
+  useEffect(() => {
+    setShowHistory(false);
+    if (bestLog) {
+      strategyStore.loadSingleEvalHistoryItem(bestLog);
+    }
+    // Sadece strateji değişiminde çalışsın; yeni test sonucunu ezmemeli.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategy?.id]);
 
   // ─── Parametre İşlemleri ────────────────────────────────────────────────
 
@@ -220,70 +255,132 @@ export default function StrategyBuilder({
           {isEditing ? 'Strateji Düzenle' : 'Yeni Strateji'}
         </h2>
 
-        {/* Orta: Test Geçmişi (Sadece seçili stratejiye ait) */}
-        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar flex-1 min-w-0 mx-2">
-          <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1 whitespace-nowrap flex-shrink-0">
-            📜 Test Geçmişi:
-          </span>
-
-          {currentStrategyLogs.length === 0 ? (
-            <span className="text-[11px] text-slate-500 italic truncate">
-              {strategy ? `"${strategy.name}" için henüz test kaydı yok.` : 'Henüz test kaydı yok.'}
+        {/* Orta: Test Geçmişi (Sadece seçili stratejiye ait) — açılır liste */}
+        <div ref={historyRef} className="relative flex-1 min-w-0 mx-2">
+          <button
+            onClick={() => currentStrategyLogs.length > 0 && setShowHistory(!showHistory)}
+            disabled={currentStrategyLogs.length === 0}
+            className={`flex items-center gap-2 w-full max-w-md px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
+              currentStrategyLogs.length === 0
+                ? 'border-slate-800 bg-slate-900/50 text-slate-500 cursor-default'
+                : 'border-slate-700/80 bg-slate-900/80 hover:bg-slate-800/80 text-slate-300'
+            }`}
+            title={
+              currentStrategyLogs.length === 0
+                ? 'Henüz test kaydı yok'
+                : 'Test geçmişini aç/kapat'
+            }
+          >
+            <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider whitespace-nowrap flex-shrink-0">
+              📜 Test Geçmişi
             </span>
-          ) : (
-            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar py-0.5">
-              {currentStrategyLogs.map((item) => {
-                const isCurrent =
-                  evaluateResult?.symbol === item.symbol &&
-                  evaluateResult?.timeframe === item.timeframe &&
-                  evaluateResult?.strategy_id === item.strategy_id;
-                const isPositive = item.total_pnl_percent >= 0;
 
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      strategyStore.loadSingleEvalHistoryItem(item);
-                    }}
-                    className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer whitespace-nowrap border ${
-                      isCurrent
-                        ? 'bg-indigo-950/90 border-indigo-500 text-white shadow-md shadow-indigo-500/20 font-bold'
-                        : 'bg-slate-900/80 border-slate-800 hover:bg-slate-800/80 text-slate-300'
-                    }`}
-                    title={`${item.strategy_name} • ${item.executed_at} tarihinde çalıştırıldı. Tıklayarak sonuçlarını inceleyin.`}
-                  >
-                    <span className="font-bold text-slate-200">{item.symbol}</span>
-                    <span className="text-[10px] text-slate-400">({item.timeframe})</span>
+            {currentStrategyLogs.length === 0 ? (
+              <span className="text-[11px] text-slate-500 italic truncate">
+                {strategy ? `"${strategy.name}" için kayıt yok` : 'Kayıt yok'}
+              </span>
+            ) : (
+              <>
+                <span className="text-[10px] text-slate-500 flex-shrink-0">
+                  ({currentStrategyLogs.length})
+                </span>
+                {/* Önizleme: en başarılı test */}
+                {bestLog && (
+                  <span className="flex items-center gap-1.5 font-mono truncate">
+                    <Trophy className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                    <span className="font-bold text-slate-200">{bestLog.symbol}</span>
+                    <span className="text-[10px] text-slate-400">({bestLog.timeframe})</span>
                     <span
                       className={`text-[11px] font-bold ${
-                        isPositive ? 'text-emerald-400' : 'text-red-400'
+                        bestLog.total_pnl_percent >= 0 ? 'text-emerald-400' : 'text-red-400'
                       }`}
                     >
-                      {isPositive ? '+' : ''}
-                      {item.total_pnl_percent.toFixed(1)}%
+                      {bestLog.total_pnl_percent >= 0 ? '+' : ''}
+                      {bestLog.total_pnl_percent.toFixed(1)}%
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        strategyStore.deleteSingleEvalHistoryItem(item.id);
+                  </span>
+                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 ml-auto flex-shrink-0 transition-transform ${
+                    showHistory ? 'rotate-180' : ''
+                  }`}
+                />
+              </>
+            )}
+          </button>
+
+          {showHistory && currentStrategyLogs.length > 0 && (
+            <div className="absolute left-0 top-full mt-1.5 w-full max-w-md z-30 rounded-xl border border-slate-700/80 bg-[#0a0e1a] shadow-2xl shadow-black/60 overflow-hidden">
+              <div className="max-h-72 overflow-y-auto custom-scrollbar py-1">
+                {/* En son test en üstte */}
+                {currentStrategyLogs.map((item) => {
+                  const isCurrent =
+                    evaluateResult?.symbol === item.symbol &&
+                    evaluateResult?.timeframe === item.timeframe &&
+                    evaluateResult?.strategy_id === item.strategy_id;
+                  const isBest = bestLog?.id === item.id;
+                  const isPositive = item.total_pnl_percent >= 0;
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        strategyStore.loadSingleEvalHistoryItem(item);
+                        setShowHistory(false);
                       }}
-                      className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors ml-0.5"
-                      title="Bu testi geçmişten sil"
+                      className={`flex items-center gap-2 px-3 py-2 text-xs font-mono cursor-pointer transition-all border-l-2 ${
+                        isCurrent
+                          ? 'bg-indigo-950/80 border-l-indigo-500 text-white font-bold'
+                          : 'border-l-transparent hover:bg-slate-800/60 text-slate-300'
+                      }`}
+                      title={`${item.strategy_name} • ${item.executed_at} tarihinde çalıştırıldı. Tıklayarak sonuçlarını inceleyin.`}
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                );
-              })}
+                      <Trophy
+                        className={`w-3 h-3 flex-shrink-0 ${
+                          isBest ? 'text-amber-400' : 'text-transparent'
+                        }`}
+                      />
+                      <span className="font-bold text-slate-200">{item.symbol}</span>
+                      <span className="text-[10px] text-slate-400">({item.timeframe})</span>
+                      <span
+                        className={`text-[11px] font-bold ${
+                          isPositive ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {isPositive ? '+' : ''}
+                        {item.total_pnl_percent.toFixed(1)}%
+                      </span>
+                      <span className="text-[10px] text-slate-500 ml-auto whitespace-nowrap">
+                        {item.executed_at}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          strategyStore.deleteSingleEvalHistoryItem(item.id);
+                        }}
+                        className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors flex-shrink-0"
+                        title="Bu testi geçmişten sil"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
 
               {currentStrategyLogs.length > 1 && (
-                <button
-                  onClick={() => strategyStore.clearSingleEvalHistory(strategy?.id)}
-                  className="text-[10px] text-slate-500 hover:text-red-400 underline ml-1.5 whitespace-nowrap"
-                  title="Bu stratejiye ait tüm geçmişi temizle"
-                >
-                  Temizle
-                </button>
+                <div className="border-t border-slate-800 px-3 py-1.5">
+                  <button
+                    onClick={() => {
+                      strategyStore.clearSingleEvalHistory(strategy?.id);
+                      setShowHistory(false);
+                    }}
+                    className="text-[10px] text-slate-500 hover:text-red-400 underline"
+                    title="Bu stratejiye ait tüm geçmişi temizle"
+                  >
+                    Tümünü temizle
+                  </button>
+                </div>
               )}
             </div>
           )}

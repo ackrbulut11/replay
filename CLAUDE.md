@@ -39,8 +39,14 @@ python -m unittest tests.test_rules tests.test_strategy_api tests.test_alerts te
 ```
 `ruff` is installed in the venv (no config file; defaults apply).
 
-### Known local-environment breakage
-`backend/.venv` is **Python 3.9.13** while `pyproject.toml` declares `^3.10`. `app/auth/dependencies.py` uses a PEP 604 union (`-> User | None`) without `from __future__ import annotations`, so `import main` raises `TypeError` under 3.9 — the backend and `tests.test_auth_api` will not start in that venv. Either recreate the venv on 3.10+ or add the `__future__` import. Most other backend modules already have `from __future__ import annotations`; keep adding it to new ones.
+### Annotation evaluation — a recurring source of import-time crashes
+`backend/.venv` is **Python 3.9.13** while `pyproject.toml` declares `^3.10`. Annotations are evaluated eagerly unless a module starts with `from __future__ import annotations`, and this repo has repeatedly shipped modules that crash on import because of it (`-> User | None` in `auth/dependencies.py` under 3.9; `engine: StrategyEngine` in `api/routes/admin.py`, where `StrategyEngine` is only imported lazily inside the endpoint bodies — that one broke on *every* Python version and took the whole app down).
+
+**Start every new backend module with `from __future__ import annotations`.** After touching any module reachable from `main.py`, verify the app still imports:
+```bash
+python -c "import main"      # from backend/
+```
+FastAPI 0.128 evaluates parameter annotations leniently, so a missing `typing.Optional` in a route signature does *not* raise — but a missing name in a plain module-level `def` does. Do not rely on the app starting as proof that imports are complete.
 
 ## Architecture
 

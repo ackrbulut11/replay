@@ -83,12 +83,12 @@ export const LoginPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   try {
                     setError(null);
-                    loginDemoUser();
+                    await loginDemoUser();
                   } catch (err: any) {
-                    setError('Demo girişi sırasında bir hata oluştu.');
+                    setError(err?.message || 'Demo girişi sırasında bir hata oluştu.');
                   }
                 }}
                 className="w-full py-3 px-5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 active:scale-[0.99] rounded-full text-xs font-semibold text-white transition-all flex items-center justify-center gap-2.5 shadow-lg shadow-indigo-600/25 cursor-pointer"

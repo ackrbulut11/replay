@@ -15,7 +15,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   loginWithGoogle: (credential: string) => Promise<void>;
-  loginDemoUser: () => void;
+  loginDemoUser: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -23,10 +23,56 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://replay-xj3e.onrender.com/api' : '/api');
 
+// Oturuma ait tüm localStorage anahtarları tek yerde tanımlı.
+// `replay_auth_token` artık yazılmıyor; eski oturumlardan kalmış olabileceği
+// için temizlik listesinde tutuluyor (aksi halde çıkıştan sonra bile
+// eski kimlikle istek gidebiliyordu).
+// Test geçmişi ve strateji sıralaması da kullanıcıya özeldir: silinmezlerse
+// aynı tarayıcıda giriş yapan bir sonraki kullanıcı öncekinin verisini görür.
+const SESSION_KEYS = [
+  'replay_access_token',
+  'replay_auth_token',
+  'replay_user',
+  'replay_single_eval_history',
+  'replay_strategy_order',
+];
+
+export const TOKEN_STORAGE_KEY = 'replay_access_token';
+
+/** API katmanı 401 aldığında yayınlanır; AuthProvider dinleyip oturumu düşürür. */
+export const UNAUTHORIZED_EVENT = 'replay:unauthorized';
+
+/** Oturum verisini tarayıcıdan tamamen siler. */
+export function clearStoredSession(): void {
+  SESSION_KEYS.forEach((key) => localStorage.removeItem(key));
+}
+
+/** Token geçersizse (401) oturumu düşürmek için API katmanından çağrılır. */
+export function notifyUnauthorized(): void {
+  clearStoredSession();
+  window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const clearSession = () => {
+    clearStoredSession();
+    setAccessToken(null);
+    setUser(null);
+  };
+
+  // Herhangi bir API çağrısı 401 dönerse oturumu düşür ve giriş ekranına dön.
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setAccessToken(null);
+      setUser(null);
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
+  }, []);
 
   // Sayfa açıldığında oturumu kontrol et (localStorage + silent refresh)
   useEffect(() => {
@@ -96,24 +142,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     } catch (e) {
-      console.warn("Demo backend sync fallback:", e);
+      console.warn("Demo login failed:", e);
     }
 
-    const mockUser: User = {
-      id: '2494589c-21fb-4b8e-b00a-53f93efbce73',
-      email: 'demo.trader@example.com',
-      name: 'Demo Trader',
-      avatar_url: 'https://lh3.googleusercontent.com/a/default-user',
-      initial_balance: 10000.0,
-      currency: 'USD'
-    };
-    const mockToken = 'dev_mock_access_token_demo';
-
-    localStorage.setItem('replay_access_token', mockToken);
-    localStorage.setItem('replay_user', JSON.stringify(mockUser));
-    setAccessToken(mockToken);
-    setUser(mockUser);
+    // Backend'e ulaşılamadıysa sahte bir oturum kurulmaz: stratejiler artık
+    // kullanıcıya bağlı olduğu için gerçek bir JWT olmadan hiçbir çağrı
+    // çalışmaz; sahte token kullanıcıyı anında giriş ekranına geri düşürürdü.
     setIsLoading(false);
+    throw new Error('Sunucuya bağlanılamadı. Backend çalışıyor mu?');
   };
 
   const loginWithGoogle = async (credential: string) => {
@@ -140,7 +176,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await res.json();
       localStorage.setItem('replay_access_token', data.access_token);
-      localStorage.setItem('replay_auth_token', data.access_token);
       localStorage.setItem('replay_user', JSON.stringify(data.user));
       setAccessToken(data.access_token);
       setUser(data.user);
@@ -158,10 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Logout error:", err);
     } finally {
-      localStorage.removeItem('replay_access_token');
-      localStorage.removeItem('replay_user');
-      setAccessToken(null);
-      setUser(null);
+      clearSession();
     }
   };
 

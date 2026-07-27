@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiRequest } from '../services/api';
 
 export interface AlertItem {
   id: string;
@@ -148,11 +149,7 @@ export const alertStore = {
     alertStore.setState(() => ({ loading: true, error: null }));
     try {
       const url = symbol ? `/api/alerts?symbol=${encodeURIComponent(symbol)}` : '/api/alerts';
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch alerts');
-      }
-      const data = await response.json();
+      const data = await apiRequest<{ alerts: AlertItem[]; count: number }>(url);
       alertStore.setState(() => ({
         alerts: data.alerts || [],
         loading: false,
@@ -178,18 +175,10 @@ export const alertStore = {
     note?: string;
   }) => {
     try {
-      const response = await fetch('/api/alerts', {
+      const res = await apiRequest<{ message: string; alert: AlertItem }>('/api/alerts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(alertData),
       });
-
-      if (!response.ok) {
-        const errJson = await response.json();
-        throw new Error(errJson.detail || 'Alarm oluşturulamadı.');
-      }
-
-      const res = await response.json();
       const newAlert: AlertItem = res.alert;
 
       alertStore.setState(prev => ({
@@ -207,14 +196,10 @@ export const alertStore = {
   toggleAlertStatus: async (alertId: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
     try {
-      const response = await fetch(`/api/alerts/${alertId}`, {
+      const res = await apiRequest<{ message: string; alert: AlertItem }>(`/api/alerts/${alertId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
       });
-
-      if (!response.ok) throw new Error('Status update failed');
-      const res = await response.json();
       const updated: AlertItem = res.alert;
 
       alertStore.setState(prev => ({
@@ -227,8 +212,9 @@ export const alertStore = {
 
   deleteAlert: async (alertId: string) => {
     try {
-      const response = await fetch(`/api/alerts/${alertId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Delete failed');
+      await apiRequest<{ message: string; alert_id: string }>(`/api/alerts/${alertId}`, {
+        method: 'DELETE',
+      });
 
       alertStore.setState(prev => ({
         alerts: prev.alerts.filter(a => a.id !== alertId),
@@ -240,20 +226,18 @@ export const alertStore = {
 
   checkAlerts: async (symbol: string, provider: string, currentPrice: number, indicatorValues?: Record<string, number>) => {
     try {
-      const response = await fetch('/api/alerts/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol,
-          provider,
-          current_price: currentPrice,
-          indicator_values: indicatorValues || {},
-        }),
-      });
-
-      if (!response.ok) return;
-
-      const data = await response.json();
+      const data = await apiRequest<{ checked_count: number; triggered_alerts: AlertItem[] }>(
+        '/api/alerts/check',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            symbol,
+            provider,
+            current_price: currentPrice,
+            indicator_values: indicatorValues || {},
+          }),
+        }
+      );
       const triggered: AlertItem[] = data.triggered_alerts || [];
 
       if (triggered.length > 0) {

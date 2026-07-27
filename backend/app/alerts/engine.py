@@ -1,206 +1,265 @@
 """
-Alert Engine for persistent storage and alert evaluation.
+Alarm Motoru.
 
-Stores alert definitions in storage/alerts/{alert_id}.json
+Alarm tanımlarını `alerts` tablosunda, kullanıcıya bağlı olarak saklar ve
+değerlendirir. Bir kullanıcı yalnızca kendi alarmlarını görebilir/değiştirebilir.
+
+İş mantığı burada, route dosyasına yazılmaz (RULES.md #9).
 """
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
-from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Dict, List, Optional
+
+from sqlalchemy.orm import Session
 
 from app.alerts.models import (
-    AlertCreateRequest,
-    AlertModel,
-    AlertStatus,
     AlertCondition,
+    AlertCreateRequest,
+    AlertStatus,
     AlertTargetType,
     AlertUpdateRequest,
 )
+from app.database.models import Alert
 
-# Project root calculation
-_CURRENT_DIR = Path(__file__).resolve().parent
-_PROJECT_ROOT = _CURRENT_DIR
-while _PROJECT_ROOT and not (_PROJECT_ROOT / "storage").exists():
-    parent = _PROJECT_ROOT.parent
-    if parent == _PROJECT_ROOT:
-        break
-    _PROJECT_ROOT = parent
+# AlertModel ile birebir eşleşen kolonlar (satır -> sözlük çevirisinde kullanılır)
+_PLAIN_FIELDS = (
+    "id",
+    "user_id",
+    "symbol",
+    "provider",
+    "timeframe",
+    "target_type",
+    "indicator_period",
+    "indicator_period_fast",
+    "indicator_period_slow",
+    "indicator_field",
+    "condition",
+    "threshold_value",
+    "note",
+    "status",
+    "last_value",
+)
 
-ALERTS_DIR = _PROJECT_ROOT / "storage" / "alerts"
+
+def _iso(value: Optional[datetime]) -> Optional[str]:
+    """datetime'ı arayüzün beklediği ISO 8601 + Z biçimine çevirir."""
+    return value.isoformat() + "Z" if value else None
 
 
 class AlertEngine:
-    """Alert management and evaluation engine."""
+    """Alarm yönetimi ve değerlendirme motoru (veritabanı destekli)."""
 
-    def __init__(self, alerts_dir: Optional[str | Path] = None):
-        self.alerts_dir = Path(alerts_dir) if alerts_dir else ALERTS_DIR
-        self.alerts_dir.mkdir(parents=True, exist_ok=True)
+    @staticmethod
+    def _row_to_dict(row: Alert) -> dict:
+        data = {field: getattr(row, field) for field in _PLAIN_FIELDS}
+        data["created_at"] = _iso(row.created_at) or (datetime.utcnow().isoformat() + "Z")
+        data["triggered_at"] = _iso(row.triggered_at)
+        return data
 
-    def list_alerts(self, symbol: Optional[str] = None, status: Optional[str] = None) -> List[dict]:
-        """Lists saved alerts with optional filtering."""
-        alerts = []
-        for filepath in sorted(self.alerts_dir.glob("*.json")):
-            try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+    # ─── CRUD İşlemleri ────────────────────────────────────────────────────
 
-                if symbol and data.get("symbol", "").upper() != symbol.upper():
-                    continue
+    def list_alerts(
+        self,
+        db: Session,
+        user_id: str,
+        symbol: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[dict]:
+        """Kullanıcının alarmlarını listeler; sembol ve duruma göre filtrelenebilir."""
+        query = db.query(Alert).filter(Alert.user_id == user_id)
 
-                if status and data.get("status") != status:
-                    continue
+        if symbol:
+            query = query.filter(Alert.symbol == symbol.upper())
+        if status:
+            query = query.filter(Alert.status == status)
 
-                alerts.append(data)
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Failed to read alert file {filepath}: {e}")
+        rows = query.order_by(Alert.created_at.desc()).all()
+        return [self._row_to_dict(r) for r in rows]
 
-        return alerts
+    def get_alert(self, db: Session, alert_id: str, user_id: str) -> Optional[dict]:
+        """
+        Alarmı döndürür — yalnızca sahibi ise.
 
-    def get_alert(self, alert_id: str) -> Optional[dict]:
-        """Gets a single alert by ID."""
-        filepath = self.alerts_dir / f"{alert_id}.json"
-        if not filepath.exists():
-            return None
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return None
+        Sahibi değilse None döner; çağıran taraf bunu 404'e çevirir, böylece
+        başkasına ait bir alarmın varlığı sızdırılmaz.
+        """
+        row = (
+            db.query(Alert)
+            .filter(Alert.id == alert_id, Alert.user_id == user_id)
+            .first()
+        )
+        return self._row_to_dict(row) if row else None
 
-    def create_alert(self, request: AlertCreateRequest) -> dict:
-        """Creates a new alert and persists it as JSON."""
-        alert = AlertModel(
+    def create_alert(self, db: Session, request: AlertCreateRequest, user_id: str) -> dict:
+        """Yeni alarm oluşturur. Sahip yalnızca `user_id` argümanından alınır."""
+        row = Alert(
+            user_id=user_id,
             symbol=request.symbol.upper(),
             provider=request.provider.lower(),
             timeframe=request.timeframe,
-            target_type=request.target_type,
+            target_type=request.target_type.value,
             indicator_period=request.indicator_period,
+            indicator_period_fast=request.indicator_period_fast,
+            indicator_period_slow=request.indicator_period_slow,
             indicator_field=request.indicator_field,
-            condition=request.condition,
+            condition=request.condition.value,
             threshold_value=request.threshold_value,
             note=request.note,
+            status=AlertStatus.ACTIVE.value,
         )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return self._row_to_dict(row)
 
-        data = alert.model_dump()
-        filepath = self.alerts_dir / f"{alert.id}.json"
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-        return data
-
-    def update_alert(self, alert_id: str, request: AlertUpdateRequest) -> Optional[dict]:
-        """Updates an existing alert."""
-        existing = self.get_alert(alert_id)
-        if existing is None:
+    def update_alert(
+        self,
+        db: Session,
+        alert_id: str,
+        request: AlertUpdateRequest,
+        user_id: str,
+    ) -> Optional[dict]:
+        """Mevcut alarmı günceller — yalnızca sahibi ise."""
+        row = (
+            db.query(Alert)
+            .filter(Alert.id == alert_id, Alert.user_id == user_id)
+            .first()
+        )
+        if row is None:
             return None
 
         if request.status is not None:
-            existing["status"] = request.status.value
+            row.status = request.status.value
+            # Yeniden etkinleştirilen alarmın eski tetiklenme damgası kalmamalı.
+            if request.status == AlertStatus.ACTIVE:
+                row.triggered_at = None
         if request.threshold_value is not None:
-            existing["threshold_value"] = request.threshold_value
+            row.threshold_value = request.threshold_value
         if request.note is not None:
-            existing["note"] = request.note
+            row.note = request.note
 
-        filepath = self.alerts_dir / f"{alert_id}.json"
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(existing, f, ensure_ascii=False, indent=2)
+        db.commit()
+        db.refresh(row)
+        return self._row_to_dict(row)
 
-        return existing
-
-    def delete_alert(self, alert_id: str) -> bool:
-        """Deletes an alert by ID."""
-        filepath = self.alerts_dir / f"{alert_id}.json"
-        if not filepath.exists():
+    def delete_alert(self, db: Session, alert_id: str, user_id: str) -> bool:
+        """Alarmı siler — yalnızca sahibi ise."""
+        row = (
+            db.query(Alert)
+            .filter(Alert.id == alert_id, Alert.user_id == user_id)
+            .first()
+        )
+        if row is None:
             return False
-        filepath.unlink()
+        db.delete(row)
+        db.commit()
         return True
+
+    # ─── Değerlendirme ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _resolve_current_value(
+        row: Alert,
+        current_price: float,
+        indicator_values: Dict[str, float],
+    ) -> Optional[float]:
+        """Alarmın izlediği büyüklüğün güncel değerini bulur."""
+        target_type = row.target_type
+
+        if target_type == AlertTargetType.PRICE.value:
+            return current_price
+
+        if target_type == AlertTargetType.EMA_CROSS.value:
+            fast = indicator_values.get(f"EMA_{row.indicator_period_fast}")
+            if fast is None:
+                fast = indicator_values.get("EMA_fast")
+            slow = indicator_values.get(f"EMA_{row.indicator_period_slow}")
+            if slow is None:
+                slow = indicator_values.get("EMA_slow")
+            if fast is None or slow is None:
+                return None
+            return fast - slow
+
+        if target_type == AlertTargetType.PERCENT_CHANGE.value:
+            pct = indicator_values.get("percent_change")
+            if pct is None:
+                pct = indicator_values.get("pct_change")
+            return pct
+
+        # Gösterge sözlüğündeki olası anahtar biçimleri: 'RSI_14', 'RSI', alan adı
+        for key in (
+            f"{target_type}_{row.indicator_period}" if row.indicator_period else target_type,
+            target_type,
+            row.indicator_field or "",
+        ):
+            if key and key in indicator_values:
+                return indicator_values[key]
+
+        return None
+
+    @staticmethod
+    def _is_triggered(row: Alert, current_val: float) -> bool:
+        """Alarmın tetiklenip tetiklenmediğine karar verir."""
+        rises = row.condition == AlertCondition.RISES_ABOVE.value
+
+        if row.target_type == AlertTargetType.EMA_CROSS.value:
+            # Kesişimde eşik değeri değil, iki ortalamanın farkının işareti bakılır.
+            return current_val >= 0 if rises else current_val <= 0
+
+        threshold = row.threshold_value
+
+        if row.target_type == AlertTargetType.PERCENT_CHANGE.value and not rises:
+            # Düşüş alarmı pozitif eşikle de tanımlanabilir (ör. "%5 düşerse").
+            limit = -abs(threshold) if threshold > 0 else threshold
+            return current_val <= limit
+
+        return current_val >= threshold if rises else current_val <= threshold
 
     def check_alerts(
         self,
+        db: Session,
         symbol: str,
         provider: str,
         current_price: float,
+        user_id: str,
         indicator_values: Optional[Dict[str, float]] = None,
     ) -> List[dict]:
         """
-        Evaluates active alerts for a symbol against current price/indicator values.
-        Marks triggered alerts as TRIGGERED.
+        Kullanıcının bir sembole ait etkin alarmlarını değerlendirir.
+
+        Tetiklenenleri TRIGGERED olarak işaretler ve döndürür.
         """
         if indicator_values is None:
             indicator_values = {}
 
-        active_alerts = self.list_alerts(symbol=symbol, status=AlertStatus.ACTIVE.value)
-        triggered_list = []
+        rows = (
+            db.query(Alert)
+            .filter(
+                Alert.user_id == user_id,
+                Alert.symbol == symbol.upper(),
+                Alert.status == AlertStatus.ACTIVE.value,
+            )
+            .all()
+        )
 
-        for alert in active_alerts:
-            target_type = alert.get("target_type")
-            threshold = alert.get("threshold_value")
-            condition = alert.get("condition")
+        triggered: List[dict] = []
 
-            current_val = None
-            if target_type == AlertTargetType.PRICE.value:
-                current_val = current_price
-            elif target_type == AlertTargetType.EMA_CROSS.value:
-                fast_period = alert.get("indicator_period_fast", 20)
-                slow_period = alert.get("indicator_period_slow", 50)
-                fast_val = indicator_values.get(f"EMA_{fast_period}") or indicator_values.get("EMA_fast")
-                slow_val = indicator_values.get(f"EMA_{slow_period}") or indicator_values.get("EMA_slow")
-                if fast_val is not None and slow_val is not None:
-                    current_val = fast_val - slow_val
-                    # For EMA_CROSS, threshold is 0 (or diff)
-                    if condition == AlertCondition.RISES_ABOVE.value:
-                        is_triggered = fast_val >= slow_val
-                    else:
-                        is_triggered = fast_val <= slow_val
-            elif target_type == AlertTargetType.PERCENT_CHANGE.value:
-                pct_val = indicator_values.get("percent_change") or indicator_values.get("pct_change")
-                if pct_val is not None:
-                    current_val = pct_val
-                    if condition == AlertCondition.RISES_ABOVE.value:
-                        is_triggered = pct_val >= threshold
-                    else:
-                        is_triggered = pct_val <= -abs(threshold) if threshold > 0 else pct_val <= threshold
-            else:
-                # Check indicator values dictionary
-                # Key formats can be 'RSI', 'EMA_20', 'RSI_14', etc.
-                period = alert.get("indicator_period")
-                field = alert.get("indicator_field")
-
-                possible_keys = [
-                    f"{target_type}_{period}" if period else target_type,
-                    target_type,
-                    field if field else "",
-                ]
-
-                for key in possible_keys:
-                    if key and key in indicator_values:
-                        current_val = indicator_values[key]
-                        break
-
-            if current_val is None and target_type not in (AlertTargetType.EMA_CROSS.value, AlertTargetType.PERCENT_CHANGE.value):
+        for row in rows:
+            current_val = self._resolve_current_value(row, current_price, indicator_values)
+            if current_val is None:
                 continue
 
-            alert["last_value"] = current_val
+            row.last_value = current_val
 
-            if target_type not in (AlertTargetType.EMA_CROSS.value, AlertTargetType.PERCENT_CHANGE.value):
-                if condition == AlertCondition.RISES_ABOVE.value and current_val >= threshold:
-                    is_triggered = True
-                elif condition == AlertCondition.FALLS_BELOW.value and current_val <= threshold:
-                    is_triggered = True
+            # Bayrak her alarm için sıfırdan hesaplanır. Önceden döngü dışında
+            # tutuluyordu; bir alarm tetiklendiğinde değer sonraki alarma
+            # sızıyor ve onu da yanlışlıkla tetikliyordu.
+            if self._is_triggered(row, current_val):
+                row.status = AlertStatus.TRIGGERED.value
+                row.triggered_at = datetime.utcnow()
+                triggered.append(self._row_to_dict(row))
 
-            if is_triggered:
-                alert["status"] = AlertStatus.TRIGGERED.value
-                alert["triggered_at"] = datetime.utcnow().isoformat() + "Z"
-
-                # Persist updated status
-                filepath = self.alerts_dir / f"{alert['id']}.json"
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(alert, f, ensure_ascii=False, indent=2)
-
-                triggered_list.append(alert)
-
-        return triggered_list
+        db.commit()
+        return triggered

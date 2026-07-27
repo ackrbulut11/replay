@@ -23,6 +23,7 @@ class User(Base):
     # Relationships
     strategies = relationship("Strategy", back_populates="user", cascade="all, delete-orphan")
     strategy_scans = relationship("StrategyScan", back_populates="user", cascade="all, delete-orphan")
+    alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
     replay_sessions = relationship("ReplaySession", back_populates="user", cascade="all, delete-orphan")
     journal_trades = relationship("JournalTrade", back_populates="user", cascade="all, delete-orphan")
     chart_layouts = relationship("ChartLayout", back_populates="user", cascade="all, delete-orphan")
@@ -76,6 +77,37 @@ class StrategyScan(Base):
 
     user = relationship("User", back_populates="strategy_scans")
     strategy = relationship("Strategy", back_populates="scans")
+
+
+class Alert(Base):
+    """
+    Kullanıcıya ait fiyat / gösterge alarmı.
+
+    Alan isimleri app/alerts/models.py içindeki AlertModel ile birebir aynıdır;
+    motor iki temsil arasında doğrudan çeviri yapar.
+    """
+
+    __tablename__ = "alerts"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    symbol = Column(String(50), nullable=False, index=True)
+    provider = Column(String(50), nullable=False, default="binance")
+    timeframe = Column(String(20), nullable=False, default="1d")
+    target_type = Column(String(30), nullable=False)
+    indicator_period = Column(Integer, nullable=True)
+    indicator_period_fast = Column(Integer, nullable=True)
+    indicator_period_slow = Column(Integer, nullable=True)
+    indicator_field = Column(String(50), nullable=True)
+    condition = Column(String(20), nullable=False)
+    threshold_value = Column(Float, nullable=False)
+    note = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="ACTIVE", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    triggered_at = Column(DateTime, nullable=True)
+    last_value = Column(Float, nullable=True)
+
+    user = relationship("User", back_populates="alerts")
 
 
 class ReplaySession(Base):

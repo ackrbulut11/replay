@@ -28,6 +28,7 @@ import type {
   ConditionGroup,
   TimeframeFilter,
   IndicatorInfo,
+  SingleEvaluationLogItem,
 } from '../types/strategy';
 import { createEmptyConditionGroup, TIMEFRAMES } from '../types/strategy';
 import { strategyStore, useStrategyStore } from '../store/strategyStore';
@@ -37,6 +38,8 @@ interface StrategyBuilderProps {
   indicators: IndicatorInfo[];
   onSaved?: (strategy: Strategy) => void;
   onCancel?: () => void;
+  /** Test geçmişinden bir kayıt seçildiğinde tetiklenir (değerlendirme panelini geri yüklemek için). */
+  onHistorySelect?: (item: SingleEvaluationLogItem) => void;
 }
 
 export default function StrategyBuilder({
@@ -44,6 +47,7 @@ export default function StrategyBuilder({
   indicators,
   onSaved,
   onCancel,
+  onHistorySelect,
 }: StrategyBuilderProps) {
   const isEditing = strategy !== null;
   const { singleEvalHistory, evaluateResult } = useStrategyStore();
@@ -108,6 +112,14 @@ export default function StrategyBuilder({
     setSaveError(null);
   }, [strategy]);
 
+  // Geçmiş kaydını seç: sonucu store'a yükle + paneli geri yükle
+  const selectHistoryItem = (item: SingleEvaluationLogItem) => {
+    strategyStore.loadSingleEvalHistoryItem(item);
+    onHistorySelect?.(item);
+  };
+  const selectHistoryItemRef = useRef(selectHistoryItem);
+  selectHistoryItemRef.current = selectHistoryItem;
+
   // Dışarı tıklanınca geçmiş listesini kapat
   useEffect(() => {
     if (!showHistory) return;
@@ -124,7 +136,7 @@ export default function StrategyBuilder({
   useEffect(() => {
     setShowHistory(false);
     if (bestLog) {
-      strategyStore.loadSingleEvalHistoryItem(bestLog);
+      selectHistoryItemRef.current(bestLog);
     }
     // Sadece strateji değişiminde çalışsın; yeni test sonucunu ezmemeli.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -325,7 +337,7 @@ export default function StrategyBuilder({
                     <div
                       key={item.id}
                       onClick={() => {
-                        strategyStore.loadSingleEvalHistoryItem(item);
+                        selectHistoryItem(item);
                         setShowHistory(false);
                       }}
                       className={`flex items-center gap-2 px-3 py-2 text-xs font-mono cursor-pointer transition-all border-l-2 ${

@@ -180,6 +180,9 @@ export interface SingleEvaluationLogItem {
   total_trades: number;
   win_rate: number;
   total_pnl_percent: number;
+  /** Testi üreten istek parametreleri — geçmişten seçilince form bu değerlerle geri yüklenir. */
+  request?: EvaluateRequest;
+  /** Testin tam sonucu (sinyaller dahil) — değerlendirme paneli bunu birebir gösterir. */
   result: EvaluateResponse;
 }
 

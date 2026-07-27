@@ -36,6 +36,35 @@ function loadInitialEvalHistory(): SingleEvaluationLogItem[] {
   }
 }
 
+/**
+ * Geçmişi localStorage'a yazar.
+ *
+ * Kayıtlar tüm sinyalleriyle birlikte saklandığı için liste kotayı aşabilir;
+ * bu durumda en eski kayıtlar düşürülerek tekrar denenir. Kalıcı olarak
+ * yazılabilen liste döner (state ile localStorage aynı kalsın diye).
+ */
+function persistEvalHistory(history: SingleEvaluationLogItem[]): SingleEvaluationLogItem[] {
+  let list = history;
+  while (list.length > 0) {
+    try {
+      localStorage.setItem('replay_single_eval_history', JSON.stringify(list));
+      return list;
+    } catch (e) {
+      if (list.length === 1) {
+        console.warn('Test geçmişi kaydedilemedi:', e);
+        return list;
+      }
+      list = list.slice(0, list.length - 1);
+    }
+  }
+  try {
+    localStorage.setItem('replay_single_eval_history', '[]');
+  } catch {
+    /* yoksay */
+  }
+  return list;
+}
+
 export const INITIAL_STRATEGY_STATE: StrategyState = {
   strategies: [],
   activeStrategy: null,
@@ -194,15 +223,13 @@ export const strategyStore = {
         total_trades: result.total_trades || 0,
         win_rate: result.win_rate || 0,
         total_pnl_percent: result.total_pnl_percent || 0,
+        request: { ...params },
         result: result,
       };
 
-      const updatedHistory = [newLogItem, ...currentState.singleEvalHistory.filter((h) => h.id !== newLogItem.id)].slice(0, 30);
-      try {
-        localStorage.setItem('replay_single_eval_history', JSON.stringify(updatedHistory));
-      } catch (e) {
-        console.warn('Failed to save single eval history:', e);
-      }
+      const updatedHistory = persistEvalHistory(
+        [newLogItem, ...currentState.singleEvalHistory.filter((h) => h.id !== newLogItem.id)].slice(0, 30)
+      );
 
       setState({
         evaluateResult: result,
@@ -217,16 +244,19 @@ export const strategyStore = {
   },
 
   loadSingleEvalHistoryItem: (item: SingleEvaluationLogItem) => {
-    setState({ evaluateResult: item.result });
+    if (!item.result) return;
+    // Eski kayıtlarda sembol/provider/timeframe sonuca yazılmamış olabilir; log'dan tamamla.
+    const restored: EvaluateResponse = {
+      ...item.result,
+      symbol: item.result.symbol || item.symbol,
+      provider: item.result.provider || item.provider,
+      timeframe: item.result.timeframe || item.timeframe,
+    };
+    setState({ evaluateResult: restored, error: null, isLoading: false });
   },
 
   deleteSingleEvalHistoryItem: (id: string) => {
-    const updated = currentState.singleEvalHistory.filter((h) => h.id !== id);
-    try {
-      localStorage.setItem('replay_single_eval_history', JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Failed to save single eval history:', e);
-    }
+    const updated = persistEvalHistory(currentState.singleEvalHistory.filter((h) => h.id !== id));
     setState({ singleEvalHistory: updated });
   },
 
@@ -235,11 +265,7 @@ export const strategyStore = {
     if (strategyId) {
       updated = currentState.singleEvalHistory.filter((h) => h.strategy_id !== strategyId);
     }
-    try {
-      localStorage.setItem('replay_single_eval_history', JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Failed to clear single eval history:', e);
-    }
+    updated = persistEvalHistory(updated);
     setState({ singleEvalHistory: updated });
   },
 

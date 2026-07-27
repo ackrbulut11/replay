@@ -19,7 +19,7 @@ import StrategyList from '../strategy/StrategyList';
 import StrategyBuilder from '../strategy/StrategyBuilder';
 import BatchScannerTab from '../strategy/BatchScannerTab';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
-import type { Strategy, EvaluateRequest } from '../types/strategy';
+import type { Strategy, EvaluateRequest, SingleEvaluationLogItem } from '../types/strategy';
 import { TIMEFRAMES } from '../types/strategy';
 import type { IndicatorsState } from '../charts/IndicatorToolbar';
 
@@ -131,6 +131,21 @@ export default function StrategyPage({
 
   const handleCancel = () => {
     setMode('list');
+  };
+
+  /**
+   * Test geçmişinden bir kayıt seçildi: değerlendirme formunu o testin
+   * parametreleriyle geri yükle ve paneli aç — sonuç yeni çalıştırılmış gibi görünsün.
+   */
+  const handleHistorySelect = (item: SingleEvaluationLogItem) => {
+    const req = item.request;
+    setEvalSymbol(req?.symbol ?? item.symbol);
+    setEvalTimeframe(req?.timeframe ?? item.timeframe);
+    setEvalStart(req?.start ?? '');
+    setEvalEnd(req?.end ?? '');
+    if (req?.limit_bars != null) setEvalLimitBars(req.limit_bars);
+    if (req?.allow_short != null) setEvalAllowShort(req.allow_short);
+    setShowEvalPanel(true);
   };
 
   const autoDetectProvider = (sym: string): string => {
@@ -347,6 +362,7 @@ export default function StrategyPage({
                       indicators={indicators}
                       onSaved={handleSaved}
                       onCancel={handleCancel}
+                      onHistorySelect={handleHistorySelect}
                     />
                   </div>
                 </>

@@ -90,7 +90,9 @@ Alembic drives the schema. `main.py: run_migrations()` runs `alembic upgrade hea
 ### Storage path resolution — two `storage/` directories exist
 `StrategyEngine`, `AlertEngine` and `DataLoader` each walk up from `__file__` until they find a directory containing `storage/`. Starting under `backend/app/...`, that resolves to **`backend/storage/`**, not the repo-root `storage/`. `DATABASE_URL` (`sqlite:///./storage/database/app.db`) is relative to the process CWD, so running `python main.py` from `backend/` also lands in `backend/storage/`. Repo-root `storage/` is largely vestigial. When adding a path, follow the existing walk-up helper rather than introducing a new root.
 
-Alerts (`storage/alerts/`) and market parquet caches still use this file layout; strategies and scans no longer do.
+Only the market parquet caches still use this file layout. Strategies, scans and alerts are all in the database now; `storage/strategies/` and `storage/alerts/` hold pre-migration backups only.
+
+Alerts follow exactly the same ownership pattern as strategies: `get_owned_alert` in [alerts.py](backend/app/api/routes/alerts.py) (404, not 403), engine methods take `(db, ..., user_id)`, and `check_alerts` only ever evaluates the caller's own alerts.
 
 ### Auth
 Google OAuth 2.0 → `POST /api/auth/google` → app-issued JWT (access + refresh). [dependencies.py](backend/app/auth/dependencies.py) provides `get_current_user` (401 on missing/invalid token *or* a token whose user no longer exists), `get_current_user_optional` (returns `None`), and `get_current_admin` (403 unless the token's email is in `ADMIN_EMAILS`).
@@ -111,6 +113,7 @@ Charts use `lightweight-charts` only — do not write a custom candlestick rende
 ### Implementation status — many files are 0–3 line placeholders
 Only Phases 1–3 are partially built. Verify a module is real before wiring to it:
 - **Implemented:** market data + symbols, indicators, rules/evaluator/engine, strategy engine + routes, scanner engine, alerts, auth, admin; frontend chart, strategy builder/list/condition editor, batch scanner, watchlist, alerts, replay controls.
+- **Still browser-only:** the single-evaluation test history (`replay_single_eval_history` in `store/strategyStore.ts`) lives in localStorage, not the database, so it does not follow the user across devices. Batch scan history does live in SQL.
 - **Stubs:** `engines/replay_engine.py`, `engines/backtest_engine.py`, `optimizer/`, `ai/`, `journal/`, `reports/`, `api/websocket.py`, routes `replay|scanner|backtest|journal|watchlist`, and frontend `pages/{Chart,Dashboard,Replay,Scanner,Backtest,Journal}Page.tsx`, `scanner/`, `journal/`, `workspace/`, `services/{websocket,backend}.ts`, `store/{chartStore,userStore}.ts`, `charts/{ChartManager,Indicators,Drawings}.ts`.
 
 `main.py` mounts only `auth`, `market`, `strategy`, `alerts`, `admin` under `/api`. New routers must be added there explicitly.

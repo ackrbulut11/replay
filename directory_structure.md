@@ -134,7 +134,7 @@ TradingResearchPlatform/
 │   │   │
 │   │   ├── database/                 # PostgreSQL & SQLite ORM Models
 │   │   │   ├── postgres.py           # SQLAlchemy Engine & Session
-│   │   │   ├── models.py             # User, Strategy, StrategyScan, ReplaySession, JournalTrade, ChartLayout
+│   │   │   ├── models.py             # User, Strategy, StrategyScan, Alert, ReplaySession, JournalTrade, ChartLayout
 │   │   │   └── migrations/           # Alembic
 │   │   │       ├── env.py
 │   │   │       ├── script.py.mako
@@ -199,7 +199,8 @@ TradingResearchPlatform/
 │   ├── download_data.py
 │   ├── update_market.py
 │   ├── build_sidecar.py
-│   └── import_strategies_to_db.py    # Eski JSON stratejileri veritabanına aktarır (tek seferlik)
+│   ├── import_strategies_to_db.py    # Eski JSON stratejileri veritabanına aktarır (tek seferlik)
+│   └── import_alerts_to_db.py        # Eski JSON alarmları veritabanına aktarır (tek seferlik)
 │
 └── .github/
     └── workflows/

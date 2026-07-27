@@ -59,15 +59,22 @@ def get_current_user_optional(
         return None
 
 
-def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+def is_user_admin(user: User) -> bool:
     """
-    Admin yetkisi gerektiren uçlar için kullanıcı doğrular.
+    Kullanıcının admin olup olmadığını söyler.
 
     Yetki, .env üzerinden okunan ADMIN_EMAILS listesine göre verilir (RULES.md #17).
     Liste boşsa hiç kimse admin sayılmaz.
     """
     admin_emails = settings.admin_emails
-    if not admin_emails or (current_user.email or "").lower() not in admin_emails:
+    if not admin_emails:
+        return False
+    return (user.email or "").lower() in admin_emails
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Admin yetkisi gerektiren uçlar için kullanıcı doğrular."""
+    if not is_user_admin(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Bu işlem için admin yetkisi gerekiyor",

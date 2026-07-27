@@ -8,7 +8,6 @@ Rule Engine, indikatör adından (EMA, RSI vb.) doğru hesaplayıcıyı bulur.
 from __future__ import annotations
 
 import pandas as pd
-import numpy as np
 
 
 # ─── İndikatör Hesaplama Fonksiyonları ─────────────────────────────────────────

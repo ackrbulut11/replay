@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from google.oauth2 import id_token
@@ -8,7 +8,7 @@ from google.auth.transport import requests as google_requests
 from app.database.postgres import get_db
 from app.database.models import User
 from app.auth.jwt import create_access_token, create_refresh_token, decode_token
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, is_user_admin
 from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -23,9 +23,26 @@ class UserResponse(BaseModel):
     avatar_url: Optional[str] = None
     initial_balance: float
     currency: str
+    # Arayüz admin sekmesini buna göre gösterir. Yetkinin kendisi her zaman
+    # sunucuda ADMIN_EMAILS ile kontrol edilir; bu alan yalnızca görsel bir
+    # ipucudur ve istemcide değiştirilmesi hiçbir erişim kazandırmaz.
+    is_admin: bool = False
 
     class Config:
         from_attributes = True
+
+
+def build_user_response(user: User) -> UserResponse:
+    """ORM kullanıcısını is_admin alanı doldurulmuş yanıta çevirir."""
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        avatar_url=user.avatar_url,
+        initial_balance=user.initial_balance,
+        currency=user.currency,
+        is_admin=is_user_admin(user),
+    )
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -135,7 +152,7 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        user=user
+        user=build_user_response(user)
     )
 
 
@@ -160,7 +177,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return build_user_response(current_user)
 
 
 @router.post("/logout")

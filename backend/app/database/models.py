@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Text, JSON, Boolean
+from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, Text, JSON, Boolean
 from sqlalchemy.orm import relationship
 from app.database.postgres import Base
 
@@ -22,12 +22,23 @@ class User(Base):
 
     # Relationships
     strategies = relationship("Strategy", back_populates="user", cascade="all, delete-orphan")
+    strategy_scans = relationship("StrategyScan", back_populates="user", cascade="all, delete-orphan")
     replay_sessions = relationship("ReplaySession", back_populates="user", cascade="all, delete-orphan")
     journal_trades = relationship("JournalTrade", back_populates="user", cascade="all, delete-orphan")
     chart_layouts = relationship("ChartLayout", back_populates="user", cascade="all, delete-orphan")
 
 
 class Strategy(Base):
+    """
+    Kullanıcıya ait strateji.
+
+    Stratejinin tamamı (parameters, entry_rules, exit_rules, timeframe_filters,
+    allow_short, take_profit_pct, stop_loss_pct) `rules` JSON kolonunda tutulur;
+    name/description listeleme ve arama kolaylığı için ayrıca kolonlanmıştır.
+    Strateji hâlâ koddur değil veridir (RULES.md #4) — yalnızca saklandığı yer
+    dosya değil veritabanıdır, böylece sahiplik user_id ile garanti altındadır.
+    """
+
     __tablename__ = "strategies"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
@@ -35,9 +46,36 @@ class Strategy(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     rules = Column(JSON, nullable=True)
+    version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="strategies")
+    scans = relationship("StrategyScan", back_populates="strategy", cascade="all, delete-orphan")
+
+
+class StrategyScan(Base):
+    """
+    Bir stratejinin toplu tarama (batch evaluate) geçmişi.
+
+    Her kayıt tek bir taramanın sonucudur; `results` içinde sembol bazlı
+    BatchEvaluateResultItem listesi JSON olarak tutulur.
+    """
+
+    __tablename__ = "strategy_scans"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    strategy_id = Column(String(36), ForeignKey("strategies.id", ondelete="CASCADE"), index=True, nullable=False)
+    strategy_name = Column(String(255), nullable=True)
+    provider = Column(String(50), nullable=False)
+    timeframe = Column(String(20), nullable=False)
+    scanned_count = Column(Integer, default=0)
+    results = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="strategy_scans")
+    strategy = relationship("Strategy", back_populates="scans")
 
 
 class ReplaySession(Base):

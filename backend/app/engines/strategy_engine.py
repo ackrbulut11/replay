@@ -1,22 +1,26 @@
 """
 Strateji Değerlendirme Motoru.
 
-JSON strateji dosyalarını yükleme/kaydetme/silme (CRUD) ve
+Strateji CRUD işlemleri (veritabanı üzerinden, kullanıcıya bağlı) ve
 rule engine çağrısı koordinasyonunu sağlar.
 
-Stratejiler storage/strategies/{strategy_id}.json formatında saklanır (RULES.md #4).
+Stratejiler kod değil veridir (RULES.md #4): kural ağacı `strategies.rules`
+JSON kolonunda tutulur, `.py` dosyası açılmaz. Saklama yeri dosya değil
+veritabanıdır; böylece sahiplik `user_id` yabancı anahtarıyla garanti altındadır
+ve bir kullanıcı başkasının stratejisine erişemez.
+
+İş mantığı burada, route dosyasına yazılmaz (RULES.md #9).
 """
 
 from __future__ import annotations
 
-import json
-import os
 from datetime import datetime
-from pathlib import Path
 from typing import Union
 
 import pandas as pd
+from sqlalchemy.orm import Session
 
+from app.database.models import Strategy
 from app.rules.engine import RuleEngine
 from app.rules.strategy_models import (
     StrategyCreateRequest,
@@ -24,66 +28,96 @@ from app.rules.strategy_models import (
     StrategyUpdateRequest,
 )
 
-# Proje kök dizininden storage/strategies/ yolunu hesapla
-_CURRENT_DIR = Path(__file__).resolve().parent
-_PROJECT_ROOT = _CURRENT_DIR
-while _PROJECT_ROOT and not (_PROJECT_ROOT / "storage").exists():
-    parent = _PROJECT_ROOT.parent
-    if parent == _PROJECT_ROOT:
-        break
-    _PROJECT_ROOT = parent
 
-STRATEGIES_DIR = _PROJECT_ROOT / "storage" / "strategies"
+def _iso(value: datetime | None) -> str:
+    """datetime'ı arayüzün beklediği ISO 8601 + Z biçimine çevirir."""
+    return (value or datetime.utcnow()).isoformat() + "Z"
 
 
 class StrategyEngine:
-    """
-    Strateji CRUD ve değerlendirme motoru.
+    """Strateji CRUD ve değerlendirme motoru (veritabanı destekli)."""
 
-    İş mantığı burada, route dosyasına yazılmaz (RULES.md #9).
-    """
+    # ─── Satır ↔ Sözlük Dönüşümü ──────────────────────────────────────────
 
-    def __init__(self, strategies_dir: str | Path | None = None):
-        self.strategies_dir = Path(strategies_dir) if strategies_dir else STRATEGIES_DIR
-        self.strategies_dir.mkdir(parents=True, exist_ok=True)
+    @staticmethod
+    def _row_to_dict(row: Strategy) -> dict:
+        """
+        Veritabanı satırını API/rule engine'in beklediği strateji sözlüğüne çevirir.
+
+        Kural ağacı `rules` kolonunda saklanır; kimlik ve sürüm bilgisi
+        kolonlardan alınır (kolonlar tek doğruluk kaynağıdır).
+        """
+        data = dict(row.rules or {})
+        data.update(
+            {
+                "id": row.id,
+                "user_id": row.user_id,
+                "name": row.name,
+                "description": row.description or "",
+                "version": row.version,
+                "created_at": _iso(row.created_at),
+                "updated_at": _iso(row.updated_at),
+            }
+        )
+        data.setdefault("parameters", [])
+        data.setdefault("entry_rules", {"logic": "AND", "conditions": []})
+        data.setdefault("exit_rules", {"logic": "AND", "conditions": []})
+        data.setdefault("timeframe_filters", [])
+        data.setdefault("allow_short", False)
+        data.setdefault("take_profit_pct", None)
+        data.setdefault("stop_loss_pct", None)
+        return data
+
+    @staticmethod
+    def _rules_payload(data: dict) -> dict:
+        """`rules` kolonuna yazılacak kural ağacını ayıklar (kimlik alanları hariç)."""
+        return {
+            "parameters": data.get("parameters", []),
+            "entry_rules": data.get("entry_rules", {"logic": "AND", "conditions": []}),
+            "exit_rules": data.get("exit_rules", {"logic": "AND", "conditions": []}),
+            "timeframe_filters": data.get("timeframe_filters", []),
+            "allow_short": data.get("allow_short", False),
+            "take_profit_pct": data.get("take_profit_pct"),
+            "stop_loss_pct": data.get("stop_loss_pct"),
+        }
 
     # ─── CRUD İşlemleri ────────────────────────────────────────────────────
 
-    def list_strategies(self, user_id: str | None = None) -> list[dict]:
-        """Tüm kayıtlı stratejileri listeler. user_id verilirse kullanıcıya özel filtreler."""
-        strategies = []
-        for filepath in sorted(self.strategies_dir.glob("*.json")):
-            try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if user_id:
-                    strat_user = data.get("user_id")
-                    if strat_user and strat_user != user_id:
-                        continue
-                strategies.append(data)
-            except (json.JSONDecodeError, IOError) as e:
-                # Bozuk dosyaları atla
-                print(f"Uyarı: {filepath} okunamadı: {e}")
-        return strategies
+    def list_strategies(self, db: Session, user_id: str) -> list[dict]:
+        """Yalnızca ilgili kullanıcının stratejilerini listeler."""
+        rows = (
+            db.query(Strategy)
+            .filter(Strategy.user_id == user_id)
+            .order_by(Strategy.created_at.desc())
+            .all()
+        )
+        return [self._row_to_dict(r) for r in rows]
 
-    def get_strategy(self, strategy_id: str) -> dict | None:
-        """Belirtilen ID'ye sahip stratejiyi döndürür."""
-        filepath = self.strategies_dir / f"{strategy_id}.json"
-        if not filepath.exists():
-            return None
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return None
+    def get_strategy(self, db: Session, strategy_id: str, user_id: str) -> dict | None:
+        """
+        Stratejiyi döndürür — yalnızca sahibi ise.
 
-    def create_strategy(self, request: StrategyCreateRequest, user_id: str | None = None) -> dict:
-        """Yeni strateji oluşturur ve JSON dosyası olarak kaydeder."""
-        effective_user_id = user_id or request.user_id
+        Sahibi değilse None döner; çağıran taraf bunu 404'e çevirir, böylece
+        başkasına ait bir stratejinin varlığı sızdırılmaz.
+        """
+        row = (
+            db.query(Strategy)
+            .filter(Strategy.id == strategy_id, Strategy.user_id == user_id)
+            .first()
+        )
+        return self._row_to_dict(row) if row else None
+
+    def create_strategy(self, db: Session, request: StrategyCreateRequest, user_id: str) -> dict:
+        """
+        Yeni strateji oluşturur.
+
+        Sahiplik yalnızca `user_id` argümanından alınır; istek gövdesindeki
+        `user_id` alanı bilinçli olarak yok sayılır (taklit edilememesi için).
+        """
         strategy = StrategyModel(
             name=request.name,
             description=request.description,
-            user_id=effective_user_id,
+            user_id=user_id,
             parameters=request.parameters,
             entry_rules=request.entry_rules,
             exit_rules=request.exit_rules,
@@ -92,82 +126,96 @@ class StrategyEngine:
             take_profit_pct=request.take_profit_pct,
             stop_loss_pct=request.stop_loss_pct,
         )
-
         data = strategy.model_dump()
-        if effective_user_id:
-            data["user_id"] = effective_user_id
 
-        filepath = self.strategies_dir / f"{strategy.id}.json"
+        row = Strategy(
+            id=strategy.id,
+            user_id=user_id,
+            name=strategy.name,
+            description=strategy.description,
+            rules=self._rules_payload(data),
+            version=1,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return self._row_to_dict(row)
 
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-        return data
-
-    def update_strategy(self, strategy_id: str, request: StrategyUpdateRequest) -> dict | None:
-        """Mevcut stratejiyi günceller."""
-        existing = self.get_strategy(strategy_id)
-        if existing is None:
+    def update_strategy(
+        self,
+        db: Session,
+        strategy_id: str,
+        request: StrategyUpdateRequest,
+        user_id: str,
+    ) -> dict | None:
+        """Mevcut stratejiyi günceller — yalnızca sahibi ise."""
+        row = (
+            db.query(Strategy)
+            .filter(Strategy.id == strategy_id, Strategy.user_id == user_id)
+            .first()
+        )
+        if row is None:
             return None
 
-        # Sadece gönderilen alanları güncelle
+        rules = dict(row.rules or {})
+
         if request.name is not None:
-            existing["name"] = request.name
+            row.name = request.name
         if request.description is not None:
-            existing["description"] = request.description
+            row.description = request.description
         if request.parameters is not None:
-            existing["parameters"] = [p.model_dump() for p in request.parameters]
+            rules["parameters"] = [p.model_dump() for p in request.parameters]
         if request.entry_rules is not None:
-            existing["entry_rules"] = request.entry_rules.model_dump()
+            rules["entry_rules"] = request.entry_rules.model_dump()
         if request.exit_rules is not None:
-            existing["exit_rules"] = request.exit_rules.model_dump()
+            rules["exit_rules"] = request.exit_rules.model_dump()
         if request.timeframe_filters is not None:
-            existing["timeframe_filters"] = [tf.model_dump() for tf in request.timeframe_filters]
+            rules["timeframe_filters"] = [tf.model_dump() for tf in request.timeframe_filters]
         if request.allow_short is not None:
-            existing["allow_short"] = request.allow_short
+            rules["allow_short"] = request.allow_short
         if request.take_profit_pct is not None:
-            existing["take_profit_pct"] = request.take_profit_pct
+            rules["take_profit_pct"] = request.take_profit_pct
         if request.stop_loss_pct is not None:
-            existing["stop_loss_pct"] = request.stop_loss_pct
+            rules["stop_loss_pct"] = request.stop_loss_pct
 
+        row.rules = rules
+        row.version = (row.version or 1) + 1
+        db.commit()
+        db.refresh(row)
+        return self._row_to_dict(row)
 
-        # Güncelleme zamanını ayarla
-        existing["updated_at"] = datetime.utcnow().isoformat() + "Z"
-        existing["version"] = existing.get("version", 1) + 1
-
-        filepath = self.strategies_dir / f"{strategy_id}.json"
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(existing, f, ensure_ascii=False, indent=2)
-
-        return existing
-
-    def delete_strategy(self, strategy_id: str) -> bool:
-        """Stratejiyi siler."""
-        filepath = self.strategies_dir / f"{strategy_id}.json"
-        if not filepath.exists():
+    def delete_strategy(self, db: Session, strategy_id: str, user_id: str) -> bool:
+        """Stratejiyi siler — yalnızca sahibi ise. Tarama geçmişi cascade ile gider."""
+        row = (
+            db.query(Strategy)
+            .filter(Strategy.id == strategy_id, Strategy.user_id == user_id)
+            .first()
+        )
+        if row is None:
             return False
-        filepath.unlink()
+        db.delete(row)
+        db.commit()
         return True
 
     # ─── Değerlendirme ────────────────────────────────────────────────────
+    #
+    # Değerlendirme metotları veritabanına hiç dokunmaz: strateji sözlüğü
+    # dışarıdan verilir. Bu sayede batch değerlendirme thread havuzunda
+    # güvenle çalışır (SQLAlchemy oturumu thread'ler arasında paylaşılmaz).
 
     def evaluate(
         self,
-        strategy_id: str,
+        strategy: dict,
         df: pd.DataFrame,
         param_overrides: dict[str, Union[int, float]] | None = None,
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
         allow_short: bool | None = None,
     ) -> dict:
-        """
-        Stratejiyi verilen veri üzerinde değerlendirir.
-        """
-        strategy = self.get_strategy(strategy_id)
-        if strategy is None:
-            raise ValueError(f"Strateji bulunamadı: {strategy_id}")
-
+        """Stratejiyi verilen veri üzerinde değerlendirir."""
         if param_overrides is None:
             param_overrides = {}
+        else:
+            param_overrides = dict(param_overrides)
 
         if allow_short is not None:
             param_overrides["allow_short"] = allow_short
@@ -190,7 +238,7 @@ class StrategyEngine:
         total_pnl_percent = round(sum(s["pnl_percent"] for s in trades), 2)
 
         return {
-            "strategy_id": strategy_id,
+            "strategy_id": strategy.get("id", ""),
             "strategy_name": strategy.get("name", ""),
             "total_bars": len(df),
             "signals": signals,
@@ -205,7 +253,7 @@ class StrategyEngine:
 
     def evaluate_symbol(
         self,
-        strategy_id: str,
+        strategy: dict,
         symbol: str,
         provider: str,
         timeframe: str,
@@ -235,7 +283,7 @@ class StrategyEngine:
                 df = df.tail(limit_bars).reset_index(drop=True)
 
             res = self.evaluate(
-                strategy_id=strategy_id,
+                strategy=strategy,
                 df=df,
                 param_overrides=param_overrides,
                 allow_short=allow_short,
@@ -265,7 +313,7 @@ class StrategyEngine:
 
     def evaluate_batch(
         self,
-        strategy_id: str,
+        strategy: dict,
         symbols: list[str],
         provider: str,
         timeframe: str,
@@ -285,7 +333,7 @@ class StrategyEngine:
             futures = [
                 executor.submit(
                     self.evaluate_symbol,
-                    strategy_id=strategy_id,
+                    strategy=strategy,
                     symbol=sym,
                     provider=provider,
                     timeframe=timeframe,
@@ -307,6 +355,8 @@ class StrategyEngine:
                     print(f"Batch evaluation error: {ex}")
 
         # PnL'e göre büyükten küçüğe sırala
-        results.sort(key=lambda x: x.get("total_pnl_percent", 0.0) if x.get("error") is None else -99999, reverse=True)
+        results.sort(
+            key=lambda x: x.get("total_pnl_percent", 0.0) if x.get("error") is None else -99999,
+            reverse=True,
+        )
         return results
-

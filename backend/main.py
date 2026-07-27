@@ -1,15 +1,46 @@
+import os
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.database.postgres import engine, Base
-from app.database import models
+from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
 from app.auth.router import router as auth_router
 from app.api.routes import alerts, market, strategy, admin
 
 
-# Veritabanı tablolarını otomatik oluştur
-Base.metadata.create_all(bind=engine)
+def run_migrations() -> None:
+    """
+    Şemayı Alembic ile güncel tutar (RULES.md #11).
+
+    `Base.metadata.create_all()` yerine migration çalıştırılır; create_all
+    eksik tabloları yaratır ama mevcut tabloya kolon ekleyemez ve alembic
+    damgası bırakmadığı için sonraki migration'ları bozar.
+
+    Üç durumu da güvenle karşılar:
+      1. Sıfır veritabanı            -> tüm revizyonlar uygulanır
+      2. Alembic öncesi veritabanı   -> önce 0001 olarak damgalanır, sonra yükseltilir
+         (aksi halde "tablo zaten var" hatası verir ve uygulama hiç açılmaz)
+      3. Zaten güncel veritabanı     -> hiçbir şey yapılmaz
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    from app.database.postgres import engine
+
+    alembic_cfg = Config(os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic.ini"))
+
+    tables = set(inspect(engine).get_table_names())
+    if "alembic_version" not in tables and "users" in tables:
+        # Alembic devreye alınmadan önce create_all ile kurulmuş veritabanı.
+        print("Alembic damgası yok, mevcut şema 0001 olarak damgalanıyor...")
+        command.stamp(alembic_cfg, "0001")
+
+    command.upgrade(alembic_cfg, "head")
+
+
+run_migrations()
 
 app = FastAPI(
     title="Trading Research Platform API",

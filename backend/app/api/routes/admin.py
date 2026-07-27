@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -8,9 +8,10 @@ from pydantic import BaseModel
 
 from app.database.postgres import get_db
 from app.database.models import User, Strategy, JournalTrade, ReplaySession
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_admin
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
+# Tüm admin uçları ADMIN_EMAILS beyaz listesiyle korunur (router seviyesinde).
+router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(get_current_admin)])
 
 class AdminUserItem(BaseModel):
     id: str
@@ -32,28 +33,20 @@ class AdminStatsResponse(BaseModel):
     total_replay_sessions: int
     latest_users: List[AdminUserItem]
 
-def _count_user_strategies(engine: StrategyEngine, db: Session, user_id: str) -> int:
-    all_json = engine.list_strategies()
-    user_json = [s for s in all_json if s.get("user_id") == user_id or not s.get("user_id")]
-    sql_cnt = db.query(Strategy).filter(Strategy.user_id == user_id).count()
-    return max(len(user_json), sql_cnt)
+def _count_user_strategies(db: Session, user_id: str) -> int:
+    """Kullanıcıya ait strateji sayısı. Stratejiler artık yalnızca veritabanında."""
+    return db.query(Strategy).filter(Strategy.user_id == user_id).count()
 
 @router.get("/users", response_model=List[AdminUserItem])
-def get_all_users(
-    db: Session = Depends(get_db),
-    admin_key: Optional[str] = Header(None, alias="X-Admin-Key")
-):
+def get_all_users(db: Session = Depends(get_db)):
     """
     Tüm kaydolan kullanıcıların listesini ve kullanıcı istatistiklerini getirir.
     """
-    from app.engines.strategy_engine import StrategyEngine
-    engine = StrategyEngine()
-
     users = db.query(User).order_by(User.created_at.desc()).all()
-    
+
     result = []
     for u in users:
-        strat_cnt = _count_user_strategies(engine, db, u.id)
+        strat_cnt = _count_user_strategies(db, u.id)
         trade_cnt = db.query(JournalTrade).filter(JournalTrade.user_id == u.id).count()
         replay_cnt = db.query(ReplaySession).filter(ReplaySession.user_id == u.id).count()
 
@@ -75,13 +68,8 @@ def get_admin_stats(db: Session = Depends(get_db)):
     """
     Platform genel istatistik özeti ve son katılan 5 kullanıcıyı getirir.
     """
-    from app.engines.strategy_engine import StrategyEngine
-    engine = StrategyEngine()
-    json_count = len(engine.list_strategies())
-
     total_u = db.query(User).count()
-    sql_strat_count = db.query(Strategy).count()
-    total_s = max(json_count, sql_strat_count)
+    total_s = db.query(Strategy).count()
 
     total_t = db.query(JournalTrade).count()
     total_r = db.query(ReplaySession).count()
@@ -89,7 +77,7 @@ def get_admin_stats(db: Session = Depends(get_db)):
     users = db.query(User).order_by(User.created_at.desc()).limit(5).all()
     latest = []
     for u in users:
-        strat_cnt = _count_user_strategies(engine, db, u.id)
+        strat_cnt = _count_user_strategies(db, u.id)
         trade_cnt = db.query(JournalTrade).filter(JournalTrade.user_id == u.id).count()
         replay_cnt = db.query(ReplaySession).filter(ReplaySession.user_id == u.id).count()
 

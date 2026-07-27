@@ -7,16 +7,14 @@ CRUD endpointleri ve strateji değerlendirme.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from app.database.postgres import get_db
-from app.database.models import User, Strategy
-from app.auth.dependencies import get_current_user_optional
+from app.database.models import User
+from app.auth.dependencies import get_current_user
 from app.data.loader import DataLoader
 from app.engines.scanner_engine import ScannerEngine
 from app.engines.strategy_engine import StrategyEngine
@@ -27,29 +25,45 @@ from app.rules.strategy_models import (
     BatchEvaluateResultItem,
     EvaluateRequest,
     EvaluateResponse,
-    IndicatorInfo,
     SaveScanRequest,
-    ScanHistoryItem,
     SignalResult,
     StrategyCreateRequest,
-    StrategyModel,
     StrategyUpdateRequest,
 )
 
 router = APIRouter(prefix="/strategy", tags=["strategy"])
 
-# Singleton instance'lar
+# Singleton instance'lar (durum tutmazlar; veritabanı oturumu her istekte verilir)
 _engine = StrategyEngine()
 _scanner = ScannerEngine()
 _loader = DataLoader()
 
 
+def get_owned_strategy(
+    strategy_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Yol parametresindeki stratejiyi yalnızca sahibi için döndürür.
+
+    Sahibi olmayan bir istek 403 değil 404 alır: 403, başkasına ait bir
+    stratejinin var olduğunu sızdırırdı.
+    """
+    strategy = _engine.get_strategy(db, strategy_id, current_user.id)
+    if strategy is None:
+        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
+    return strategy
+
+
 
 @router.get("/list")
-def list_strategies(current_user: Optional[User] = Depends(get_current_user_optional)):
-    """Tüm kayıtlı stratejileri listeler (kullanıcıya özel filtreli)."""
-    user_id = current_user.id if current_user else None
-    strategies = _engine.list_strategies(user_id=user_id)
+def list_strategies(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Yalnızca giriş yapan kullanıcının stratejilerini listeler."""
+    strategies = _engine.list_strategies(db, current_user.id)
     return {"strategies": strategies, "count": len(strategies)}
 
 
@@ -61,76 +75,63 @@ def get_available_indicators():
 
 
 @router.get("/{strategy_id}")
-def get_strategy(strategy_id: str):
-    """Belirtilen ID'ye sahip strateji detayını döndürür."""
-    strategy = _engine.get_strategy(strategy_id)
-    if strategy is None:
-        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
+def get_strategy(strategy: dict = Depends(get_owned_strategy)):
+    """Strateji detayını döndürür (yalnızca sahibi)."""
     return strategy
 
 
 @router.post("")
 def create_strategy(
     request: StrategyCreateRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Yeni strateji oluşturur."""
+    """Yeni strateji oluşturur. Sahip, token'daki kullanıcıdır."""
     try:
-        user_id = current_user.id if current_user else request.user_id
-        strategy = _engine.create_strategy(request, user_id=user_id)
-
-        # Ayrıca SQL veritabanındaki Strategy tablosuna da kaydet
-        if user_id:
-            try:
-                sql_strat = Strategy(
-                    id=strategy["id"],
-                    user_id=user_id,
-                    name=strategy["name"],
-                    description=strategy.get("description", ""),
-                    content=json.dumps(strategy, ensure_ascii=False)
-                )
-                db.add(sql_strat)
-                db.commit()
-            except Exception as sql_err:
-                db.rollback()
-                print(f"SQL strategy save note: {sql_err}")
-
-        return {"message": "Strateji oluşturuldu", "strategy": strategy}
+        strategy = _engine.create_strategy(db, request, user_id=current_user.id)
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    return {"message": "Strateji oluşturuldu", "strategy": strategy}
 
 
 @router.put("/{strategy_id}")
-def update_strategy(strategy_id: str, request: StrategyUpdateRequest):
-    """Mevcut stratejiyi günceller."""
-    result = _engine.update_strategy(strategy_id, request)
+def update_strategy(
+    strategy_id: str,
+    request: StrategyUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mevcut stratejiyi günceller (yalnızca sahibi)."""
+    result = _engine.update_strategy(db, strategy_id, request, current_user.id)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
     return {"message": "Strateji güncellendi", "strategy": result}
 
 
 @router.delete("/{strategy_id}")
-def delete_strategy(strategy_id: str):
-    """Stratejiyi siler."""
-    success = _engine.delete_strategy(strategy_id)
+def delete_strategy(
+    strategy_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stratejiyi siler (yalnızca sahibi). Tarama geçmişi de birlikte silinir."""
+    success = _engine.delete_strategy(db, strategy_id, current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
     return {"message": "Strateji silindi", "strategy_id": strategy_id}
 
 
 @router.post("/{strategy_id}/evaluate")
-def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
+def evaluate_strategy(
+    request: EvaluateRequest,
+    strategy: dict = Depends(get_owned_strategy),
+):
     """
-    Stratejiyi verilen sembol/timeframe üzerinde çalıştırır.
+    Stratejiyi verilen sembol/timeframe üzerinde çalıştırır (yalnızca sahibi).
 
     Sinyalleri döndürür (BUY/SELL noktaları).
     """
-    # Strateji var mı kontrol et
-    strategy = _engine.get_strategy(strategy_id)
-    if strategy is None:
-        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
-
     # Tarih aralığını hazırla
     if request.end:
         try:
@@ -228,7 +229,7 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
     # Değerlendir
     try:
         result = _engine.evaluate(
-            strategy_id=strategy_id,
+            strategy=strategy,
             df=df,
             param_overrides=request.param_overrides,
             multi_tf_data=multi_tf_data if multi_tf_data else None,
@@ -266,14 +267,15 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
 
 
 @router.post("/{strategy_id}/batch-evaluate")
-def batch_evaluate_strategy(strategy_id: str, request: BatchEvaluateRequest):
+def batch_evaluate_strategy(
+    request: BatchEvaluateRequest,
+    strategy: dict = Depends(get_owned_strategy),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
-    Stratejiyi birden fazla sembol üzerinde paralel olarak değerlendirir.
+    Stratejiyi birden fazla sembol üzerinde paralel olarak değerlendirir (yalnızca sahibi).
     """
-    strategy = _engine.get_strategy(strategy_id)
-    if strategy is None:
-        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
-
     if request.end:
         try:
             end_dt = datetime.strptime(request.end, "%Y-%m-%d")
@@ -298,7 +300,7 @@ def batch_evaluate_strategy(strategy_id: str, request: BatchEvaluateRequest):
     limit_bars = request.limit_bars if request.limit_bars is not None else 1000
 
     results_raw = _engine.evaluate_batch(
-        strategy_id=strategy_id,
+        strategy=strategy,
         symbols=request.symbols,
         provider=request.provider,
         timeframe=request.timeframe,
@@ -328,17 +330,19 @@ def batch_evaluate_strategy(strategy_id: str, request: BatchEvaluateRequest):
         for r in results_raw
     ]
 
-    # Otomatik olarak tarama geçmişine de kaydet
+    # Otomatik olarak tarama geçmişine de kaydet (kullanıcıya bağlı)
     _scanner.save_scan(
-        strategy_id=strategy_id,
+        db=db,
+        strategy_id=strategy["id"],
         strategy_name=strategy.get("name", "Strateji"),
         provider=request.provider,
         timeframe=request.timeframe,
         results=results_items,
+        user_id=current_user.id,
     )
 
     return BatchEvaluateResponse(
-        strategy_id=strategy_id,
+        strategy_id=strategy["id"],
         strategy_name=strategy.get("name", ""),
         provider=request.provider,
         timeframe=request.timeframe,
@@ -348,30 +352,33 @@ def batch_evaluate_strategy(strategy_id: str, request: BatchEvaluateRequest):
 
 
 @router.get("/{strategy_id}/scans")
-def get_strategy_scans(strategy_id: str):
-    """Bir stratejiye ait geçmiş tarama kayıtlarını döndürür."""
-    strategy = _engine.get_strategy(strategy_id)
-    if strategy is None:
-        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
-
-    scans = _scanner.get_scans(strategy_id)
-    latest = _scanner.get_latest_scan(strategy_id)
-    return {"strategy_id": strategy_id, "scans": scans, "latest": latest}
+def get_strategy_scans(
+    strategy: dict = Depends(get_owned_strategy),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Bir stratejiye ait tarama geçmişini döndürür (yalnızca sahibi)."""
+    scans = _scanner.get_scans(db, strategy["id"], current_user.id)
+    latest = scans[0] if scans else None
+    return {"strategy_id": strategy["id"], "scans": scans, "latest": latest}
 
 
 @router.post("/{strategy_id}/scans")
-def save_strategy_scan(strategy_id: str, request: SaveScanRequest):
-    """Strateji tarama sonucunu manuel olarak kaydeder."""
-    strategy = _engine.get_strategy(strategy_id)
-    if strategy is None:
-        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
-
+def save_strategy_scan(
+    request: SaveScanRequest,
+    strategy: dict = Depends(get_owned_strategy),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Strateji tarama sonucunu manuel olarak kaydeder (yalnızca sahibi)."""
     scan_item = _scanner.save_scan(
-        strategy_id=strategy_id,
+        db=db,
+        strategy_id=strategy["id"],
         strategy_name=strategy.get("name", "Strateji"),
         provider=request.provider,
         timeframe=request.timeframe,
         results=request.results,
+        user_id=current_user.id,
     )
     return {"message": "Tarama kaydedildi", "scan": scan_item}
 

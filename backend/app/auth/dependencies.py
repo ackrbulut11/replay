@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.database.postgres import get_db
 from app.database.models import User
 from app.auth.jwt import decode_token
@@ -32,6 +33,10 @@ def get_current_user(
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        # Token geçerli ama kullanıcı silinmiş olabilir; None döndürmek
+        # çağıran tarafta AttributeError'a yol açar.
+        raise credentials_exception
     return user
 
 
@@ -52,3 +57,19 @@ def get_current_user_optional(
         return db.query(User).filter(User.id == user_id).first()
     except Exception:
         return None
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Admin yetkisi gerektiren uçlar için kullanıcı doğrular.
+
+    Yetki, .env üzerinden okunan ADMIN_EMAILS listesine göre verilir (RULES.md #17).
+    Liste boşsa hiç kimse admin sayılmaz.
+    """
+    admin_emails = settings.admin_emails
+    if not admin_emails or (current_user.email or "").lower() not in admin_emails:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu işlem için admin yetkisi gerekiyor",
+        )
+    return current_user

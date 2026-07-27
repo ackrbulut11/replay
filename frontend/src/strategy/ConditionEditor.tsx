@@ -410,7 +410,7 @@ export default function ConditionEditor({
       newCond = {
         left: { type: 'indicator', name: 'MACD', period: 12, field: 'MACD' },
         operator: isSellGroup ? 'cross_below' : 'cross_above',
-        right: { type: 'indicator', name: 'MACD', period: 12, field: 'signal' },
+        right: { type: 'indicator', name: 'MACD', period: 12, field: 'MACD_signal' },
       };
     } else if (templateKey === 'rsi_level') {
       // RSI Aşırı Alım / Satım Seviye Kesişimi
@@ -442,7 +442,9 @@ export default function ConditionEditor({
           type: 'indicator',
           name: 'BollingerBands',
           period: 20,
-          field: isSellGroup ? 'upper' : 'lower',
+          // Alan adları backend registry'sindeki anahtarlarla birebir aynı olmalı;
+          // 'upper'/'lower' değerlendirme sırasında "geçersiz alan" hatası veriyordu.
+          field: isSellGroup ? 'BB_upper' : 'BB_lower',
         },
       };
     } else if (templateKey === 'stoch_level') {

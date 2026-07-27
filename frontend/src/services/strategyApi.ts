@@ -14,6 +14,7 @@ import type {
   BatchEvaluateResponse,
   ScanHistoryItem,
   SaveScanRequest,
+  SingleEvaluationLogItem,
   IndicatorInfo,
 } from '../types/strategy';
 
@@ -95,6 +96,38 @@ export async function saveScanResult(
   });
 }
 
+// ─── Tekli Test Geçmişi ──────────────────────────────────────────────────────
+
+export async function getEvaluationHistory(): Promise<SingleEvaluationLogItem[]> {
+  const data = await request<{ evaluations: SingleEvaluationLogItem[]; count: number }>(
+    `${API_BASE}/evaluations`
+  );
+  return data.evaluations;
+}
+
+/** Tarayıcıda kalmış eski geçmişi bir kez sunucuya taşır. */
+export async function importEvaluationHistory(
+  items: SingleEvaluationLogItem[]
+): Promise<{ message: string; imported: number }> {
+  return request(`${API_BASE}/evaluations/import`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}
+
+export async function deleteEvaluation(
+  evaluationId: string
+): Promise<{ message: string; evaluation_id: string }> {
+  return request(`${API_BASE}/evaluations/${evaluationId}`, { method: 'DELETE' });
+}
+
+export async function clearEvaluationHistory(
+  strategyId?: string
+): Promise<{ message: string; deleted: number }> {
+  const query = strategyId ? `?strategy_id=${encodeURIComponent(strategyId)}` : '';
+  return request(`${API_BASE}/evaluations${query}`, { method: 'DELETE' });
+}
+
 // ─── İndikatörler ────────────────────────────────────────────────────────────
 
 export async function getAvailableIndicators(): Promise<IndicatorInfo[]> {
@@ -112,6 +145,10 @@ export const strategyApi = {
   batchEvaluateStrategy,
   getScanHistory,
   saveScanResult,
+  getEvaluationHistory,
+  importEvaluationHistory,
+  deleteEvaluation,
+  clearEvaluationHistory,
   getAvailableIndicators,
 };
 

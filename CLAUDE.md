@@ -94,6 +94,8 @@ Only the market parquet caches still use this file layout. Strategies, scans and
 
 Alerts follow exactly the same ownership pattern as strategies: `get_owned_alert` in [alerts.py](backend/app/api/routes/alerts.py) (404, not 403), engine methods take `(db, ..., user_id)`, and `check_alerts` only ever evaluates the caller's own alerts.
 
+Single-evaluation history (`strategy_evaluations`) is also in SQL now — `evaluate_strategy` auto-saves its result the same way `batch-evaluate` auto-saves scans. One row per `(user_id, strategy_id, provider, symbol, timeframe)` combo (unique constraint), so re-running the same test overwrites the previous one instead of accumulating. The `/evaluations*` routes on `strategy.py` **must** stay declared before `/{strategy_id}` or the path parameter swallows them.
+
 Watchlists are one row per user (`watchlists.lists`, a JSON array), so ownership is just the `user_id` filter — no id-based gate. Only user-editable lists are stored; the BIST/NASDAQ/Kripto/Forex lists are *derived* from "Favoriler" by `sanitizeLists` in `store/watchlistStore.ts` and must never be persisted. Quote fields (`lastPrice`/`change`/`changePercent`) are stripped before saving — they change on every refresh, and persisting them caused a PUT storm. `scheduleServerSave` also skips the write when the structural payload is unchanged.
 
 ### Auth
@@ -115,7 +117,6 @@ Charts use `lightweight-charts` only — do not write a custom candlestick rende
 ### Implementation status — many files are 0–3 line placeholders
 Only Phases 1–3 are partially built. Verify a module is real before wiring to it:
 - **Implemented:** market data + symbols, indicators, rules/evaluator/engine, strategy engine + routes, scanner engine, alerts, auth, admin; frontend chart, strategy builder/list/condition editor, batch scanner, watchlist, alerts, replay controls.
-- **Still browser-only:** the single-evaluation test history (`replay_single_eval_history` in `store/strategyStore.ts`) lives in localStorage, not the database, so it does not follow the user across devices. Batch scan history does live in SQL.
 - **Stubs:** `engines/replay_engine.py`, `engines/backtest_engine.py`, `optimizer/`, `ai/`, `journal/`, `reports/`, `api/websocket.py`, routes `replay|scanner|backtest|journal|watchlist`, and frontend `pages/{Chart,Dashboard,Replay,Scanner,Backtest,Journal}Page.tsx`, `scanner/`, `journal/`, `workspace/`, `services/{websocket,backend}.ts`, `store/{chartStore,userStore}.ts`, `charts/{ChartManager,Indicators,Drawings}.ts`.
 
 `main.py` mounts only `auth`, `market`, `strategy`, `alerts`, `admin` under `/api`. New routers must be added there explicitly.

@@ -46,42 +46,18 @@ function dedupeEvalHistory(history: SingleEvaluationLogItem[]): SingleEvaluation
   });
 }
 
-function loadInitialEvalHistory(): SingleEvaluationLogItem[] {
+// Tekli test geçmişi artık veritabanında, kullanıcıya bağlı olarak tutuluyor.
+// Bu anahtar yalnızca eski tarayıcı verisini bir kez sunucuya taşımak için okunur.
+const LEGACY_EVAL_HISTORY_KEY = 'replay_single_eval_history';
+
+/** Tarayıcıda kalmış eski geçmişi okur (tek seferlik geçiş için). */
+function readLegacyEvalHistory(): SingleEvaluationLogItem[] {
   try {
-    const raw = localStorage.getItem('replay_single_eval_history');
+    const raw = localStorage.getItem(LEGACY_EVAL_HISTORY_KEY);
     return raw ? dedupeEvalHistory(JSON.parse(raw)) : [];
   } catch {
     return [];
   }
-}
-
-/**
- * Geçmişi localStorage'a yazar.
- *
- * Kayıtlar tüm sinyalleriyle birlikte saklandığı için liste kotayı aşabilir;
- * bu durumda en eski kayıtlar düşürülerek tekrar denenir. Kalıcı olarak
- * yazılabilen liste döner (state ile localStorage aynı kalsın diye).
- */
-function persistEvalHistory(history: SingleEvaluationLogItem[]): SingleEvaluationLogItem[] {
-  let list = history;
-  while (list.length > 0) {
-    try {
-      localStorage.setItem('replay_single_eval_history', JSON.stringify(list));
-      return list;
-    } catch (e) {
-      if (list.length === 1) {
-        console.warn('Test geçmişi kaydedilemedi:', e);
-        return list;
-      }
-      list = list.slice(0, list.length - 1);
-    }
-  }
-  try {
-    localStorage.setItem('replay_single_eval_history', '[]');
-  } catch {
-    /* yoksay */
-  }
-  return list;
 }
 
 export const INITIAL_STRATEGY_STATE: StrategyState = {
@@ -89,7 +65,8 @@ export const INITIAL_STRATEGY_STATE: StrategyState = {
   activeStrategy: null,
   indicators: [],
   evaluateResult: null,
-  singleEvalHistory: loadInitialEvalHistory(),
+  // Giriş yapıldığında sunucudan yüklenir (fetchEvalHistory).
+  singleEvalHistory: [],
   isLoading: false,
   error: null,
 };
@@ -230,32 +207,12 @@ export const strategyStore = {
       result.provider = params.provider;
       result.timeframe = params.timeframe;
 
-      const newLogItem: SingleEvaluationLogItem = {
-        id: `${id}_${params.symbol}_${params.timeframe}_${Date.now()}`,
-        strategy_id: id,
-        strategy_name: result.strategy_name || currentState.activeStrategy?.name || 'Strateji',
-        symbol: params.symbol,
-        provider: params.provider,
-        timeframe: params.timeframe,
-        executed_at: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-        total_bars: result.total_bars,
-        total_trades: result.total_trades || 0,
-        win_rate: result.win_rate || 0,
-        total_pnl_percent: result.total_pnl_percent || 0,
-        request: { ...params },
-        result: result,
-      };
+      setState({ evaluateResult: result, isLoading: false });
 
-      // Aynı strateji/parite/timeframe için eski kayıt varsa yerini yenisi alır.
-      const updatedHistory = persistEvalHistory(
-        dedupeEvalHistory([newLogItem, ...currentState.singleEvalHistory]).slice(0, 30)
-      );
+      // Sunucu değerlendirmeyi kendisi geçmişe yazıyor (aynı strateji/parite/
+      // timeframe için eski kaydın üzerine); güncel listeyi oradan tazele.
+      strategyStore.fetchEvalHistory();
 
-      setState({
-        evaluateResult: result,
-        singleEvalHistory: updatedHistory,
-        isLoading: false,
-      });
       return result;
     } catch (err: any) {
       setState({ isLoading: false, error: err.message || 'Değerlendirme başarısız' });
@@ -275,18 +232,56 @@ export const strategyStore = {
     setState({ evaluateResult: restored, error: null, isLoading: false });
   },
 
-  deleteSingleEvalHistoryItem: (id: string) => {
-    const updated = persistEvalHistory(currentState.singleEvalHistory.filter((h) => h.id !== id));
-    setState({ singleEvalHistory: updated });
+  /**
+   * Test geçmişini sunucudan yükler.
+   *
+   * Sunucu boşsa ve tarayıcıda eski kayıtlar varsa bunlar bir kez yukarı
+   * taşınır; böylece localStorage'daki mevcut geçmiş kaybolmaz.
+   */
+  fetchEvalHistory: async () => {
+    try {
+      let history = await strategyApi.getEvaluationHistory();
+
+      if (history.length === 0) {
+        const legacy = readLegacyEvalHistory();
+        if (legacy.length > 0) {
+          await strategyApi.importEvaluationHistory(legacy);
+          history = await strategyApi.getEvaluationHistory();
+        }
+      }
+
+      // Aktarım sonrası tarayıcıdaki kopya artık gereksiz; tek kaynak sunucu.
+      localStorage.removeItem(LEGACY_EVAL_HISTORY_KEY);
+      setState({ singleEvalHistory: dedupeEvalHistory(history) });
+    } catch (err) {
+      console.warn('Test geçmişi alınamadı:', err);
+    }
   },
 
-  clearSingleEvalHistory: (strategyId?: string) => {
-    let updated: SingleEvaluationLogItem[] = [];
-    if (strategyId) {
-      updated = currentState.singleEvalHistory.filter((h) => h.strategy_id !== strategyId);
+  deleteSingleEvalHistoryItem: async (id: string) => {
+    // Arayüz anında tepki versin; hata olursa sunucudaki gerçek liste geri yüklenir.
+    setState({ singleEvalHistory: currentState.singleEvalHistory.filter((h) => h.id !== id) });
+    try {
+      await strategyApi.deleteEvaluation(id);
+    } catch (err) {
+      console.warn('Test kaydı silinemedi:', err);
+      strategyStore.fetchEvalHistory();
     }
-    updated = persistEvalHistory(updated);
-    setState({ singleEvalHistory: updated });
+  },
+
+  clearSingleEvalHistory: async (strategyId?: string) => {
+    const previous = currentState.singleEvalHistory;
+    setState({
+      singleEvalHistory: strategyId
+        ? previous.filter((h) => h.strategy_id !== strategyId)
+        : [],
+    });
+    try {
+      await strategyApi.clearEvaluationHistory(strategyId);
+    } catch (err) {
+      console.warn('Test geçmişi temizlenemedi:', err);
+      strategyStore.fetchEvalHistory();
+    }
   },
 
   // ─── İndikatörler ─────────────────────────────────────────────────────

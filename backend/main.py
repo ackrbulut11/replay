@@ -53,12 +53,20 @@ origins = [
     "http://127.0.0.1:5173",
     "http://localhost:1420",
     "https://replay-nine-gold.vercel.app",
-    settings.FRONTEND_URL
 ]
+if settings.FRONTEND_URL and settings.FRONTEND_URL not in origins:
+    origins.append(settings.FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:.*|http://127\.0\.0\.1:.*",
+    # Liste daha önce kuruluyor ama middleware'e verilmiyordu; FRONTEND_URL
+    # ayarının hiçbir etkisi yoktu.
+    allow_origins=origins,
+    # Vercel preview dağıtımları rastgele alt alan adı aldığı için regex
+    # gerekli, ancak proje adına sabitlendi: eski `https://.*\.vercel\.app`
+    # kalıbı herhangi bir vercel.app sitesinin kimlik bilgisiyle istek
+    # atmasına izin veriyordu.
+    allow_origin_regex=r"https://replay-[a-z0-9-]+\.vercel\.app|http://localhost:\d+|http://127\.0\.0\.1:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

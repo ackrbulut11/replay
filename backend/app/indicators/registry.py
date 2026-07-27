@@ -31,8 +31,19 @@ def calc_rsi(df: pd.DataFrame, period: int) -> pd.Series:
     loss = (-delta).where(delta < 0, 0.0)
     avg_gain = gain.ewm(alpha=1.0 / period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1.0 / period, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, float("nan"))
-    return 100 - (100 / (1 + rs))
+
+    # Sıfıra bölmeyi NaN'a çevirip uç durumları aşağıda açıkça ele alıyoruz.
+    rs = avg_gain / avg_loss.replace(0.0, float("nan"))
+    rsi = 100 - (100 / (1 + rs))
+
+    # Hiç kayıp yoksa RSI tanım gereği 100'dür; NaN bırakılırsa kesintisiz
+    # yükselişte RSI koşulları sessizce hiç tetiklenmez.
+    no_loss = avg_loss == 0
+    rsi = rsi.mask(no_loss & (avg_gain > 0), 100.0)
+    # Ne kazanç ne kayıp varsa (tamamen yatay fiyat) nötr kabul edilir.
+    rsi = rsi.mask(no_loss & (avg_gain == 0), 50.0)
+
+    return rsi
 
 
 def calc_macd(df: pd.DataFrame, period: int = 12) -> dict[str, pd.Series]:

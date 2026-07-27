@@ -27,10 +27,29 @@ export interface StrategyState {
   error: string | null;
 }
 
+/** Kayıt kimliği: aynı strateji + parite + timeframe için tek kayıt tutulur. */
+function evalLogKey(item: SingleEvaluationLogItem): string {
+  return `${item.strategy_id}|${item.provider}|${item.symbol}|${item.timeframe}`;
+}
+
+/**
+ * Aynı strateji/parite/timeframe için birden fazla kayıt varsa sadece en günceli kalır.
+ * Liste en yeni en üstte olduğundan ilk görülen kayıt en güncel olandır.
+ */
+function dedupeEvalHistory(history: SingleEvaluationLogItem[]): SingleEvaluationLogItem[] {
+  const seen = new Set<string>();
+  return history.filter((item) => {
+    const key = evalLogKey(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function loadInitialEvalHistory(): SingleEvaluationLogItem[] {
   try {
     const raw = localStorage.getItem('replay_single_eval_history');
-    return raw ? JSON.parse(raw) : [];
+    return raw ? dedupeEvalHistory(JSON.parse(raw)) : [];
   } catch {
     return [];
   }
@@ -227,8 +246,9 @@ export const strategyStore = {
         result: result,
       };
 
+      // Aynı strateji/parite/timeframe için eski kayıt varsa yerini yenisi alır.
       const updatedHistory = persistEvalHistory(
-        [newLogItem, ...currentState.singleEvalHistory.filter((h) => h.id !== newLogItem.id)].slice(0, 30)
+        dedupeEvalHistory([newLogItem, ...currentState.singleEvalHistory]).slice(0, 30)
       );
 
       setState({

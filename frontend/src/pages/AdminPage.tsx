@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Users, SlidersHorizontal, BookOpen, PlayCircle, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Users, SlidersHorizontal, Bell, PlayCircle, RefreshCw, ShieldAlert } from 'lucide-react';
 import { getAdminStats, getAdminUsers, type AdminStats, type AdminUserItem } from '../services/adminApi';
 
 function formatDate(value?: string | null): string {
@@ -17,6 +17,19 @@ function formatDate(value?: string | null): string {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+  });
+}
+
+/** Son giriş için tarih + saat; "hiç giriş yapmamış" durumunu ayırt eder. */
+function formatDateTime(value?: string | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('tr-TR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -97,7 +110,7 @@ export default function AdminPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard label="Toplam Kullanıcı" value={stats.total_users} icon={Users} />
           <StatCard label="Toplam Strateji" value={stats.total_strategies} icon={SlidersHorizontal} />
-          <StatCard label="Toplam İşlem" value={stats.total_trades} icon={BookOpen} />
+          <StatCard label="Toplam Alarm" value={stats.total_alerts} icon={Bell} />
           <StatCard label="Replay Oturumu" value={stats.total_replay_sessions} icon={PlayCircle} />
         </div>
       )}
@@ -116,8 +129,10 @@ export default function AdminPage() {
                 <tr className="text-slate-500 border-b border-slate-800/60">
                   <th className="text-left font-semibold px-4 py-2.5">Kullanıcı</th>
                   <th className="text-left font-semibold px-4 py-2.5">Katılım</th>
+                  <th className="text-left font-semibold px-4 py-2.5">Son Giriş</th>
                   <th className="text-right font-semibold px-4 py-2.5">Strateji</th>
-                  <th className="text-right font-semibold px-4 py-2.5">İşlem</th>
+                  <th className="text-right font-semibold px-4 py-2.5">Alarm</th>
+                  <th className="text-left font-semibold px-4 py-2.5">Alarm Pariteleri</th>
                   <th className="text-right font-semibold px-4 py-2.5">Replay</th>
                 </tr>
               </thead>
@@ -140,8 +155,29 @@ export default function AdminPage() {
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-slate-400 font-mono whitespace-nowrap">{formatDate(u.created_at)}</td>
+                    <td className="px-4 py-2.5 text-slate-400 font-mono whitespace-nowrap">
+                      {u.last_login_at ? formatDateTime(u.last_login_at) : (
+                        <span className="text-slate-600 italic font-sans">hiç giriş yapmadı</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.strategies_count}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.trades_count}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.alerts_count}</td>
+                    <td className="px-4 py-2.5">
+                      {u.alert_symbols.length === 0 ? (
+                        <span className="text-slate-600">—</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1 max-w-[240px]">
+                          {u.alert_symbols.map((sym) => (
+                            <span
+                              key={sym}
+                              className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[10px] whitespace-nowrap"
+                            >
+                              {sym}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.replay_sessions_count}</td>
                   </tr>
                 ))}

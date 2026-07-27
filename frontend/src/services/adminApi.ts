@@ -15,15 +15,18 @@ export interface AdminUserItem {
   name?: string | null;
   avatar_url?: string | null;
   created_at?: string | null;
+  last_login_at?: string | null;
   strategies_count: number;
-  trades_count: number;
+  alerts_count: number;
+  /** Kullanıcının alarm kurduğu pariteler (tekrarsız, alfabetik) */
+  alert_symbols: string[];
   replay_sessions_count: number;
 }
 
 export interface AdminStats {
   total_users: number;
   total_strategies: number;
-  total_trades: number;
+  total_alerts: number;
   total_replay_sessions: number;
   latest_users: AdminUserItem[];
 }

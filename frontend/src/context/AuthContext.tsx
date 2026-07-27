@@ -37,6 +37,7 @@ const SESSION_KEYS = [
   'replay_user',
   'replay_single_eval_history',
   'replay_strategy_order',
+  'replay_watchlists_v2',
 ];
 
 export const TOKEN_STORAGE_KEY = 'replay_access_token';

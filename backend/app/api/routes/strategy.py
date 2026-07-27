@@ -8,8 +8,10 @@ CRUD endpointleri ve strateji değerlendirme.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database.postgres import get_db
@@ -30,6 +32,12 @@ from app.rules.strategy_models import (
     StrategyCreateRequest,
     StrategyUpdateRequest,
 )
+
+class ImportEvaluationsRequest(BaseModel):
+    """Tarayıcıda kalmış eski test geçmişinin tek seferlik aktarımı."""
+
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+
 
 router = APIRouter(prefix="/strategy", tags=["strategy"])
 
@@ -72,6 +80,85 @@ def get_available_indicators():
     """Kullanılabilir indikatör listesini döndürür."""
     indicators = IndicatorRegistry.list_indicators()
     return {"indicators": indicators}
+
+
+# ─── Tekli Test Geçmişi ──────────────────────────────────────────────────────
+#
+# DİKKAT: Bu uçlar "/{strategy_id}" yolundan ÖNCE tanımlanmalıdır; aksi halde
+# yol parametresi "evaluations" kelimesini strateji ID'si sanıp bunları yutar.
+
+
+@router.get("/evaluations")
+def list_evaluations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Kullanıcının tekli test geçmişini döndürür (tüm stratejiler)."""
+    items = _engine.list_evaluations(db, current_user.id)
+    return {"evaluations": items, "count": len(items)}
+
+
+@router.post("/evaluations/import")
+def import_evaluations(
+    request: ImportEvaluationsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Tarayıcıda kalmış eski geçmişi bir kez veritabanına aktarır.
+
+    Yalnızca sunucuda hiç kayıt yokken çağrılması beklenir; var olan kayıtların
+    üzerine yazmamak için sunucu doluysa hiçbir şey yapılmaz.
+    """
+    if _engine.list_evaluations(db, current_user.id):
+        return {"message": "Geçmiş zaten mevcut, aktarım yapılmadı", "imported": 0}
+
+    imported = 0
+    for item in request.items:
+        req = item.get("request") or {}
+        result = item.get("result")
+        if not result or not req.get("symbol"):
+            continue
+        # Stratejinin hâlâ var ve kullanıcıya ait olduğunu doğrula.
+        if _engine.get_strategy(db, item.get("strategy_id", ""), current_user.id) is None:
+            continue
+        _engine.save_evaluation(
+            db=db,
+            user_id=current_user.id,
+            strategy_id=item["strategy_id"],
+            strategy_name=item.get("strategy_name", ""),
+            request=req,
+            result=result,
+        )
+        imported += 1
+
+    return {"message": "Geçmiş aktarıldı", "imported": imported}
+
+
+@router.delete("/evaluations")
+def clear_evaluations(
+    strategy_id: Optional[str] = Query(None, description="Yalnızca bu stratejinin kayıtlarını sil"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Test geçmişini temizler."""
+    deleted = _engine.clear_evaluations(db, current_user.id, strategy_id)
+    return {"message": "Test geçmişi temizlendi", "deleted": deleted}
+
+
+@router.delete("/evaluations/{evaluation_id}")
+def delete_evaluation(
+    evaluation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Tek bir test kaydını siler (yalnızca sahibi)."""
+    if not _engine.delete_evaluation(db, evaluation_id, current_user.id):
+        raise HTTPException(status_code=404, detail=f"Test kaydı bulunamadı: {evaluation_id}")
+    return {"message": "Test kaydı silindi", "evaluation_id": evaluation_id}
+
+
+# ─── Strateji Detayı ─────────────────────────────────────────────────────────
 
 
 @router.get("/{strategy_id}")
@@ -126,6 +213,8 @@ def delete_strategy(
 def evaluate_strategy(
     request: EvaluateRequest,
     strategy: dict = Depends(get_owned_strategy),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Stratejiyi verilen sembol/timeframe üzerinde çalıştırır (yalnızca sahibi).
@@ -237,6 +326,21 @@ def evaluate_strategy(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Değerlendirme hatası: {e}")
+
+    # Sonucu tekli test geçmişine kaydet (toplu tarama da aynı şekilde davranır).
+    # Geçmiş kaydı başarısız olsa bile değerlendirme sonucu döndürülmeli.
+    try:
+        _engine.save_evaluation(
+            db=db,
+            user_id=current_user.id,
+            strategy_id=strategy["id"],
+            strategy_name=strategy.get("name", ""),
+            request=request.model_dump(),
+            result=result,
+        )
+    except Exception as e:
+        db.rollback()
+        print(f"Uyarı: test geçmişi kaydedilemedi: {e}")
 
     return EvaluateResponse(
         strategy_id=result["strategy_id"],

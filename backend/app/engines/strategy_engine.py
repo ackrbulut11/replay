@@ -20,13 +20,17 @@ from typing import Union
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.database.models import Strategy
+from app.database.models import Strategy, StrategyEvaluation
 from app.rules.engine import RuleEngine
 from app.rules.strategy_models import (
     StrategyCreateRequest,
     StrategyModel,
     StrategyUpdateRequest,
 )
+
+
+# Kullanıcı başına saklanacak azami tekli test sayısı; aşan en eski kayıtlar silinir.
+MAX_EVALUATIONS_PER_USER = 30
 
 
 def _iso(value: datetime | None) -> str:
@@ -196,6 +200,141 @@ class StrategyEngine:
         db.delete(row)
         db.commit()
         return True
+
+    # ─── Tekli Test Geçmişi ───────────────────────────────────────────────
+
+    @staticmethod
+    def _evaluation_to_dict(row: StrategyEvaluation) -> dict:
+        """Satırı arayüzün SingleEvaluationLogItem yapısına çevirir."""
+        created = row.created_at or datetime.utcnow()
+        return {
+            "id": row.id,
+            "strategy_id": row.strategy_id,
+            "strategy_name": row.strategy_name or "",
+            "symbol": row.symbol,
+            "provider": row.provider,
+            "timeframe": row.timeframe,
+            # Arayüz bunu olduğu gibi gösteriyor (saat:dakika).
+            "executed_at": created.strftime("%H:%M"),
+            "created_at": created.isoformat() + "Z",
+            "total_bars": row.total_bars or 0,
+            "total_trades": row.total_trades or 0,
+            "win_rate": row.win_rate or 0.0,
+            "total_pnl_percent": row.total_pnl_percent or 0.0,
+            "request": row.request,
+            "result": row.result,
+        }
+
+    def save_evaluation(
+        self,
+        db: Session,
+        user_id: str,
+        strategy_id: str,
+        strategy_name: str,
+        request: dict,
+        result: dict,
+        created_at: datetime | None = None,
+    ) -> dict:
+        """
+        Tekli test sonucunu kaydeder.
+
+        Aynı strateji/sağlayıcı/parite/zaman dilimi için kayıt varsa üzerine
+        yazılır — geçmişte her kombinasyondan yalnızca en güncel test durur.
+        """
+        symbol = str(request.get("symbol", "")).upper()
+        provider = str(request.get("provider", "")).lower()
+        timeframe = str(request.get("timeframe", ""))
+
+        row = (
+            db.query(StrategyEvaluation)
+            .filter(
+                StrategyEvaluation.user_id == user_id,
+                StrategyEvaluation.strategy_id == strategy_id,
+                StrategyEvaluation.provider == provider,
+                StrategyEvaluation.symbol == symbol,
+                StrategyEvaluation.timeframe == timeframe,
+            )
+            .first()
+        )
+
+        if row is None:
+            row = StrategyEvaluation(
+                user_id=user_id,
+                strategy_id=strategy_id,
+                symbol=symbol,
+                provider=provider,
+                timeframe=timeframe,
+            )
+            db.add(row)
+
+        row.strategy_name = strategy_name
+        row.total_bars = result.get("total_bars", 0)
+        row.total_trades = result.get("total_trades", 0)
+        row.win_rate = result.get("win_rate", 0.0)
+        row.total_pnl_percent = result.get("total_pnl_percent", 0.0)
+        row.request = request
+        row.result = result
+        row.created_at = created_at or datetime.utcnow()
+
+        db.commit()
+        db.refresh(row)
+
+        self._prune_evaluations(db, user_id)
+        return self._evaluation_to_dict(row)
+
+    def _prune_evaluations(self, db: Session, user_id: str) -> None:
+        """Kullanıcı başına saklanan test sayısını sınırlar (sınırsız birikmesin)."""
+        stale = (
+            db.query(StrategyEvaluation)
+            .filter(StrategyEvaluation.user_id == user_id)
+            .order_by(StrategyEvaluation.created_at.desc())
+            .offset(MAX_EVALUATIONS_PER_USER)
+            .all()
+        )
+        if not stale:
+            return
+        for row in stale:
+            db.delete(row)
+        db.commit()
+
+    def list_evaluations(self, db: Session, user_id: str) -> list[dict]:
+        """Kullanıcının tekli test geçmişini döndürür (en yeni en başta)."""
+        rows = (
+            db.query(StrategyEvaluation)
+            .filter(StrategyEvaluation.user_id == user_id)
+            .order_by(StrategyEvaluation.created_at.desc())
+            .limit(MAX_EVALUATIONS_PER_USER)
+            .all()
+        )
+        return [self._evaluation_to_dict(r) for r in rows]
+
+    def delete_evaluation(self, db: Session, evaluation_id: str, user_id: str) -> bool:
+        """Tek bir test kaydını siler — yalnızca sahibi ise."""
+        row = (
+            db.query(StrategyEvaluation)
+            .filter(
+                StrategyEvaluation.id == evaluation_id,
+                StrategyEvaluation.user_id == user_id,
+            )
+            .first()
+        )
+        if row is None:
+            return False
+        db.delete(row)
+        db.commit()
+        return True
+
+    def clear_evaluations(self, db: Session, user_id: str, strategy_id: str | None = None) -> int:
+        """Test geçmişini temizler; strategy_id verilirse yalnızca o stratejiyi."""
+        query = db.query(StrategyEvaluation).filter(StrategyEvaluation.user_id == user_id)
+        if strategy_id:
+            query = query.filter(StrategyEvaluation.strategy_id == strategy_id)
+
+        rows = query.all()
+        for row in rows:
+            db.delete(row)
+        db.commit()
+        return len(rows)
 
     # ─── Değerlendirme ────────────────────────────────────────────────────
     #

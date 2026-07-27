@@ -1,6 +1,17 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, Text, JSON, Boolean
+from sqlalchemy import (
+    Column,
+    String,
+    Float,
+    Integer,
+    DateTime,
+    ForeignKey,
+    Text,
+    JSON,
+    Boolean,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from app.database.postgres import Base
 
@@ -25,6 +36,9 @@ class User(Base):
     # Relationships
     strategies = relationship("Strategy", back_populates="user", cascade="all, delete-orphan")
     strategy_scans = relationship("StrategyScan", back_populates="user", cascade="all, delete-orphan")
+    strategy_evaluations = relationship(
+        "StrategyEvaluation", back_populates="user", cascade="all, delete-orphan"
+    )
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
     watchlist = relationship(
         "Watchlist", back_populates="user", uselist=False, cascade="all, delete-orphan"
@@ -58,6 +72,9 @@ class Strategy(Base):
 
     user = relationship("User", back_populates="strategies")
     scans = relationship("StrategyScan", back_populates="strategy", cascade="all, delete-orphan")
+    evaluations = relationship(
+        "StrategyEvaluation", back_populates="strategy", cascade="all, delete-orphan"
+    )
 
 
 class StrategyScan(Base):
@@ -82,6 +99,48 @@ class StrategyScan(Base):
 
     user = relationship("User", back_populates="strategy_scans")
     strategy = relationship("Strategy", back_populates="scans")
+
+
+class StrategyEvaluation(Base):
+    """
+    Tekli strateji testi (single evaluate) geçmişi.
+
+    Aynı strateji + sağlayıcı + parite + zaman dilimi için tek kayıt tutulur;
+    yeni test eskisinin yerini alır (benzersiz kısıt bunu garanti eder).
+    Özet alanlar listeleme için kolonlanmış, tam sonuç `result` içinde durur.
+    """
+
+    __tablename__ = "strategy_evaluations"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "strategy_id",
+            "provider",
+            "symbol",
+            "timeframe",
+            name="uq_strategy_evaluation_combo",
+        ),
+    )
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    strategy_id = Column(String(36), ForeignKey("strategies.id", ondelete="CASCADE"), index=True, nullable=False)
+    strategy_name = Column(String(255), nullable=True)
+    symbol = Column(String(50), nullable=False)
+    provider = Column(String(50), nullable=False)
+    timeframe = Column(String(20), nullable=False)
+    total_bars = Column(Integer, default=0)
+    total_trades = Column(Integer, default=0)
+    win_rate = Column(Float, default=0.0)
+    total_pnl_percent = Column(Float, default=0.0)
+    # Testi üreten istek; geçmişten seçilince form bu değerlerle geri yüklenir.
+    request = Column(JSON, nullable=True)
+    # Sinyaller dahil tam sonuç.
+    result = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="strategy_evaluations")
+    strategy = relationship("Strategy", back_populates="evaluations")
 
 
 class Alert(Base):

@@ -8,6 +8,9 @@ CRUD endpointleri ve strateji değerlendirme.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.orm import Session
 
@@ -129,8 +132,6 @@ def evaluate_strategy(strategy_id: str, request: EvaluateRequest):
         raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
 
     # Tarih aralığını hazırla
-    from datetime import timedelta
-
     if request.end:
         try:
             end_dt = datetime.strptime(request.end, "%Y-%m-%d")
@@ -272,8 +273,6 @@ def batch_evaluate_strategy(strategy_id: str, request: BatchEvaluateRequest):
     strategy = _engine.get_strategy(strategy_id)
     if strategy is None:
         raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
-
-    from datetime import timedelta
 
     if request.end:
         try:

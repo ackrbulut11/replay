@@ -58,8 +58,17 @@ React UI  ──HTTP /api──▶  FastAPI routes (thin)  ──▶  engines/ +
 - The strategy/rule engine never imports anything chart- or frontend-related, and the same `RuleEngine.evaluate*` path serves both live analysis and replay.
 - Frontend talks to the backend only through `src/services/*`; components must not `fetch` directly (several existing files violate this — don't copy the pattern).
 
-### Strategies are data, not code
-A strategy is a JSON file in `storage/strategies/<uuid>.json` with `parameters`, `entry_rules`, `exit_rules`, `timeframe_filters`, `allow_short`, `take_profit_pct`, `stop_loss_pct`. Never add a `.py` file per strategy.
+### Strategies are data, not code — and they are per-user
+A strategy is a JSON rule tree stored in the `strategies.rules` column (`parameters`, `entry_rules`, `exit_rules`, `timeframe_filters`, `allow_short`, `take_profit_pct`, `stop_loss_pct`). Never add a `.py` file per strategy. The older `storage/strategies/*.json` files are pre-migration backups and are no longer read — `scripts/import_strategies_to_db.py` imports them.
+
+Ownership is enforced, not advisory:
+- Every strategy endpoint requires a valid token (`get_current_user`); there is no anonymous access.
+- `get_owned_strategy` in [strategy.py](backend/app/api/routes/strategy.py) is the single ownership gate for `get/update/delete/evaluate/batch-evaluate/scans`. It returns **404, not 403**, for someone else's strategy so existence isn't leaked. Reuse it rather than re-checking `user_id` inline.
+- Identity comes only from the token. `StrategyCreateRequest.user_id` exists in the schema but is deliberately ignored server-side.
+- Engine CRUD methods all take `(db, ..., user_id)` and filter by `user_id` in the query itself.
+- Evaluation methods (`evaluate`, `evaluate_symbol`, `evaluate_batch`) take an already-fetched strategy **dict** and never touch the DB — `evaluate_batch` runs in a thread pool, and a SQLAlchemy session must not cross threads.
+
+Scan history (`strategy_scans`) is scoped the same way and cascades on strategy/user delete.
 
 Rule DSL: a condition group is `{logic: "AND"|"OR", conditions: [{left, operator, right, right2?}]}`. Each operand is `{type: "indicator"|"price"|"value"|"pnl", ...}`. Numeric fields may reference a strategy parameter as a `"$param_name"` string, resolved by `resolve_parameter()` in [evaluator.py](backend/app/rules/evaluator.py).
 
@@ -75,17 +84,22 @@ Adding a market = implement `IDataProvider` in `data/providers/` and register it
 ### Data loading and caching
 [data/loader.py](backend/app/data/loader.py) is a three-tier cache: in-process RAM dict keyed by `(provider, symbol, timeframe)` and invalidated by parquet mtime → `storage/market_data/<provider>/<SYMBOL>_<tf>.parquet` → provider API. Cache hits are range-checked at both ends and only the missing prefix/suffix is fetched; a cache younger than 300s counts as covering "now". Per-symbol `threading.Lock`s guard parquet writes. `4h` for nasdaq/bist/forex is resampled from `1h` and cached. Timestamps are pandas datetimes; daily+ timeframes are normalized and deduped.
 
+### Schema migrations
+Alembic drives the schema. `main.py: run_migrations()` runs `alembic upgrade head` on startup — `Base.metadata.create_all()` was removed on purpose, because it cannot add a column to an existing table and leaves no alembic stamp, which breaks the next migration. Revision `0001` is a baseline of the pre-Alembic schema: an existing database is `alembic stamp 0001`-ed once, a fresh one runs both revisions. SQLite needs `op.batch_alter_table()` for any column add/drop.
+
 ### Storage path resolution — two `storage/` directories exist
 `StrategyEngine`, `AlertEngine` and `DataLoader` each walk up from `__file__` until they find a directory containing `storage/`. Starting under `backend/app/...`, that resolves to **`backend/storage/`**, not the repo-root `storage/`. `DATABASE_URL` (`sqlite:///./storage/database/app.db`) is relative to the process CWD, so running `python main.py` from `backend/` also lands in `backend/storage/`. Repo-root `storage/` is largely vestigial. When adding a path, follow the existing walk-up helper rather than introducing a new root.
 
-Strategy JSON files, not the SQLAlchemy `Strategy` table, are the source of truth; the table exists in parallel and [admin.py](backend/app/api/routes/admin.py) reconciles both (`max(json_count, sql_count)`).
+Alerts (`storage/alerts/`) and market parquet caches still use this file layout; strategies and scans no longer do.
 
 ### Auth
-Google OAuth 2.0 → `POST /api/auth/google` → app-issued JWT (access + refresh). `get_current_user` (401 on failure) and `get_current_user_optional` (returns `None`) in [dependencies.py](backend/app/auth/dependencies.py). Strategy endpoints use the optional dependency and filter by `user_id`, treating strategies with no `user_id` as visible to everyone (legacy records).
+Google OAuth 2.0 → `POST /api/auth/google` → app-issued JWT (access + refresh). [dependencies.py](backend/app/auth/dependencies.py) provides `get_current_user` (401 on missing/invalid token *or* a token whose user no longer exists), `get_current_user_optional` (returns `None`), and `get_current_admin` (403 unless the token's email is in `ADMIN_EMAILS`).
 
-A dev bypass exists: any credential equal to `dev_mock_google_token` or starting with `dev_` logs in as `demo.trader@example.com`.
+All `/api/admin/*` routes are gated at the router level by `get_current_admin`. `ADMIN_EMAILS` is read from `.env` and empty by default, meaning nobody is an admin until it is configured — see [.env.example](backend/.env.example).
 
-Frontend token storage is inconsistent — `strategyApi.ts` reads `replay_access_token` with a fallback to `replay_auth_token`. Check `AuthContext.tsx` before touching either key.
+A dev bypass exists: any credential equal to `dev_mock_google_token` or starting with `dev_` logs in as `demo.trader@example.com`. It still goes through the real `/auth/google` endpoint and yields a real JWT — the frontend no longer fabricates an offline session, since a fake token cannot pass the enforced auth.
+
+Frontend session keys live in one place: `TOKEN_STORAGE_KEY` and `clearStoredSession()` in [AuthContext.tsx](frontend/src/context/AuthContext.tsx). On 401, `notifyUnauthorized()` clears storage and fires the `replay:unauthorized` event, which `AuthProvider` listens for to drop back to the login screen.
 
 ### Frontend state and routing
 There is **no router**. `App.tsx` holds an `activeTab` string and renders chart/replay/strategy inline; every other tab renders a placeholder. Symbol/provider/timeframe/date range are `useState` in `App.tsx` and threaded down as props.

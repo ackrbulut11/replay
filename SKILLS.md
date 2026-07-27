@@ -33,7 +33,8 @@ Bu dosya, projenin farklı katmanlarında çalışırken uyulması gereken tekni
 
 ## Veritabanı — SQLite
 
-- Şema değişiklikleri migration dosyası olmadan yapılmaz (`database/migrations/`).
+- Şema değişiklikleri migration dosyası olmadan yapılmaz (`database/migrations/`). Migration'lar Alembic ile yönetilir; `backend/` dizininden `alembic revision -m "..."` ile oluşturulur, `alembic upgrade head` ile uygulanır. Uygulama açılışta migration'ları kendisi çalıştırır (`main.py: run_migrations()`), `Base.metadata.create_all()` kullanılmaz — create_all mevcut tabloya kolon ekleyemez ve alembic damgası bırakmadığı için sonraki migration'ları bozar.
+- SQLite ALTER TABLE'ı sınırlı desteklediğinden kolon ekleme/silme `op.batch_alter_table()` içinde yapılır.
 - Büyük OHLCV verisi SQLite'ta değil `storage/parquet/` altında tutulur; SQLite sadece strateji, trade, journal gibi ilişkisel veriler için kullanılır.
 
 ## Backtest / Optimizer

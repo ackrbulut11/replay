@@ -94,6 +94,8 @@ TradingResearchPlatform/
 │   │
 │   ├── requirements.txt
 │   ├── pyproject.toml
+│   ├── alembic.ini                   # Alembic yapılandırması (URL env.py'den okunur)
+│   ├── .env.example                  # Ayar şablonu (.env git'e girmez)
 │   ├── main.py
 │   │
 │   ├── app/
@@ -132,8 +134,11 @@ TradingResearchPlatform/
 │   │   │
 │   │   ├── database/                 # PostgreSQL & SQLite ORM Models
 │   │   │   ├── postgres.py           # SQLAlchemy Engine & Session
-│   │   │   ├── models.py             # User, Strategy, ReplaySession, JournalTrade, ChartLayout
-│   │   │   └── migrations/
+│   │   │   ├── models.py             # User, Strategy, StrategyScan, ReplaySession, JournalTrade, ChartLayout
+│   │   │   └── migrations/           # Alembic
+│   │   │       ├── env.py
+│   │   │       ├── script.py.mako
+│   │   │       └── versions/
 │   │   │
 │   │   ├── indicators/
 │   │   │   ├── base.py
@@ -183,7 +188,8 @@ TradingResearchPlatform/
 │   │   ├── nasdaq/
 │   │   └── forex/
 │   │
-│   ├── strategies/                   # Kullanıcı stratejileri (JSON)
+│   ├── strategies/                   # ESKİ: stratejiler artık veritabanında (bkz. RULES.md §4)
+│   │                                 # Bu klasör yalnızca geçiş öncesi yedekleri barındırır.
 │   │
 │   └── database/
 │       └── app.db                    # Local SQLite Database
@@ -191,7 +197,9 @@ TradingResearchPlatform/
 │
 ├── scripts/
 │   ├── download_data.py
-│   └── update_market.py
+│   ├── update_market.py
+│   ├── build_sidecar.py
+│   └── import_strategies_to_db.py    # Eski JSON stratejileri veritabanına aktarır (tek seferlik)
 │
 └── .github/
     └── workflows/

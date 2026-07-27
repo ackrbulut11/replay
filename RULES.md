@@ -7,7 +7,8 @@ Bu dosya, bu proje üzerinde çalışan AI ajanlarının ve geliştiricilerin uy
 1. **Modülerlik zorunlu.** Her modül (`chart`, `replay`, `rules`, `scanner`, `journal`, `providers` vb.) bağımsız çalışabilmeli. Bir modülü silmek diğerlerini kırmamalı.
 2. **Strateji motoru grafikten bağımsızdır.** `backend/app/rules/` ve `engines/` içindeki kod, hiçbir zaman frontend/chart tarafına doğrudan bağımlı olamaz.
 3. **Replay ve canlı analiz aynı veri akışını kullanır.** İki ayrı veri işleme mantığı yazılmaz; tek bir engine, farklı modlarda (`live`, `replay`) çalışır.
-4. **Stratejiler kod değil, veridir.** Yeni strateji eklemek için `.py` dosyası açılmaz. Stratejiler `storage/strategies/*.json` içinde saklanır ve `rules/engine.py` tarafından yorumlanır.
+4. **Stratejiler kod değil, veridir.** Yeni strateji eklemek için `.py` dosyası açılmaz. Strateji, JSON kural ağacı olarak `strategies` tablosunun `rules` kolonunda saklanır ve `rules/engine.py` tarafından yorumlanır. Rule engine hâlâ düz bir sözlük alır; saklama biçimi değil, yalnızca saklama yeri veritabanıdır.
+4b. **Stratejiler kullanıcıya aittir.** Her strateji zorunlu bir `user_id` ile kaydedilir; listeleme, okuma, güncelleme, silme ve değerlendirme dahil tüm işlemler sahiplik kontrolünden geçer. Sahibi olmayan bir isteğe 403 değil **404** dönülür (403, başkasına ait bir stratejinin varlığını sızdırır). Kimlik yalnızca token'dan alınır; istek gövdesindeki `user_id` yok sayılır.
 5. **Veri sağlayıcılar `IDataProvider` interface'ini uygular.** Yeni bir borsa/piyasa eklemek sadece yeni bir `providers/*.py` dosyası yazmayı gerektirmeli; başka hiçbir yer değişmemeli.
 6. **UI, veri katmanı ve strateji motoru birbirinden bağımsızdır.** Frontend sadece API/WebSocket üzerinden konuşur, backend iç mantığını bilmez.
 

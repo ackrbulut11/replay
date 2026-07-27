@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
 from app.auth.router import router as auth_router
-from app.api.routes import alerts, market, strategy, admin
+from app.api.routes import alerts, market, strategy, admin, watchlist
 
 
 def run_migrations() -> None:
@@ -76,6 +76,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(market.router, prefix="/api")
 app.include_router(strategy.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
+app.include_router(watchlist.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 
 

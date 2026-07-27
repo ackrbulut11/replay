@@ -26,6 +26,9 @@ class User(Base):
     strategies = relationship("Strategy", back_populates="user", cascade="all, delete-orphan")
     strategy_scans = relationship("StrategyScan", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
+    watchlist = relationship(
+        "Watchlist", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     replay_sessions = relationship("ReplaySession", back_populates="user", cascade="all, delete-orphan")
     journal_trades = relationship("JournalTrade", back_populates="user", cascade="all, delete-orphan")
     chart_layouts = relationship("ChartLayout", back_populates="user", cascade="all, delete-orphan")
@@ -110,6 +113,34 @@ class Alert(Base):
     last_value = Column(Float, nullable=True)
 
     user = relationship("User", back_populates="alerts")
+
+
+class Watchlist(Base):
+    """
+    Kullanıcının izleme listeleri (kullanıcı başına tek satır).
+
+    `lists`, kullanıcının düzenleyebildiği listeleri (Favoriler + özel listeler)
+    JSON dizisi olarak tutar. BIST/NASDAQ/Kripto/Forex listeleri Favoriler'den
+    provider'a göre türetildiği için saklanmaz, arayüzde hesaplanır.
+
+    Panel genişliği / açık-kapalı gibi cihaza özel tercihler burada tutulmaz;
+    onlar tarayıcıda kalır.
+    """
+
+    __tablename__ = "watchlists"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        unique=True,
+        nullable=False,
+    )
+    lists = Column(JSON, nullable=False, default=list)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="watchlist")
 
 
 class ReplaySession(Base):

@@ -95,6 +95,26 @@ def calc_bollinger(df: pd.DataFrame, period: int) -> dict[str, pd.Series]:
     }
 
 
+def calc_stochastic(df: pd.DataFrame, period: int) -> dict[str, pd.Series]:
+    """
+    Stochastic Osilatör.
+
+    %K = 100 * (kapanış - period içindeki en düşük) / (en yüksek - en düşük)
+    %D = %K'nın 3 periyotluk basit ortalaması (sinyal çizgisi)
+    """
+    low_min = df["low"].rolling(window=period).min()
+    high_max = df["high"].rolling(window=period).max()
+    price_range = high_max - low_min
+
+    # Sıfıra bölmeyi NaN'a çevirip aşağıda açıkça ele alıyoruz.
+    k = 100 * (df["close"] - low_min) / price_range.replace(0.0, float("nan"))
+    # Period boyunca yüksek ve düşük eşitse (tamamen yatay) oran tanımsızdır; nötr 50.
+    k = k.mask(price_range == 0, 50.0)
+    d = k.rolling(window=3).mean()
+
+    return {"STOCH_K": k, "STOCH_D": d}
+
+
 def calc_adx(df: pd.DataFrame, period: int) -> dict[str, pd.Series]:
     """Average Directional Index (ADX)."""
     high = df["high"]
@@ -193,6 +213,16 @@ INDICATOR_INFO = {
         "max_period": 200,
         "fields": ["BB_upper", "BB_middle", "BB_lower"],
         "calc": calc_bollinger,
+        "multi_output": True,
+    },
+    "Stochastic": {
+        "display_name": "Stochastic Oscillator",
+        "category": "momentum",
+        "default_period": 14,
+        "min_period": 2,
+        "max_period": 100,
+        "fields": ["STOCH_K", "STOCH_D"],
+        "calc": calc_stochastic,
         "multi_output": True,
     },
     "ADX": {

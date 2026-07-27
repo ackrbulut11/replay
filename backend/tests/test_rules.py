@@ -62,6 +62,65 @@ class TestRules(unittest.TestCase):
         self.assertFalse(np.isnan(rsi_val))
         self.assertTrue(0 <= rsi_val <= 100)
 
+    def test_stochastic(self):
+        np.random.seed(7)
+        close = 100 + np.random.randn(100).cumsum()
+        df = pd.DataFrame({
+            "open": close,
+            "high": close + 2,
+            "low": close - 2,
+            "close": close,
+            "volume": [1000] * 100,
+        })
+
+        # Alan verilmezse varsayilan %K dondurulur (arayuzdeki sablon boyle cagiriyor)
+        k = IndicatorRegistry.get_value("Stochastic", df, period=14, bar_index=50)
+        self.assertFalse(np.isnan(k))
+        self.assertTrue(0 <= k <= 100, f"%K 0-100 araliginda olmali, gelen: {k}")
+
+        d = IndicatorRegistry.get_value("Stochastic", df, period=14, bar_index=50, field="STOCH_D")
+        self.assertTrue(0 <= d <= 100)
+
+        # Warmup: period'dan onceki barlar NaN olmali (lookahead korumasi)
+        self.assertTrue(np.isnan(IndicatorRegistry.get_value("Stochastic", df, 14, 5)))
+
+    def test_stochastic_edge_cases(self):
+        """Kesintisiz yukselis/dusus ve tamamen yatay fiyat."""
+        n = 60
+        up = pd.DataFrame({
+            "open": np.linspace(100, 200, n), "high": np.linspace(100, 200, n),
+            "low": np.linspace(100, 200, n), "close": np.linspace(100, 200, n),
+            "volume": [1000] * n,
+        })
+        # Kapanis her zaman period'un en yuksegi -> %K = 100
+        self.assertAlmostEqual(IndicatorRegistry.get_value("Stochastic", up, 14, 40), 100.0, places=6)
+
+        down = up.copy()
+        for col in ("open", "high", "low", "close"):
+            down[col] = np.linspace(200, 100, n)
+        self.assertAlmostEqual(IndicatorRegistry.get_value("Stochastic", down, 14, 40), 0.0, places=6)
+
+        # Tamamen yatay: yuksek == dusuk, oran tanimsiz -> notr 50 (NaN degil)
+        flat = up.copy()
+        for col in ("open", "high", "low", "close"):
+            flat[col] = 100.0
+        self.assertEqual(IndicatorRegistry.get_value("Stochastic", flat, 14, 40), 50.0)
+
+    def test_multi_output_field_names_are_stable(self):
+        """
+        Coklu ciktili indikatorlerin alan adlari arayuzdeki sablonlarla
+        birebir eslesmeli. Uyusmazlik "gecersiz alan" hatasina yol aciyordu
+        (ConditionEditor 'upper'/'lower'/'signal' gonderiyordu).
+        """
+        expected = {
+            "MACD": ["MACD", "MACD_signal", "MACD_hist"],
+            "BollingerBands": ["BB_upper", "BB_middle", "BB_lower"],
+            "ADX": ["ADX", "+DI", "-DI"],
+            "Stochastic": ["STOCH_K", "STOCH_D"],
+        }
+        for name, fields in expected.items():
+            self.assertEqual(IndicatorRegistry.get_info(name)["fields"], fields, f"{name} alanlari degismis")
+
     def test_rule_evaluator_and_engine(self):
         closes = [10.0] * 30 + [12.0, 15.0, 18.0, 22.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0]
         df = pd.DataFrame({

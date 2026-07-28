@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import {
-  Bell, Plus, Trash2, Power, X,
+  Bell, Plus, Trash2, Power,
   TrendingUp, TrendingDown, Clock, GripVertical
 } from 'lucide-react';
 import { alertStore, useAlertStore, AlertItem } from '../../store/alertStore';
@@ -11,11 +11,13 @@ interface AlertsPanelProps {
   currentProvider?: string;
   currentPrice?: number;
   onOpenCreateModal: () => void;
+  onSelectSymbol?: (symbol: string, provider: string) => void;
 }
 
 export default function AlertsPanel({
   currentSymbol,
   onOpenCreateModal,
+  onSelectSymbol,
 }: AlertsPanelProps) {
   const [watchlistState] = useWatchlistStore();
   const [alertState] = useAlertStore();
@@ -129,14 +131,6 @@ export default function AlertsPanel({
             <Plus className="w-3.5 h-3.5" />
             <span>Ekle</span>
           </button>
-
-          <button
-            onClick={() => watchlistStore.togglePanel()}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-lg transition"
-            title="Paneli Kapat"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
@@ -173,6 +167,7 @@ export default function AlertsPanel({
                     currentSymbol={currentSymbol}
                     formatTarget={formatTarget}
                     formatThreshold={formatThreshold}
+                    onSelectSymbol={onSelectSymbol}
                   />
                 ))}
               </div>
@@ -191,6 +186,7 @@ export default function AlertsPanel({
                     currentSymbol={currentSymbol}
                     formatTarget={formatTarget}
                     formatThreshold={formatThreshold}
+                    onSelectSymbol={onSelectSymbol}
                   />
                 ))}
               </div>
@@ -209,6 +205,7 @@ export default function AlertsPanel({
                     currentSymbol={currentSymbol}
                     formatTarget={formatTarget}
                     formatThreshold={formatThreshold}
+                    onSelectSymbol={onSelectSymbol}
                   />
                 ))}
               </div>
@@ -225,15 +222,23 @@ interface AlertCardProps {
   currentSymbol: string;
   formatTarget: (a: AlertItem) => string;
   formatThreshold: (v: number, t: string) => string;
+  onSelectSymbol?: (symbol: string, provider: string) => void;
 }
 
-function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold }: AlertCardProps) {
+function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold, onSelectSymbol }: AlertCardProps) {
   const isMatchCurrent = alert.symbol.toUpperCase() === currentSymbol.toUpperCase();
   const isRises = alert.condition === 'rises_above';
+  const canNavigate = !!onSelectSymbol && !isMatchCurrent;
 
   return (
     <div
-      className={`p-2.5 rounded-xl border transition-all ${
+      onClick={() => {
+        if (canNavigate) {
+          onSelectSymbol!(alert.symbol, alert.provider);
+        }
+      }}
+      title={canNavigate ? `${alert.symbol} paritesine geç` : undefined}
+      className={`p-2.5 rounded-xl border transition-all ${canNavigate ? 'cursor-pointer hover:border-amber-500/50' : ''} ${
         alert.status === 'TRIGGERED'
           ? 'bg-amber-500/10 border-amber-500/40 shadow-md shadow-amber-500/10'
           : isMatchCurrent
@@ -251,7 +256,10 @@ function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold }: Aler
 
         <div className="flex items-center gap-1">
           <button
-            onClick={() => alertStore.toggleAlertStatus(alert.id, alert.status)}
+            onClick={(e) => {
+              e.stopPropagation();
+              alertStore.toggleAlertStatus(alert.id, alert.status);
+            }}
             className={`p-1 rounded-lg transition ${
               alert.status === 'ACTIVE'
                 ? 'text-emerald-400 hover:bg-emerald-500/20'
@@ -264,7 +272,10 @@ function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold }: Aler
             <Power className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => alertStore.deleteAlert(alert.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              alertStore.deleteAlert(alert.id);
+            }}
             className="p-1 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
             title="Alarmı Sil"
           >

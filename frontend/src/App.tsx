@@ -256,6 +256,10 @@ function App() {
                   chartData.length > 0 ? chartData[chartData.length - 1].close : undefined
                 )
               }
+              onSelectSymbol={(newSym, newProv) => {
+                setSymbol(newSym);
+                setProvider(newProv);
+              }}
             />
 
             {/* Dikey Sağ Araç Çubuğu (TradingView Stili) */}

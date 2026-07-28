@@ -424,7 +424,10 @@ def _run_batch_scan_job(
     ROUND_TIMEOUT_SECONDS = 30
 
     db = SessionLocal()
-    executor = ThreadPoolExecutor(max_workers=10)
+    # Sıralı (tek işçi): sağlayıcılar (özellikle Yahoo Finance) çok sayıda eşzamanlı
+    # isteği kısıtlayıp yavaşlatabiliyor/donmaya sebep olabiliyor; tek tek taramak
+    # toplamda daha güvenilir ve sonuçlar zaten bitiği anda aşağıya düşüyor.
+    executor = ThreadPoolExecutor(max_workers=1)
     try:
         futures = {
             executor.submit(

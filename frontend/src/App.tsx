@@ -93,14 +93,15 @@ function App() {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleLoadChart = useCallback(async () => {
+  const handleLoadChart = useCallback(async (signal: AbortSignal) => {
     if (!isAuthenticated) return;
     console.log("Fetching market data for:", { provider, symbol, timeframe, start, end });
     setLoading(true);
     setError(null);
     try {
       const response = await fetch(
-        `/api/market/data?provider=${provider}&symbol=${symbol}&timeframe=${timeframe}&start=${start}&end=${end}`
+        `/api/market/data?provider=${provider}&symbol=${symbol}&timeframe=${timeframe}&start=${start}&end=${end}`,
+        { signal }
       );
       if (!response.ok) {
         const errJson = await response.json();
@@ -115,26 +116,35 @@ function App() {
         setChartData(data);
       }
     } catch (err: any) {
+      // Daha yeni bir istek başladığı için iptal edildi — bu istek artık
+      // önemsiz; eski verinin ekrana yazılmasını (parite/interval etiketiyle
+      // uyuşmayan grafik) burada engelliyoruz, hata da göstermiyoruz.
+      if (err?.name === 'AbortError') return;
       console.error("Fetch data failed:", err);
       setError(err.message || 'Sunucu bağlantı hatası.');
       setChartData([]);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [provider, symbol, timeframe, start, end, isAuthenticated]);
 
-  // Girdiler değiştiğinde grafiği otomatik olarak yükle (sembol yazımı için debounce uygulandı)
+  // Girdiler değiştiğinde grafiği otomatik olarak yükle (sembol yazımı için debounce uygulandı).
+  // AbortController: bir önceki (henüz tamamlanmamış) istek burada iptal edilir; aksi halde
+  // parite/interval hızlı değiştiğinde geç dönen eski bir yanıt, yeni seçili paritenin/interval'ın
+  // üzerine eski (yanlış) mum verisini yazabilir (bkz. "1h seçili ama günlük gösteriyor" hatası).
   useEffect(() => {
     if (!isAuthenticated || !symbol || symbol.trim().length < 2) return;
 
+    const controller = new AbortController();
     console.log("App inputs changed, setting reload timeout for:", { provider, symbol, timeframe, start, end });
     const timer = setTimeout(() => {
-      handleLoadChart();
+      handleLoadChart(controller.signal);
     }, 300);
 
     return () => {
       console.log("App inputs changed again, clearing previous timeout.");
       clearTimeout(timer);
+      controller.abort();
     };
   }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated]);
 

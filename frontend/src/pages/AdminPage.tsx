@@ -7,8 +7,14 @@
  */
 
 import React from 'react';
-import { Users, SlidersHorizontal, Bell, Star, RefreshCw, ShieldAlert } from 'lucide-react';
-import { getAdminStats, getAdminUsers, type AdminStats, type AdminUserItem } from '../services/adminApi';
+import {
+  Users, SlidersHorizontal, Bell, Star, RefreshCw, ShieldAlert,
+  ChevronDown, TrendingUp, TrendingDown, Power, PowerOff, AlertTriangle,
+} from 'lucide-react';
+import {
+  getAdminStats, getAdminUsers, getAdminUserDetail,
+  type AdminStats, type AdminUserItem, type AdminUserDetail,
+} from '../services/adminApi';
 
 function formatDate(value?: string | null): string {
   if (!value) return '—';
@@ -52,6 +58,11 @@ export default function AdminPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
+  const [details, setDetails] = React.useState<Record<string, AdminUserDetail>>({});
+  const [detailLoadingId, setDetailLoadingId] = React.useState<string | null>(null);
+  const [detailErrors, setDetailErrors] = React.useState<Record<string, string>>({});
+
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -69,6 +80,21 @@ export default function AdminPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  const toggleRow = React.useCallback(async (userId: string) => {
+    setExpandedId((prev) => (prev === userId ? null : userId));
+    if (details[userId] || detailLoadingId === userId) return;
+    setDetailLoadingId(userId);
+    setDetailErrors((prev) => ({ ...prev, [userId]: '' }));
+    try {
+      const detail = await getAdminUserDetail(userId);
+      setDetails((prev) => ({ ...prev, [userId]: detail }));
+    } catch (err: any) {
+      setDetailErrors((prev) => ({ ...prev, [userId]: err?.message || 'Detaylar yüklenemedi.' }));
+    } finally {
+      setDetailLoadingId(null);
+    }
+  }, [details, detailLoadingId]);
 
   return (
     <div className="h-full w-full overflow-auto bg-[#070b13] p-4 space-y-4">
@@ -127,6 +153,7 @@ export default function AdminPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-slate-500 border-b border-slate-800/60">
+                  <th className="text-left font-semibold px-4 py-2.5 w-6"></th>
                   <th className="text-left font-semibold px-4 py-2.5">Kullanıcı</th>
                   <th className="text-left font-semibold px-4 py-2.5">Katılım</th>
                   <th className="text-left font-semibold px-4 py-2.5">Son Giriş</th>
@@ -137,50 +164,72 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20">
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {u.avatar_url ? (
-                          <img src={u.avatar_url} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
-                        ) : (
-                          <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 text-[10px] font-bold flex-shrink-0">
-                            {(u.name || u.email).charAt(0).toUpperCase()}
+                {users.map((u) => {
+                  const isExpanded = expandedId === u.id;
+                  return (
+                    <React.Fragment key={u.id}>
+                      <tr
+                        onClick={() => toggleRow(u.id)}
+                        className={`border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 cursor-pointer transition-colors ${isExpanded ? 'bg-slate-800/30' : ''}`}
+                      >
+                        <td className="px-4 py-2.5">
+                          <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {u.avatar_url ? (
+                              <img src={u.avatar_url} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 text-[10px] font-bold flex-shrink-0">
+                                {(u.name || u.email).charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="text-slate-200 font-medium truncate">{u.name || '—'}</div>
+                              <div className="text-slate-500 font-mono text-[11px] truncate">{u.email}</div>
+                            </div>
                           </div>
-                        )}
-                        <div className="min-w-0">
-                          <div className="text-slate-200 font-medium truncate">{u.name || '—'}</div>
-                          <div className="text-slate-500 font-mono text-[11px] truncate">{u.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-400 font-mono whitespace-nowrap">{formatDate(u.created_at)}</td>
-                    <td className="px-4 py-2.5 text-slate-400 font-mono whitespace-nowrap">
-                      {u.last_login_at ? formatDateTime(u.last_login_at) : (
-                        <span className="text-slate-600 italic font-sans">hiç giriş yapmadı</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-400 font-mono whitespace-nowrap">{formatDate(u.created_at)}</td>
+                        <td className="px-4 py-2.5 text-slate-400 font-mono whitespace-nowrap">
+                          {u.last_login_at ? formatDateTime(u.last_login_at) : (
+                            <span className="text-slate-600 italic font-sans">hiç giriş yapmadı</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.strategies_count}</td>
+                        <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.alerts_count}</td>
+                        <td className="px-4 py-2.5">
+                          {u.alert_symbols.length === 0 ? (
+                            <span className="text-slate-600">—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1 max-w-[240px]">
+                              {u.alert_symbols.map((sym) => (
+                                <span
+                                  key={sym}
+                                  className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[10px] whitespace-nowrap"
+                                >
+                                  {sym}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.watchlist_count}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-[#070b13]/60 border-b border-slate-800/40">
+                          <td colSpan={8} className="p-0">
+                            <UserDetailPanel
+                              detail={details[u.id]}
+                              loading={detailLoadingId === u.id}
+                              error={detailErrors[u.id]}
+                            />
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.strategies_count}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.alerts_count}</td>
-                    <td className="px-4 py-2.5">
-                      {u.alert_symbols.length === 0 ? (
-                        <span className="text-slate-600">—</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1 max-w-[240px]">
-                          {u.alert_symbols.map((sym) => (
-                            <span
-                              key={sym}
-                              className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[10px] whitespace-nowrap"
-                            >
-                              {sym}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-slate-200 font-mono">{u.watchlist_count}</td>
-                  </tr>
-                ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -190,6 +239,156 @@ export default function AdminPage() {
       {!loading && !error && users.length === 0 && (
         <div className="text-center py-12 text-slate-500 text-sm">Henüz kayıtlı kullanıcı yok.</div>
       )}
+    </div>
+  );
+}
+
+const statusStyles: Record<string, string> = {
+  ACTIVE: 'text-emerald-400',
+  TRIGGERED: 'text-amber-400',
+  DISABLED: 'text-slate-500',
+};
+
+const statusLabels: Record<string, string> = {
+  ACTIVE: 'Aktif',
+  TRIGGERED: 'Tetiklendi',
+  DISABLED: 'Devre Dışı',
+};
+
+function UserDetailPanel({
+  detail,
+  loading,
+  error,
+}: {
+  detail?: AdminUserDetail;
+  loading: boolean;
+  error?: string;
+}) {
+  if (loading && !detail) {
+    return (
+      <div className="flex items-center gap-2 px-6 py-5 text-xs text-slate-500">
+        <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        Detaylar yükleniyor...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 px-6 py-5 text-xs text-red-400">
+        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+        {error}
+      </div>
+    );
+  }
+
+  if (!detail) return null;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-6 py-4">
+      {/* Stratejiler */}
+      <div>
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+          <SlidersHorizontal className="w-3 h-3" />
+          Stratejiler ({detail.strategies.length})
+        </h4>
+        {detail.strategies.length === 0 ? (
+          <p className="text-xs text-slate-600">Henüz strateji oluşturmamış.</p>
+        ) : (
+          <div className="space-y-2">
+            {detail.strategies.map((s) => (
+              <div key={s.id} className="bg-[#0d1321]/80 border border-slate-800/60 rounded-lg px-3 py-2">
+                <div className="text-xs font-semibold text-slate-200 truncate">{s.name}</div>
+                {s.description && (
+                  <div className="text-[11px] text-slate-500 truncate mt-0.5">{s.description}</div>
+                )}
+                <div className="flex flex-wrap gap-1.5 mt-1.5 text-[10px] font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                    Giriş: {s.entry_rules_count}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-300">
+                    Çıkış: {s.exit_rules_count}
+                  </span>
+                  {s.allow_short && (
+                    <span className="px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-300">
+                      Short
+                    </span>
+                  )}
+                  {s.take_profit_pct != null && (
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                      TP %{s.take_profit_pct}
+                    </span>
+                  )}
+                  {s.stop_loss_pct != null && (
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                      SL %{s.stop_loss_pct}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Alarmlar */}
+      <div>
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+          <Bell className="w-3 h-3" />
+          Alarmlar ({detail.alerts.length})
+        </h4>
+        {detail.alerts.length === 0 ? (
+          <p className="text-xs text-slate-600">Henüz alarm oluşturmamış.</p>
+        ) : (
+          <div className="space-y-2">
+            {detail.alerts.map((a) => (
+              <div key={a.id} className="bg-[#0d1321]/80 border border-slate-800/60 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
+                  {a.condition === 'rises_above' ? (
+                    <TrendingUp className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  ) : (
+                    <TrendingDown className="w-3 h-3 text-red-400 flex-shrink-0" />
+                  )}
+                  <span className="truncate">{a.description}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-1 text-[10px] font-mono">
+                  <span className={statusStyles[a.status] || 'text-slate-500'}>
+                    {a.status === 'ACTIVE' ? <Power className="w-3 h-3 inline mr-0.5" /> : <PowerOff className="w-3 h-3 inline mr-0.5" />}
+                    {statusLabels[a.status] || a.status}
+                  </span>
+                  <span className="text-slate-600">•</span>
+                  <span className="text-slate-500">{a.timeframe}</span>
+                </div>
+                {a.note && <div className="text-[11px] text-slate-500 italic mt-1 truncate">{a.note}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Favoriler */}
+      <div>
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+          <Star className="w-3 h-3" />
+          İzleme Listesi ({detail.watchlist_items.length})
+        </h4>
+        {detail.watchlist_items.length === 0 ? (
+          <p className="text-xs text-slate-600">İzleme listesi boş.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {detail.watchlist_items.map((w) => (
+              <span
+                key={w.id}
+                title={w.name || undefined}
+                className="px-2 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-mono text-[11px] whitespace-nowrap"
+              >
+                {w.symbol}
+                <span className="text-slate-500 ml-1">{w.provider}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

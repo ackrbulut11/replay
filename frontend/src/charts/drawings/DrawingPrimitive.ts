@@ -318,25 +318,32 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
         const p2x = d.points[2].x + dx;
         const p2y = d.points[2].y + dy;
 
+        // Üst sınır çizgisi (1. ve 2. tıklama)
         ctx.beginPath();
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[1].x, d.points[1].y);
         ctx.stroke();
 
+        // Alt sınır çizgisi (3. tıklamayla ofsetlenmiş paralel)
         ctx.beginPath();
         ctx.moveTo(d.points[2].x, d.points[2].y);
         ctx.lineTo(p2x, p2y);
         ctx.stroke();
 
-        ctx.beginPath();
-        ctx.moveTo(d.points[0].x, d.points[0].y);
-        ctx.lineTo(d.points[2].x, d.points[2].y);
-        ctx.stroke();
+        // Ortadaki kesikli orta çizgi
+        const midStartX = (d.points[0].x + d.points[2].x) / 2;
+        const midStartY = (d.points[0].y + d.points[2].y) / 2;
+        const midEndX = (d.points[1].x + p2x) / 2;
+        const midEndY = (d.points[1].y + p2y) / 2;
 
+        ctx.save();
+        ctx.setLineDash([lw * 2, lw * 2]);
+        ctx.lineWidth = Math.max(1, lw - 0.5);
         ctx.beginPath();
-        ctx.moveTo(d.points[1].x, d.points[1].y);
-        ctx.lineTo(p2x, p2y);
+        ctx.moveTo(midStartX, midStartY);
+        ctx.lineTo(midEndX, midEndY);
         ctx.stroke();
+        ctx.restore();
         break;
       }
 
@@ -674,8 +681,6 @@ function getDrawingSegments(d: PixelDrawing): [PixelPoint, PixelPoint][] {
       const p2y = d.points[2].y + dy;
       segs.push([d.points[0], d.points[1]]);
       segs.push([d.points[2], { x: p2x, y: p2y }]);
-      segs.push([d.points[0], d.points[2]]);
-      segs.push([d.points[1], { x: p2x, y: p2y }]);
       break;
     }
   }

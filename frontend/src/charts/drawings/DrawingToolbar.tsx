@@ -4,7 +4,6 @@ import {
   TrendingUp,
   Minus,
   Square,
-  GitPullRequest,
   Ruler,
   Magnet,
   Eraser,
@@ -12,6 +11,25 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import type { DrawingTool } from './types';
+
+function ParallelChannelIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="3" y1="8" x2="19" y2="4" />
+      <line x1="5" y1="20" x2="21" y2="16" />
+      <line x1="4" y1="14" x2="20" y2="10" strokeDasharray="2.2 2.2" strokeWidth="1.25" />
+    </svg>
+  );
+}
 
 interface DrawingToolbarProps {
   activeTool: DrawingTool;
@@ -30,7 +48,7 @@ const tools: { tool: DrawingTool; icon: React.ReactNode; label: string }[] = [
   { tool: 'trendLine', icon: <TrendingUp className="w-4 h-4" />, label: 'Trend Çizgisi' },
   { tool: 'horizontalRay', icon: <Minus className="w-4 h-4" />, label: 'Yatay Işın' },
   { tool: 'rectangle', icon: <Square className="w-4 h-4" />, label: 'Dikdörtgen' },
-  { tool: 'parallelChannel', icon: <GitPullRequest className="w-4 h-4" />, label: 'Paralel Kanal' },
+  { tool: 'parallelChannel', icon: <ParallelChannelIcon />, label: 'Paralel Kanal' },
 ];
 
 export default function DrawingToolbar({

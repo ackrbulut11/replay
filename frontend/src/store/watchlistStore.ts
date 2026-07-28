@@ -306,11 +306,14 @@ export const watchlistStore = {
   },
 
   /**
-   * Oturum kapandığında senkronizasyon durumunu sıfırlar.
+   * Oturum kapandığında senkronizasyon durumunu ve bellekteki listeleri sıfırlar.
    *
-   * Aksi halde çıkış ile bir sonraki kullanıcının senkronizasyonu arasındaki
-   * kısa aralıkta yapılan bir değişiklik, önceki kullanıcının listelerini yeni
-   * hesaba yazabilir.
+   * Sadece senkronizasyon bayraklarını sıfırlamak yetmez: `currentState.lists`
+   * (ve localStorage önbelleği) önceki kullanıcının verisiyle dolu kalırsa,
+   * bir sonraki kullanıcı sunucuda henüz kaydı olmayan yeni bir hesapla giriş
+   * yaptığında `syncFromServer`'daki "sunucu boş: yereldekini yukarı taşı"
+   * dalı önceki kullanıcının favorilerini yeni hesaba yazar. Bu yüzden burada
+   * bellek durumu da uygulamanın varsayılanlarına döndürülür.
    */
   resetForLogout: () => {
     syncedOnce = false;
@@ -320,6 +323,17 @@ export const watchlistStore = {
       clearTimeout(syncTimer);
       syncTimer = null;
     }
+    currentState = {
+      ...currentState,
+      activeListId: 'favoriler',
+      lists: sanitizeLists(DEFAULT_LISTS),
+    };
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    } catch (e) {
+      console.error('Failed to clear watchlist localStorage on logout', e);
+    }
+    listeners.forEach((listener) => listener(currentState));
   },
 
   togglePanel: () => {

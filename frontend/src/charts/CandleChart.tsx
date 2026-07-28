@@ -532,6 +532,13 @@ export default function CandleChart({
       if (!target.closest('#dates-popover')) {
         setIsDatesOpen(false);
       }
+      if (
+        plusMenuRef.current &&
+        !target.closest('#plus-menu-popover') &&
+        !(plusButtonRef.current && plusButtonRef.current.contains(target))
+      ) {
+        setPlusMenu(null);
+      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
@@ -2233,7 +2240,7 @@ export default function CandleChart({
       {/* Popover Menü Açıkken Dışarı Tıklama Yakalayıcı Backdrop */}
       {plusMenu && (
         <div
-          className="absolute inset-0 z-35 bg-transparent"
+          className="absolute inset-0 z-[35] bg-transparent"
           onClick={() => setPlusMenu(null)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -2245,6 +2252,7 @@ export default function CandleChart({
       {/* (+) Butonuna Tıklandığında Açılan Hızlı İşlem Menüsü Popover */}
       {plusMenu && (
         <div
+          id="plus-menu-popover"
           style={{ top: `${Math.max(10, plusMenu.y - 18)}px` }}
           className="absolute right-[84px] z-40 bg-[#1e222d] border border-[#2a2e39] rounded-xl shadow-2xl py-1.5 min-w-[310px] text-xs animate-fadeIn select-none backdrop-blur-md"
         >

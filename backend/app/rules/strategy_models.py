@@ -229,7 +229,7 @@ class EvaluateRequest(BaseModel):
     timeframe: str = Field(..., description="Ana zaman dilimi (ör. 15m, 1h, 1d)")
     start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
     end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
-    limit_bars: Optional[int] = Field(1000, description="Değerlendirilecek maksimum mum sayısı (varsayılan: 1000)")
+    limit_bars: Optional[int] = Field(1000, description="Değerlendirilecek maksimum mum sayısı (varsayılan: 1000, azami: 10000)")
     allow_short: Optional[bool] = Field(None, description="Short pozisyon açılsın mı?")
     param_overrides: Dict[str, Union[int, float]] = Field(
         default_factory=dict, description="Parametre override'ları"
@@ -286,10 +286,9 @@ class BatchEvaluateRequest(BaseModel):
     timeframe: str = Field("1d", description="Zaman dilimi (15m, 1h, 1d)")
     start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
     end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
-    limit_bars: Optional[int] = Field(1000, description="Maksimum mum sayısı")
+    limit_bars: Optional[int] = Field(1000, description="Maksimum mum sayısı (azami: 10000)")
     allow_short: Optional[bool] = Field(None, description="Short pozisyon izni")
     param_overrides: Dict[str, Union[int, float]] = Field(default_factory=dict)
-    save_scan: bool = Field(True, description="Sonucu tarama geçmişine otomatik kaydet")
 
 
 class BatchEvaluateResultItem(BaseModel):
@@ -309,20 +308,12 @@ class BatchEvaluateResultItem(BaseModel):
     error: Optional[str] = None
 
 
-class BatchEvaluateResponse(BaseModel):
-    """Çoklu sembol tarama yanıtı."""
-
-    strategy_id: str
-    strategy_name: str
-    provider: str
-    timeframe: str
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
-    scanned_count: int
-    results: List[BatchEvaluateResultItem]
-
-
 class ScanHistoryItem(BaseModel):
-    """Kayıtlı tarama geçmişi ötesi."""
+    """Kayıtlı tarama geçmişi öğesi.
+
+    `status`: "running" (arka planda devam ediyor) | "done" | "error".
+    Tarama arka planda ilerledikçe `results`/`scanned_count` kademeli olarak dolar.
+    """
 
     scan_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     strategy_id: str
@@ -331,6 +322,9 @@ class ScanHistoryItem(BaseModel):
     timeframe: str
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     scanned_count: int
+    total_symbols: Optional[int] = None
+    status: str = "done"
+    error: Optional[str] = None
     results: List[BatchEvaluateResultItem]
 
 

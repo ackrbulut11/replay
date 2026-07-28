@@ -94,6 +94,9 @@ class StrategyScan(Base):
     provider = Column(String(50), nullable=False)
     timeframe = Column(String(20), nullable=False)
     scanned_count = Column(Integer, default=0)
+    total_symbols = Column(Integer, nullable=True)
+    status = Column(String(20), nullable=False, default="done")
+    error = Column(Text, nullable=True)
     results = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 

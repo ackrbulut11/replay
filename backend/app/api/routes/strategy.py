@@ -10,11 +10,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.database.postgres import get_db
+from app.database.postgres import get_db, SessionLocal
 from app.database.models import User
 from app.auth.dependencies import get_current_user
 from app.data.loader import DataLoader
@@ -23,8 +23,6 @@ from app.engines.strategy_engine import StrategyEngine
 from app.indicators.registry import IndicatorRegistry
 from app.rules.strategy_models import (
     BatchEvaluateRequest,
-    BatchEvaluateResponse,
-    BatchEvaluateResultItem,
     EvaluateRequest,
     EvaluateResponse,
     SaveScanRequest,
@@ -32,6 +30,9 @@ from app.rules.strategy_models import (
     StrategyCreateRequest,
     StrategyUpdateRequest,
 )
+
+MAX_LIMIT_BARS = 10000  # Strateji testinde (tekli/toplu) izin verilen azami mum sayısı
+
 
 class ImportEvaluationsRequest(BaseModel):
     """Tarayıcıda kalmış eski test geçmişinin tek seferlik aktarımı."""
@@ -245,11 +246,13 @@ def evaluate_strategy(
             else:
                 start_dt = datetime(2010, 1, 1)
         elif request.timeframe in ("1m", "5m", "15m"):
-            start_dt = end_dt - timedelta(days=14)
-        elif request.timeframe in ("1h", "4h"):
-            start_dt = end_dt - timedelta(days=180)
+            start_dt = end_dt - timedelta(days=182)  # ~6 ay
+        elif request.timeframe == "4h":
+            start_dt = end_dt - timedelta(days=3 * 365)
+        elif request.timeframe == "1h":
+            start_dt = end_dt - timedelta(days=3 * 365)
         else:
-            start_dt = end_dt - timedelta(days=5 * 365)
+            start_dt = end_dt - timedelta(days=10 * 365)
 
     # Ana zaman dilimi verisini yükle
     try:
@@ -311,6 +314,8 @@ def evaluate_strategy(
     limit_bars = 1000
     if request.limit_bars is not None:
         limit_bars = request.limit_bars
+    if limit_bars > MAX_LIMIT_BARS:
+        limit_bars = MAX_LIMIT_BARS
 
     if limit_bars > 0 and len(df) > limit_bars:
         df = df.tail(limit_bars).reset_index(drop=True)
@@ -370,15 +375,76 @@ def evaluate_strategy(
     )
 
 
+def _run_batch_scan_job(
+    scan_id: str,
+    strategy: dict,
+    symbols: List[str],
+    provider: str,
+    timeframe: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    limit_bars: int,
+    param_overrides: Optional[Dict[str, Any]],
+    allow_short: Optional[bool],
+) -> None:
+    """Toplu taramayı arka planda (BackgroundTasks) çalıştırır.
+
+    HTTP isteği çoktan yanıtlanmış olduğu için burada request'e bağlı `db`
+    session'ı kullanılamaz (kapatılmış olur); kendi session'ını açar. Her
+    sembol bittikçe sonucu veritabanına yazar, böylece frontend `/status`
+    endpoint'inden ilerlemeyi kademeli olarak okuyabilir.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    db = SessionLocal()
+    try:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(
+                    _engine.evaluate_symbol,
+                    strategy=strategy,
+                    symbol=sym,
+                    provider=provider,
+                    timeframe=timeframe,
+                    loader=_loader,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                    limit_bars=limit_bars,
+                    param_overrides=param_overrides,
+                    allow_short=allow_short,
+                ): sym
+                for sym in symbols
+            }
+            for future in as_completed(futures):
+                sym = futures[future]
+                try:
+                    result = future.result()
+                except Exception as e:
+                    result = {"symbol": sym, "error": str(e)}
+                _scanner.append_scan_result(db, scan_id=scan_id, result=result)
+
+        _scanner.finish_scan(db, scan_id=scan_id)
+    except Exception as e:
+        _scanner.fail_scan(db, scan_id=scan_id, error=str(e))
+    finally:
+        db.close()
+
+
 @router.post("/{strategy_id}/batch-evaluate")
 def batch_evaluate_strategy(
     request: BatchEvaluateRequest,
+    background_tasks: BackgroundTasks,
     strategy: dict = Depends(get_owned_strategy),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Stratejiyi birden fazla sembol üzerinde paralel olarak değerlendirir (yalnızca sahibi).
+    Stratejiyi birden fazla sembol üzerinde arka planda değerlendirir (yalnızca sahibi).
+
+    İstek anında bir `scan_id` ile döner; gerçek tarama arka planda devam eder.
+    İlerleme `/scans/{scan_id}/status` ile sorgulanır. Bu sayede tek bir HTTP
+    isteği hiçbir zaman uzun sürmez ve Vercel'in harici proxy zaman aşımına
+    (ROUTER_EXTERNAL_TARGET_ERROR) takılmaz.
     """
     if request.end:
         try:
@@ -395,20 +461,35 @@ def batch_evaluate_strategy(
             raise HTTPException(status_code=400, detail="Geçersiz başlangıç tarihi formatı (YYYY-MM-DD)")
     else:
         if request.timeframe in ("1m", "5m", "15m"):
-            start_dt = end_dt - timedelta(days=30)
-        elif request.timeframe in ("1h", "4h"):
-            start_dt = end_dt - timedelta(days=180)
+            start_dt = end_dt - timedelta(days=182)  # ~6 ay
+        elif request.timeframe == "4h":
+            start_dt = end_dt - timedelta(days=3 * 365)
+        elif request.timeframe == "1h":
+            start_dt = end_dt - timedelta(days=3 * 365)
         else:
-            start_dt = end_dt - timedelta(days=365 * 2)
+            start_dt = end_dt - timedelta(days=10 * 365)
 
     limit_bars = request.limit_bars if request.limit_bars is not None else 1000
+    if limit_bars > MAX_LIMIT_BARS:
+        limit_bars = MAX_LIMIT_BARS
 
-    results_raw = _engine.evaluate_batch(
+    scan = _scanner.create_running_scan(
+        db=db,
+        strategy_id=strategy["id"],
+        strategy_name=strategy.get("name", "Strateji"),
+        provider=request.provider,
+        timeframe=request.timeframe,
+        total_symbols=len(request.symbols),
+        user_id=current_user.id,
+    )
+
+    background_tasks.add_task(
+        _run_batch_scan_job,
+        scan_id=scan["scan_id"],
         strategy=strategy,
         symbols=request.symbols,
         provider=request.provider,
         timeframe=request.timeframe,
-        loader=_loader,
         start_dt=start_dt,
         end_dt=end_dt,
         limit_bars=limit_bars,
@@ -416,47 +497,7 @@ def batch_evaluate_strategy(
         allow_short=request.allow_short,
     )
 
-    results_items = [
-        BatchEvaluateResultItem(
-            symbol=r["symbol"],
-            total_bars=r.get("total_bars", 0),
-            buy_count=r.get("buy_count", 0),
-            sell_count=r.get("sell_count", 0),
-            total_trades=r.get("total_trades", 0),
-            winning_trades=r.get("winning_trades", 0),
-            losing_trades=r.get("losing_trades", 0),
-            win_rate=r.get("win_rate", 0.0),
-            total_pnl_percent=r.get("total_pnl_percent", 0.0),
-            last_signal=r.get("last_signal"),
-            last_signal_time=r.get("last_signal_time"),
-            error=r.get("error"),
-        )
-        for r in results_raw
-    ]
-
-    # Otomatik olarak tarama geçmişine de kaydet (kullanıcıya bağlı)
-    # Not: Büyük taramalar frontend'de parçalar halinde gönderilebilir; bu durumda
-    # her parça için ayrı kayıt oluşmaması adına save_scan=False geçilir ve
-    # birleşik sonuç /scans endpoint'i ile tek seferde kaydedilir.
-    if request.save_scan:
-        _scanner.save_scan(
-            db=db,
-            strategy_id=strategy["id"],
-            strategy_name=strategy.get("name", "Strateji"),
-            provider=request.provider,
-            timeframe=request.timeframe,
-            results=results_items,
-            user_id=current_user.id,
-        )
-
-    return BatchEvaluateResponse(
-        strategy_id=strategy["id"],
-        strategy_name=strategy.get("name", ""),
-        provider=request.provider,
-        timeframe=request.timeframe,
-        scanned_count=len(results_items),
-        results=results_items,
-    )
+    return scan
 
 
 @router.get("/{strategy_id}/scans")
@@ -489,4 +530,22 @@ def save_strategy_scan(
         user_id=current_user.id,
     )
     return {"message": "Tarama kaydedildi", "scan": scan_item}
+
+
+@router.get("/{strategy_id}/scans/{scan_id}/status")
+def get_scan_status(
+    scan_id: str,
+    strategy: dict = Depends(get_owned_strategy),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Arka planda çalışan (veya biten) bir taramanın güncel durumunu döndürür (yalnızca sahibi).
+
+    Frontend, `/batch-evaluate` çağrısından dönen `scan_id` ile bunu birkaç
+    saniyede bir sorgulayarak ilerlemeyi (status/scanned_count/results) takip eder.
+    """
+    scan = _scanner.get_scan(db, strategy["id"], scan_id, current_user.id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Tarama bulunamadı")
+    return scan
 

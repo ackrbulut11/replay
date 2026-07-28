@@ -49,6 +49,9 @@ class ScannerEngine:
             timeframe=row.timeframe,
             created_at=(row.created_at or datetime.utcnow()).isoformat() + "Z",
             scanned_count=row.scanned_count or 0,
+            total_symbols=row.total_symbols,
+            status=row.status or "done",
+            error=row.error,
             results=[BatchEvaluateResultItem(**r) for r in (row.results or [])],
         ).model_dump()
 
@@ -72,6 +75,8 @@ class ScannerEngine:
             provider=provider,
             timeframe=timeframe,
             scanned_count=len(normalized),
+            total_symbols=len(normalized),
+            status="done",
             results=normalized,
         )
         db.add(row)
@@ -116,3 +121,72 @@ class ScannerEngine:
             .first()
         )
         return self._row_to_item(row) if row else None
+
+    def get_scan(self, db: Session, strategy_id: str, scan_id: str, user_id: str) -> Optional[dict]:
+        """Tek bir taramanın (devam eden veya biten) güncel durumunu döndürür (yalnızca sahibi)."""
+        row = (
+            db.query(StrategyScan)
+            .filter(
+                StrategyScan.id == scan_id,
+                StrategyScan.strategy_id == strategy_id,
+                StrategyScan.user_id == user_id,
+            )
+            .first()
+        )
+        return self._row_to_item(row) if row else None
+
+    def create_running_scan(
+        self,
+        db: Session,
+        strategy_id: str,
+        strategy_name: str,
+        provider: str,
+        timeframe: str,
+        total_symbols: int,
+        user_id: str,
+    ) -> dict:
+        """Arka planda çalışacak taramayı temsil eden boş bir kayıt oluşturur."""
+        row = StrategyScan(
+            user_id=user_id,
+            strategy_id=strategy_id,
+            strategy_name=strategy_name,
+            provider=provider,
+            timeframe=timeframe,
+            scanned_count=0,
+            total_symbols=total_symbols,
+            status="running",
+            results=[],
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return self._row_to_item(row)
+
+    def append_scan_result(self, db: Session, scan_id: str, result: dict) -> None:
+        """Arka plandaki tarama tek bir sembolü bitirdiğinde sonucu kayda ekler."""
+        row = db.query(StrategyScan).filter(StrategyScan.id == scan_id).first()
+        if not row:
+            return
+        normalized = BatchEvaluateResultItem(**result).model_dump()
+        # JSON kolonunda değişikliğin algılanması için yeniden atama gerekir (in-place mutasyon yetmez).
+        row.results = [*(row.results or []), normalized]
+        row.scanned_count = len(row.results)
+        db.commit()
+
+    def finish_scan(self, db: Session, scan_id: str) -> None:
+        """Taramayı tamamlandı olarak işaretler ve eski kayıtları budar."""
+        row = db.query(StrategyScan).filter(StrategyScan.id == scan_id).first()
+        if not row:
+            return
+        row.status = "done"
+        db.commit()
+        self._prune(db, row.strategy_id, row.user_id)
+
+    def fail_scan(self, db: Session, scan_id: str, error: str) -> None:
+        """Taramayı hata ile sonlanmış olarak işaretler."""
+        row = db.query(StrategyScan).filter(StrategyScan.id == scan_id).first()
+        if not row:
+            return
+        row.status = "error"
+        row.error = error
+        db.commit()

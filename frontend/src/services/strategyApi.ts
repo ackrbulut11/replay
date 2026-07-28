@@ -11,7 +11,6 @@ import type {
   EvaluateRequest,
   EvaluateResponse,
   BatchEvaluateRequest,
-  BatchEvaluateResponse,
   ScanHistoryItem,
   SaveScanRequest,
   SingleEvaluationLogItem,
@@ -70,14 +69,20 @@ export async function evaluateStrategy(
   });
 }
 
+/** Toplu taramayı arka planda başlatır; anında "running" durumunda bir kayıt döner. */
 export async function batchEvaluateStrategy(
   id: string,
   params: BatchEvaluateRequest
-): Promise<BatchEvaluateResponse> {
+): Promise<ScanHistoryItem> {
   return request(`${API_BASE}/${id}/batch-evaluate`, {
     method: 'POST',
     body: JSON.stringify(params),
   });
+}
+
+/** Arka planda çalışan (veya biten) bir taramanın güncel durumunu sorgular. */
+export async function getScanStatus(id: string, scanId: string): Promise<ScanHistoryItem> {
+  return request(`${API_BASE}/${id}/scans/${scanId}/status`);
 }
 
 export async function getScanHistory(
@@ -143,6 +148,7 @@ export const strategyApi = {
   deleteStrategy,
   evaluateStrategy,
   batchEvaluateStrategy,
+  getScanStatus,
   getScanHistory,
   saveScanResult,
   getEvaluationHistory,

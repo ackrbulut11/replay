@@ -152,6 +152,9 @@ const PRESET_GROUPS = [
   },
 ];
 
+// Strateji testinde izin verilen azami mum sayısı (backend ile aynı sınır)
+const MAX_LIMIT_BARS = 10000;
+
 export default function BatchScannerTab({
   strategy,
   onSelectSymbolAndShowChart,
@@ -239,6 +242,14 @@ export default function BatchScannerTab({
           setLatestScanTime(data.latest.created_at);
           setProvider(data.latest.provider || 'binance');
           setTimeframe(data.latest.timeframe || '1d');
+
+          // Sayfa, tarama hâlâ arka planda devam ederken yenilenmiş olabilir; kaldığı yerden takibe devam et
+          if (data.latest.status === 'running') {
+            setIsScanning(true);
+            setScanProgress({ done: data.latest.scanned_count, total: data.latest.total_symbols ?? data.latest.scanned_count });
+            activeScanIdRef.current = data.latest.scan_id;
+            pollScanStatus(data.latest.scan_id);
+          }
         }
         if (isMounted && data.scans) {
           setHistoryList(data.scans);
@@ -253,89 +264,89 @@ export default function BatchScannerTab({
     };
   }, [strategy.id]);
 
-  // Tek istekte kaç sembol taranacağı: Vercel proxy'sinin uzun süren backend
-  // isteklerinde verdiği ROUTER_EXTERNAL_TARGET_ERROR'ı önlemek için küçük
-  // parçalar halinde tarama yapılır (bkz. sohbet geçmişi / hata analizi).
-  const SCAN_CHUNK_SIZE = 4;
+  // Tarama artık backend'de arka planda (background job) çalışır: bir HTTP
+  // isteği hiçbir zaman uzun sürmediği için Vercel'in harici proxy zaman
+  // aşımına (ROUTER_EXTERNAL_TARGET_ERROR) takılmaz. Frontend sadece
+  // ilerlemeyi belirli aralıklarla sorgular (polling).
+  const POLL_INTERVAL_MS = 1500;
+  const MAX_POLL_FAILURES = 5;
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeScanIdRef = useRef<string | null>(null);
 
-  // Taramayı Çalıştır — sembolleri küçük parçalara bölerek arka arkaya tarar,
-  // her parça sonucunu anında tabloya yansıtır ve en sonda tek bir tarama
-  // kaydı olarak sunucuya kaydeder.
+  useEffect(() => {
+    return () => {
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
+
+  const pollScanStatus = (scanId: string, failureCount = 0) => {
+    const tick = async () => {
+      // Kullanıcı bu arada yeni bir tarama başlattıysa eski döngüyü sonlandır
+      if (activeScanIdRef.current !== scanId) return;
+
+      try {
+        const scan = await strategyApi.getScanStatus(strategy.id, scanId);
+        setResults(scan.results);
+        setScanProgress({ done: scan.scanned_count, total: scan.total_symbols ?? scan.scanned_count });
+
+        if (scan.status === 'running') {
+          pollTimeoutRef.current = setTimeout(() => pollScanStatus(scanId, 0), POLL_INTERVAL_MS);
+          return;
+        }
+
+        setLatestScanTime(scan.created_at);
+        if (scan.status === 'error') {
+          setScanError(scan.error || 'Tarama sırasında bir hata oluştu');
+        }
+        setScanProgress(null);
+        setIsScanning(false);
+
+        const historyData = await strategyApi.getScanHistory(strategy.id);
+        if (historyData.scans) {
+          setHistoryList(historyData.scans);
+        }
+      } catch (err: any) {
+        // Geçici ağ hatası olabilir; birkaç kez daha dene, sonra pes et
+        if (failureCount + 1 >= MAX_POLL_FAILURES) {
+          setScanError(err.message || 'Tarama durumu sorgulanırken bağlantı hatası oluştu');
+          setScanProgress(null);
+          setIsScanning(false);
+          return;
+        }
+        pollTimeoutRef.current = setTimeout(() => pollScanStatus(scanId, failureCount + 1), POLL_INTERVAL_MS);
+      }
+    };
+
+    tick();
+  };
+
+  // Taramayı Çalıştır — backend'de arka plan taramasını başlatır ve anında
+  // dönen scan_id ile ilerlemeyi sorgulamaya başlar.
   const handleRunScan = async () => {
     const group = PRESET_GROUPS.find((g) => g.id === selectedGroup);
     if (!group) return;
 
+    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     setIsScanning(true);
     setScanError(null);
     setResults([]);
-
-    const chunks: string[][] = [];
-    for (let i = 0; i < group.symbols.length; i += SCAN_CHUNK_SIZE) {
-      chunks.push(group.symbols.slice(i, i + SCAN_CHUNK_SIZE));
-    }
     setScanProgress({ done: 0, total: group.symbols.length });
 
-    const mergedResults: BatchEvaluateResultItem[] = [];
-    let lastError: string | null = null;
-
-    for (const chunk of chunks) {
-      try {
-        const response = await strategyApi.batchEvaluateStrategy(strategy.id, {
-          symbols: chunk,
-          provider: group.provider,
-          timeframe: timeframe,
-          limit_bars: limitBars,
-          allow_short: strategy.allow_short,
-          save_scan: false,
-        });
-        mergedResults.push(...response.results);
-      } catch (err: any) {
-        lastError = err.message || 'Tarama sırasında bir hata oluştu';
-        // Hata alan parçadaki sembolleri hata bilgisiyle listeye ekle, taramaya devam et
-        for (const symbol of chunk) {
-          mergedResults.push({
-            symbol,
-            total_bars: 0,
-            buy_count: 0,
-            sell_count: 0,
-            total_trades: 0,
-            winning_trades: 0,
-            losing_trades: 0,
-            win_rate: 0,
-            total_pnl_percent: 0,
-            error: lastError,
-          });
-        }
-      }
-
-      setResults([...mergedResults]);
-      setScanProgress({ done: mergedResults.length, total: group.symbols.length });
-    }
-
-    const nowIso = new Date().toISOString();
-    setLatestScanTime(nowIso);
-
     try {
-      await strategyApi.saveScanResult(strategy.id, {
+      const scan = await strategyApi.batchEvaluateStrategy(strategy.id, {
+        symbols: group.symbols,
         provider: group.provider,
         timeframe: timeframe,
-        results: mergedResults,
+        limit_bars: limitBars,
+        allow_short: strategy.allow_short,
       });
-      const historyData = await strategyApi.getScanHistory(strategy.id);
-      if (historyData.scans) {
-        setHistoryList(historyData.scans);
-      }
+      activeScanIdRef.current = scan.scan_id;
+      pollScanStatus(scan.scan_id);
     } catch (err: any) {
-      // Kayıt başarısız olsa da tarama sonuçları ekranda kalmaya devam eder
-      lastError = err.message || lastError;
+      setScanError(err.message || 'Tarama başlatılırken bir hata oluştu');
+      setScanProgress(null);
+      setIsScanning(false);
     }
-
-    if (lastError) {
-      setScanError(`Bazı semboller taranırken hata oluştu (son hata: ${lastError})`);
-    }
-
-    setScanProgress(null);
-    setIsScanning(false);
   };
 
   // Filtrelenmiş ve Sıralanmış Sonuçlar
@@ -497,8 +508,12 @@ export default function BatchScannerTab({
               </label>
               <input
                 type="number"
+                max={MAX_LIMIT_BARS}
                 value={limitBars}
-                onChange={(e) => setLimitBars(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setLimitBars(Number.isNaN(val) ? 1000 : Math.min(val, MAX_LIMIT_BARS));
+                }}
                 className="w-full bg-slate-950 border border-slate-700/80 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500 font-mono"
               />
             </div>

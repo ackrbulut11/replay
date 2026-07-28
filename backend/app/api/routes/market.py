@@ -136,11 +136,13 @@ def get_market_data(
         elif timeframe == "1w":
             start_dt = end_dt - timedelta(days=10*365)
         elif timeframe == "1d":
-            start_dt = end_dt - timedelta(days=5*365)
-        elif timeframe in ["4h", "1h"]:
-            start_dt = end_dt - timedelta(days=180)
+            start_dt = end_dt - timedelta(days=10*365)
+        elif timeframe == "4h":
+            start_dt = end_dt - timedelta(days=3*365)
+        elif timeframe == "1h":
+            start_dt = end_dt - timedelta(days=3*365)
         else: # 15m, 5m, 1m
-            start_dt = end_dt - timedelta(days=14)
+            start_dt = end_dt - timedelta(days=182)  # ~6 ay
 
     try:
         df = loader.load_data(

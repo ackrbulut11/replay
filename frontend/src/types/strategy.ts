@@ -256,7 +256,6 @@ export interface BatchEvaluateRequest {
   limit_bars?: number;
   allow_short?: boolean;
   param_overrides?: Record<string, number>;
-  save_scan?: boolean;
 }
 
 export interface BatchEvaluateResultItem {
@@ -274,15 +273,8 @@ export interface BatchEvaluateResultItem {
   error?: string | null;
 }
 
-export interface BatchEvaluateResponse {
-  strategy_id: string;
-  strategy_name: string;
-  provider: string;
-  timeframe: string;
-  timestamp: string;
-  scanned_count: number;
-  results: BatchEvaluateResultItem[];
-}
+/** Tarama durumu: "running" arka planda devam ediyor, "done"/"error" tamamlandı. */
+export type ScanStatus = 'running' | 'done' | 'error';
 
 export interface ScanHistoryItem {
   scan_id: string;
@@ -292,6 +284,9 @@ export interface ScanHistoryItem {
   timeframe: string;
   created_at: string;
   scanned_count: number;
+  total_symbols?: number | null;
+  status: ScanStatus;
+  error?: string | null;
   results: BatchEvaluateResultItem[];
 }
 

@@ -112,10 +112,14 @@ export default function CandleChart({
   const ema200Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
 
   const rsiRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  // RSI/MACD hangi eksene (kendi overlay'ine mi yoksa gerçek 'left' eksenine mi) bağlı oluşturulduğunu izler;
+  // tek gösterge aktifken 'left', ikisi birden aktifken kendi overlay'leri kullanılır (bkz. MARJ YERLEŞİM ETKİSİ).
+  const rsiScaleIdRef = useRef<string | null>(null);
 
   const macdLineRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const macdSignalRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const macdHistRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
+  const macdScaleIdRef = useRef<string | null>(null);
 
   const bbUpperRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
   const bbMiddleRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
@@ -898,6 +902,12 @@ export default function CandleChart({
         autoScale: true,
         mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
       },
+      // Tek bir alt gösterge (RSI veya MACD) aktifken kendi cetvelini burada gösterir;
+      // böylece fiyat ekseniyle aynı sütuna sıkışıp sayı sayı üstüne binmez (bkz. MARJ YERLEŞİM ETKİSİ).
+      leftPriceScale: {
+        visible: false,
+        borderColor: '#1e293b',
+      },
       timeScale: {
         borderColor: '#1e293b',
         timeVisible: true,
@@ -1286,9 +1296,11 @@ export default function CandleChart({
       ema100Ref.current = null;
       ema200Ref.current = null;
       rsiRef.current = null;
+      rsiScaleIdRef.current = null;
       macdLineRef.current = null;
       macdSignalRef.current = null;
       macdHistRef.current = null;
+      macdScaleIdRef.current = null;
       bbUpperRef.current = null;
       bbMiddleRef.current = null;
       bbLowerRef.current = null;
@@ -1483,13 +1495,23 @@ export default function CandleChart({
     }
 
 
-    // RSI (Alt panel)
+    // RSI (Alt panel) — tek başına aktifken gerçek 'left' eksenine, MACD ile birlikteyse
+    // kendi 'rsi' overlay eksenine bağlanır (bkz. MARJ YERLEŞİM ETKİSİ). Hedef eksen
+    // değiştiğinde seri, yeni priceScaleId ile silinip yeniden oluşturulur.
+    const subPanesCountForScale = (indicators.rsi ? 1 : 0) + (indicators.macd ? 1 : 0);
+    const rsiTargetScale = subPanesCountForScale === 1 && indicators.rsi ? 'left' : 'rsi';
+    const macdTargetScale = subPanesCountForScale === 1 && indicators.macd ? 'left' : 'macd';
+
     if (indicators.rsi) {
+      if (rsiRef.current && rsiScaleIdRef.current !== rsiTargetScale) {
+        chart.removeSeries(rsiRef.current);
+        rsiRef.current = null;
+      }
       if (!rsiRef.current) {
         rsiRef.current = chart.addLineSeries({
           color: '#ffffff',
           lineWidth: 2,
-          priceScaleId: 'rsi',
+          priceScaleId: rsiTargetScale,
           title: '',
           lastValueVisible: false,
           priceLineVisible: false,
@@ -1498,6 +1520,7 @@ export default function CandleChart({
             margins: { above: 2, below: 2 },
           }),
         });
+        rsiScaleIdRef.current = rsiTargetScale;
 
         rsiRef.current.createPriceLine({ price: 70, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
         rsiRef.current.createPriceLine({ price: 50, color: 'rgba(148, 163, 184, 0.4)', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '' });
@@ -1508,14 +1531,24 @@ export default function CandleChart({
     } else if (rsiRef.current) {
       chart.removeSeries(rsiRef.current);
       rsiRef.current = null;
+      rsiScaleIdRef.current = null;
     }
 
-    // MACD (Alt panel)
+    // MACD (Alt panel) — aynı mantık: tek başına aktifken 'left', RSI ile birlikteyse 'macd' overlay'i.
     if (indicators.macd) {
+      if (macdHistRef.current && macdScaleIdRef.current !== macdTargetScale) {
+        chart.removeSeries(macdHistRef.current);
+        chart.removeSeries(macdLineRef.current!);
+        chart.removeSeries(macdSignalRef.current!);
+        macdHistRef.current = null;
+        macdLineRef.current = null;
+        macdSignalRef.current = null;
+      }
       if (!macdHistRef.current || !macdLineRef.current || !macdSignalRef.current) {
-        macdHistRef.current = chart.addHistogramSeries({ priceScaleId: 'macd', title: '', lastValueVisible: false, priceLineVisible: false });
-        macdLineRef.current = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceScaleId: 'macd', title: '', lastValueVisible: false, priceLineVisible: false });
-        macdSignalRef.current = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceScaleId: 'macd', title: '', lastValueVisible: false, priceLineVisible: false });
+        macdHistRef.current = chart.addHistogramSeries({ priceScaleId: macdTargetScale, title: '', lastValueVisible: false, priceLineVisible: false });
+        macdLineRef.current = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceScaleId: macdTargetScale, title: '', lastValueVisible: false, priceLineVisible: false });
+        macdSignalRef.current = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceScaleId: macdTargetScale, title: '', lastValueVisible: false, priceLineVisible: false });
+        macdScaleIdRef.current = macdTargetScale;
       }
       const macd = calculateMACD(visibleData, 12, 26, 9);
       macdHistRef.current.setData(macd.histogram.map(d => ({ time: d.time as Time, value: d.value, color: d.color })));
@@ -1525,6 +1558,7 @@ export default function CandleChart({
       if (macdHistRef.current) { chart.removeSeries(macdHistRef.current); macdHistRef.current = null; }
       if (macdLineRef.current) { chart.removeSeries(macdLineRef.current); macdLineRef.current = null; }
       if (macdSignalRef.current) { chart.removeSeries(macdSignalRef.current); macdSignalRef.current = null; }
+      macdScaleIdRef.current = null;
     }
 
     // Bollinger Bands (BB) - Sarı Üst/Alt Bant, Gri Orta Bant (20, 2)
@@ -1579,6 +1613,7 @@ export default function CandleChart({
         borderColor: '#1e293b',
         scaleMargins: { top: 0.02, bottom: 0.08 },
       });
+      chart.priceScale('left').applyOptions({ visible: false });
       try {
         chart.priceScale('volume_overlay').applyOptions({
           scaleMargins: { top: 0.82, bottom: 0.02 },
@@ -1609,24 +1644,19 @@ export default function CandleChart({
       const subTop = 1 - subPaneRatio;
 
       if (subPanesCount === 1) {
-        if (rsiActive) {
-          chart.priceScale('rsi').applyOptions({
-            visible: true,
-            autoScale: true,
-            borderColor: '#1e293b',
-            scaleMargins: { top: subTop, bottom: 0.02 },
-          });
-        }
-        if (macdActive) {
-          chart.priceScale('macd').applyOptions({
-            visible: true,
-            autoScale: true,
-            borderColor: '#1e293b',
-            scaleMargins: { top: subTop + 0.04, bottom: 0.02 },
-          });
-        }
+        // Aktif tek gösterge gerçek 'left' eksenine bağlandı (yukarıda) — kendi ayrı
+        // sütununda, fiyat cetveliyle hiç karışmadan gösterilir.
+        chart.priceScale('left').applyOptions({
+          visible: true,
+          autoScale: true,
+          borderColor: '#1e293b',
+          scaleMargins: { top: subTop, bottom: 0.02 },
+        });
       } else {
-        // 2 alt panel — subPaneRatio yüksekliğinin rsiMacdSplit oranını kullanarak böl
+        // 2 alt panel — 'left' tek başına ikisine yetmediği için eskisi gibi kendi
+        // overlay eksenlerinde (rsi/macd) kalıp subPaneRatio yüksekliğini rsiMacdSplit
+        // oranıyla aralarında bölüşürler.
+        chart.priceScale('left').applyOptions({ visible: false });
         const mid = subTop + subPaneRatio * rsiMacdSplit;
         if (rsiActive) {
           chart.priceScale('rsi').applyOptions({

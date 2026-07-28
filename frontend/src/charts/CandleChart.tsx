@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { createChart, ColorType, PriceScaleMode, CrosshairMode } from 'lightweight-charts';
-import type { Time } from 'lightweight-charts';
+import {
+  createChart, ColorType, PriceScaleMode, CrosshairMode,
+  CandlestickSeries, LineSeries, HistogramSeries,
+} from 'lightweight-charts';
+import { createSeriesMarkers, createTextWatermark } from 'lightweight-charts';
+import type { Time, ISeriesApi, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import DrawingToolbar from './drawings/DrawingToolbar';
 import DrawingEditPanel from './drawings/DrawingEditPanel';
 import { DrawingsPrimitive, RECT_HANDLE_LABELS, POSITION_HANDLE_LABELS } from './drawings/DrawingPrimitive';
@@ -101,44 +105,34 @@ export default function CandleChart({
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
-  const candleSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addCandlestickSeries']> | null>(null);
-  const mainLineSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const volumeSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const mainLineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const primitiveRef = useRef<DrawingsPrimitive | null>(null);
+  // v5'te setMarkers seriden kaldirildi; isaretler ayri bir eklenti uzerinden yonetilir.
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   // Gösterge Serisi Referansları
-  const ema20Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const ema50Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const ema100Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const ema200Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const ema20Ref = useRef<ISeriesApi<'Line'> | null>(null);
+  const ema50Ref = useRef<ISeriesApi<'Line'> | null>(null);
+  const ema100Ref = useRef<ISeriesApi<'Line'> | null>(null);
+  const ema200Ref = useRef<ISeriesApi<'Line'> | null>(null);
 
-  const rsiRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  // RSI/MACD hangi eksene (kendi overlay'ine mi yoksa gerçek 'left' eksenine mi) bağlı oluşturulduğunu izler;
-  // tek gösterge aktifken 'left', ikisi birden aktifken kendi overlay'leri kullanılır (bkz. MARJ YERLEŞİM ETKİSİ).
-  const rsiScaleIdRef = useRef<string | null>(null);
+  const rsiRef = useRef<ISeriesApi<'Line'> | null>(null);
 
-  const macdLineRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const macdSignalRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const macdHistRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
-  const macdScaleIdRef = useRef<string | null>(null);
+  const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdSignalRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const macdHistRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  const bbUpperRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const bbMiddleRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
-  const bbLowerRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+  const bbUpperRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const bbMiddleRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const bbLowerRef = useRef<ISeriesApi<'Line'> | null>(null);
 
   const alertPriceLinesRef = useRef<Array<{ line: any; series: any }>>([]);
   const [alertState] = useAlertStore();
 
 
   // Alt panel boyutlandırma durumu
-  const [subPaneRatio, setSubPaneRatio] = useState(0.28);
-  const [rsiMacdSplit, setRsiMacdSplit] = useState(0.5);
-  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
-  const [dividerHovered, setDividerHovered] = useState<'main' | 'sub' | null>(null);
-  const isDraggingDividerRef = useRef(false);
-  const activeDividerRef = useRef<'main' | 'sub' | null>(null);
-  const subPaneRatioRef = useRef(0.28);
-  subPaneRatioRef.current = subPaneRatio;
 
   const [activeTool, setActiveTool] = useState<DrawingTool>('pointer');
   const [snapEnabled, setSnapEnabled] = useState(false);
@@ -213,9 +207,17 @@ export default function CandleChart({
     const targetSeries = candleSeriesRef.current || mainLineSeriesRef.current;
     if (!targetSeries) return;
 
+    const setMarkers = (list: any[]) => {
+      if (!markersPluginRef.current) {
+        markersPluginRef.current = createSeriesMarkers(targetSeries, list);
+      } else {
+        markersPluginRef.current.setMarkers(list);
+      }
+    };
+
     if (!evaluateResult || !Array.isArray(evaluateResult.signals) || evaluateResult.signals.length === 0) {
       try {
-        targetSeries.setMarkers([]);
+        setMarkers([]);
       } catch {}
       return;
     }
@@ -225,7 +227,7 @@ export default function CandleChart({
     // Sembol kontrolü
     if (evaluateResult.symbol && symbol && evaluateResult.symbol.toUpperCase() !== symbol.toUpperCase()) {
       try {
-        targetSeries.setMarkers([]);
+        setMarkers([]);
       } catch {}
       return;
     }
@@ -281,7 +283,7 @@ export default function CandleChart({
     const markers = Array.from(markersMap.values()).sort((a, b) => Number(a.time) - Number(b.time));
 
     try {
-      targetSeries.setMarkers(markers);
+      setMarkers(markers);
     } catch (err) {
       console.warn('Set strategy markers error:', err);
     }
@@ -330,7 +332,6 @@ export default function CandleChart({
     };
   }, []);
 
-  const [chartHeight, setChartHeight] = useState(600);
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
   const [isDatesOpen, setIsDatesOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -554,39 +555,9 @@ export default function CandleChart({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // --- Ayırıcı sürükleme yöneticisi ---
-  const handleDividerMouseDown = useCallback((e: React.MouseEvent, which: 'main' | 'sub') => {
-    isDraggingDividerRef.current = true;
-    activeDividerRef.current = which;
-    setIsDraggingDivider(true);
-    document.body.style.cursor = 'ns-resize';
-    document.body.style.userSelect = 'none';
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  // Ayırıcı sürükleme için pencere düzeyinde fare dinleyicileri
+  // Çizim tutamacı sürüklemesi için pencere düzeyinde fare dinleyicileri
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      // Ayırıcı sürükleme
-      if (isDraggingDividerRef.current && chartContainerRef.current && activeDividerRef.current) {
-        const rect = chartContainerRef.current.getBoundingClientRect();
-        const relativeY = e.clientY - rect.top;
-
-        if (activeDividerRef.current === 'main') {
-          const newRatio = 1 - relativeY / rect.height;
-          setSubPaneRatio(Math.max(0.10, Math.min(0.80, newRatio)));
-        } else {
-          const curRatio = subPaneRatioRef.current;
-          const subAreaStartPx = rect.height * (1 - curRatio);
-          const subAreaHeightPx = rect.height * curRatio;
-          if (subAreaHeightPx <= 0) return;
-          const posInSubArea = (relativeY - subAreaStartPx) / subAreaHeightPx;
-          setRsiMacdSplit(Math.max(0.15, Math.min(0.85, posInSubArea)));
-        }
-        return;
-      }
-
       // Çizim handle sürükleme
       if (dragStateRef.current && chartContainerRef.current && primitiveRef.current) {
         isDraggingDrawingRef.current = true;
@@ -610,16 +581,6 @@ export default function CandleChart({
     };
 
     const handleMouseUp = () => {
-      // Ayırıcı sürükleme bitişi
-      if (isDraggingDividerRef.current) {
-        isDraggingDividerRef.current = false;
-        activeDividerRef.current = null;
-        setIsDraggingDivider(false);
-        setDividerHovered(null);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      }
-
       // Çizim handle sürükleme bitişi
       if (dragStateRef.current) {
         dragStateRef.current = null;
@@ -891,14 +852,6 @@ export default function CandleChart({
         textColor: '#94a3b8',
         fontSize: 12,
       },
-      watermark: {
-        visible: true,
-        fontSize: 20,
-        horzAlign: 'center',
-        vertAlign: 'center',
-        color: 'rgba(148, 163, 184, 0.05)',
-        text: 'Trading Research Platform',
-      },
       grid: {
         vertLines: { color: '#1e293b' },
         horzLines: { color: '#1e293b' },
@@ -907,12 +860,6 @@ export default function CandleChart({
         borderColor: '#1e293b',
         autoScale: true,
         mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
-      },
-      // Tek bir alt gösterge (RSI veya MACD) aktifken kendi cetvelini burada gösterir;
-      // böylece fiyat ekseniyle aynı sütuna sıkışıp sayı sayı üstüne binmez (bkz. MARJ YERLEŞİM ETKİSİ).
-      leftPriceScale: {
-        visible: false,
-        borderColor: '#1e293b',
       },
       timeScale: {
         borderColor: '#1e293b',
@@ -939,7 +886,14 @@ export default function CandleChart({
       height: chartContainerRef.current.clientHeight || 600,
     });
 
-    const candleSeries = chart.addCandlestickSeries({
+    // v5'te watermark bir chart secenegi degil, pane eklentisidir.
+    createTextWatermark(chart.panes()[0], {
+      horzAlign: 'center',
+      vertAlign: 'center',
+      lines: [{ text: 'Trading Research Platform', color: 'rgba(148, 163, 184, 0.05)', fontSize: 20 }],
+    });
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#ef4444',
       borderVisible: false,
@@ -948,7 +902,7 @@ export default function CandleChart({
       visible: chartType === 'candlestick',
     });
 
-    const mainLineSeries = chart.addLineSeries({
+    const mainLineSeries = chart.addSeries(LineSeries, {
       color: '#ffffff',
       lineWidth: 2,
       crosshairMarkerVisible: true,
@@ -956,7 +910,7 @@ export default function CandleChart({
     });
     mainLineSeriesRef.current = mainLineSeries;
 
-    const volumeSeries = chart.addHistogramSeries({
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       color: '#2563eb',
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume_overlay',
@@ -1195,7 +1149,6 @@ export default function CandleChart({
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
           chart.resize(width, height);
-          setChartHeight(height);
         }
       }
     });
@@ -1306,11 +1259,9 @@ export default function CandleChart({
       ema100Ref.current = null;
       ema200Ref.current = null;
       rsiRef.current = null;
-      rsiScaleIdRef.current = null;
       macdLineRef.current = null;
       macdSignalRef.current = null;
       macdHistRef.current = null;
-      macdScaleIdRef.current = null;
       bbUpperRef.current = null;
       bbMiddleRef.current = null;
       bbLowerRef.current = null;
@@ -1459,7 +1410,7 @@ export default function CandleChart({
     // EMA 20
     if (indicators.ema20) {
       if (!ema20Ref.current) {
-        ema20Ref.current = chart.addLineSeries({
+        ema20Ref.current = chart.addSeries(LineSeries, {
           color: '#f59e0b',
           lineWidth: 2,
           lastValueVisible: false,
@@ -1477,7 +1428,7 @@ export default function CandleChart({
     // EMA 50
     if (indicators.ema50) {
       if (!ema50Ref.current) {
-        ema50Ref.current = chart.addLineSeries({
+        ema50Ref.current = chart.addSeries(LineSeries, {
           color: '#06b6d4',
           lineWidth: 2,
           lastValueVisible: false,
@@ -1495,7 +1446,7 @@ export default function CandleChart({
     // EMA 100
     if (indicators.ema100) {
       if (!ema100Ref.current) {
-        ema100Ref.current = chart.addLineSeries({
+        ema100Ref.current = chart.addSeries(LineSeries, {
           color: '#8b5cf6',
           lineWidth: 2,
           lastValueVisible: false,
@@ -1513,7 +1464,7 @@ export default function CandleChart({
     // EMA 200
     if (indicators.ema200) {
       if (!ema200Ref.current) {
-        ema200Ref.current = chart.addLineSeries({
+        ema200Ref.current = chart.addSeries(LineSeries, {
           color: '#ec4899',
           lineWidth: 2,
           lastValueVisible: false,
@@ -1529,23 +1480,17 @@ export default function CandleChart({
     }
 
 
-    // RSI (Alt panel) — tek başına aktifken gerçek 'left' eksenine, MACD ile birlikteyse
-    // kendi 'rsi' overlay eksenine bağlanır (bkz. MARJ YERLEŞİM ETKİSİ). Hedef eksen
-    // değiştiğinde seri, yeni priceScaleId ile silinip yeniden oluşturulur.
-    const subPanesCountForScale = (indicators.rsi ? 1 : 0) + (indicators.macd ? 1 : 0);
-    const rsiTargetScale = subPanesCountForScale === 1 && indicators.rsi ? 'left' : 'rsi';
-    const macdTargetScale = subPanesCountForScale === 1 && indicators.macd ? 'left' : 'macd';
+    // RSI ve MACD kendi pane'lerinde (v5 çoklu panel API'si) yaşar: her pane'in
+    // kendi fiyat cetveli vardır, bu yüzden ne birbirleriyle ne de fiyat ekseniyle
+    // çakışırlar. Pane 0 fiyat grafiğidir; alt göstergeler sırayla 1 ve 2'dir.
+    const rsiPaneIndex = 1;
+    const macdPaneIndex = indicators.rsi ? 2 : 1;
 
     if (indicators.rsi) {
-      if (rsiRef.current && rsiScaleIdRef.current !== rsiTargetScale) {
-        chart.removeSeries(rsiRef.current);
-        rsiRef.current = null;
-      }
       if (!rsiRef.current) {
-        rsiRef.current = chart.addLineSeries({
+        rsiRef.current = chart.addSeries(LineSeries, {
           color: '#ffffff',
           lineWidth: 2,
-          priceScaleId: rsiTargetScale,
           title: '',
           lastValueVisible: false,
           priceLineVisible: false,
@@ -1553,8 +1498,7 @@ export default function CandleChart({
             priceRange: { minValue: 0, maxValue: 100 },
             margins: { above: 2, below: 2 },
           }),
-        });
-        rsiScaleIdRef.current = rsiTargetScale;
+        }, rsiPaneIndex);
 
         rsiRef.current.createPriceLine({ price: 70, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
         rsiRef.current.createPriceLine({ price: 50, color: 'rgba(148, 163, 184, 0.4)', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '' });
@@ -1565,24 +1509,19 @@ export default function CandleChart({
     } else if (rsiRef.current) {
       chart.removeSeries(rsiRef.current);
       rsiRef.current = null;
-      rsiScaleIdRef.current = null;
     }
 
-    // MACD (Alt panel) — aynı mantık: tek başına aktifken 'left', RSI ile birlikteyse 'macd' overlay'i.
     if (indicators.macd) {
-      if (macdHistRef.current && macdScaleIdRef.current !== macdTargetScale) {
-        chart.removeSeries(macdHistRef.current);
-        chart.removeSeries(macdLineRef.current!);
-        chart.removeSeries(macdSignalRef.current!);
-        macdHistRef.current = null;
-        macdLineRef.current = null;
-        macdSignalRef.current = null;
-      }
       if (!macdHistRef.current || !macdLineRef.current || !macdSignalRef.current) {
-        macdHistRef.current = chart.addHistogramSeries({ priceScaleId: macdTargetScale, title: '', lastValueVisible: false, priceLineVisible: false });
-        macdLineRef.current = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceScaleId: macdTargetScale, title: '', lastValueVisible: false, priceLineVisible: false });
-        macdSignalRef.current = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceScaleId: macdTargetScale, title: '', lastValueVisible: false, priceLineVisible: false });
-        macdScaleIdRef.current = macdTargetScale;
+        macdHistRef.current = chart.addSeries(HistogramSeries, { title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
+        macdLineRef.current = chart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
+        macdSignalRef.current = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
+      } else {
+        // RSI açılıp kapandığında MACD'nin pane sırası kayar; serileri yeniden
+        // oluşturmadan doğru pane'e taşı.
+        for (const s of [macdHistRef.current, macdLineRef.current, macdSignalRef.current]) {
+          if (s.getPane().paneIndex() !== macdPaneIndex) s.moveToPane(macdPaneIndex);
+        }
       }
       const macd = calculateMACD(visibleData, 12, 26, 9);
       macdHistRef.current.setData(macd.histogram.map(d => ({ time: d.time as Time, value: d.value, color: d.color })));
@@ -1592,27 +1531,26 @@ export default function CandleChart({
       if (macdHistRef.current) { chart.removeSeries(macdHistRef.current); macdHistRef.current = null; }
       if (macdLineRef.current) { chart.removeSeries(macdLineRef.current); macdLineRef.current = null; }
       if (macdSignalRef.current) { chart.removeSeries(macdSignalRef.current); macdSignalRef.current = null; }
-      macdScaleIdRef.current = null;
     }
 
     // Bollinger Bands (BB) - Sarı Üst/Alt Bant, Gri Orta Bant (20, 2)
     if (indicators.bb) {
       if (!bbUpperRef.current || !bbMiddleRef.current || !bbLowerRef.current) {
-        bbUpperRef.current = chart.addLineSeries({
+        bbUpperRef.current = chart.addSeries(LineSeries, {
           color: '#eab308', // Canlı Sarı (Üst Bant)
           lineWidth: 2,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
-        bbMiddleRef.current = chart.addLineSeries({
+        bbMiddleRef.current = chart.addSeries(LineSeries, {
           color: '#94a3b8', // Gri / Slate (Orta Bant - SMA 20)
           lineWidth: 1,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
-        bbLowerRef.current = chart.addLineSeries({
+        bbLowerRef.current = chart.addSeries(LineSeries, {
           color: '#eab308', // Canlı Sarı (Alt Bant)
           lineWidth: 2,
           lastValueVisible: false,
@@ -1631,87 +1569,25 @@ export default function CandleChart({
     }
   }, [visibleData, indicators]);
 
-  // --- MARJ YERLEŞİM ETKİSİ (serileri yeniden oluşturmadan subPaneRatio sürüklemesine yanıt vermesi için ayrıldı) ---
+  // --- PANE YERLEŞİMİ ---
+  // v5'te RSI/MACD ayrı pane'lerde durur; her pane kendi fiyat cetvelini yönetir.
+  // Burada yalnızca pane yükseklik oranları ve hacim overlay marjı ayarlanır.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
 
-    const rsiActive = indicators.rsi;
-    const macdActive = indicators.macd;
-    const subPanesCount = (rsiActive ? 1 : 0) + (macdActive ? 1 : 0);
+    const panes = chart.panes();
+    if (panes.length > 0) panes[0].setStretchFactor(3);
+    for (let i = 1; i < panes.length; i++) panes[i].setStretchFactor(1);
 
-    if (subPanesCount === 0) {
-      // Alt panel yok — ana grafik tüm alanı kullanır (zaman ekseni etiketinin görünürlüğü için küçük bir alan bırakır)
-      chart.priceScale('right').applyOptions({
-        visible: true,
-        borderColor: '#1e293b',
-        scaleMargins: { top: 0.02, bottom: 0.08 },
+    try {
+      chart.priceScale('volume_overlay').applyOptions({
+        scaleMargins: { top: 0.82, bottom: 0.02 },
       });
-      chart.priceScale('left').applyOptions({ visible: false });
-      try {
-        chart.priceScale('volume_overlay').applyOptions({
-          scaleMargins: { top: 0.82, bottom: 0.02 },
-        });
-      } catch (e) {
-        console.warn('Volume price scale error:', e);
-      }
-    } else {
-      // Ana grafiğin alt marjı tam olarak subPaneRatio kadardır
-      chart.priceScale('right').applyOptions({
-        visible: true,
-        borderColor: '#1e293b',
-        scaleMargins: { top: 0.02, bottom: subPaneRatio },
-      });
-
-      // Hacim, ana grafik alanının alt %15'ini kaplar.
-      // Orantılı üst marj, top + bottom >= 1.0 çökmesini önler.
-      const volumeTop = (1 - subPaneRatio) * 0.85;
-      try {
-        chart.priceScale('volume_overlay').applyOptions({
-          scaleMargins: { top: volumeTop, bottom: subPaneRatio },
-        });
-      } catch (e) {
-        console.warn('Volume price scale error:', e);
-      }
-
-      // Alt panel alanı tam olarak ana grafiğin bittiği yerde başlar
-      const subTop = 1 - subPaneRatio;
-
-      if (subPanesCount === 1) {
-        // Aktif tek gösterge gerçek 'left' eksenine bağlandı (yukarıda) — kendi ayrı
-        // sütununda, fiyat cetveliyle hiç karışmadan gösterilir.
-        chart.priceScale('left').applyOptions({
-          visible: true,
-          autoScale: true,
-          borderColor: '#1e293b',
-          scaleMargins: { top: subTop, bottom: 0.02 },
-        });
-      } else {
-        // 2 alt panel — 'left' tek başına ikisine yetmediği için eskisi gibi kendi
-        // overlay eksenlerinde (rsi/macd) kalıp subPaneRatio yüksekliğini rsiMacdSplit
-        // oranıyla aralarında bölüşürler.
-        chart.priceScale('left').applyOptions({ visible: false });
-        const mid = subTop + subPaneRatio * rsiMacdSplit;
-        if (rsiActive) {
-          chart.priceScale('rsi').applyOptions({
-            visible: true,
-            autoScale: true,
-            borderColor: '#1e293b',
-            scaleMargins: { top: subTop, bottom: 1 - mid },
-          });
-        }
-        if (macdActive) {
-          chart.priceScale('macd').applyOptions({
-            visible: true,
-            autoScale: true,
-            borderColor: '#1e293b',
-            // Ayırıcıya değmesini önlemek için üstte küçük bir boşluk bırakır, çökmeleri önlemek için 0.95 ile sınırlanmıştır
-            scaleMargins: { top: Math.min(mid + 0.04, 0.95), bottom: 0.02 },
-          });
-        }
-      }
+    } catch (e) {
+      console.warn('Volume price scale error:', e);
     }
-  }, [subPaneRatio, rsiMacdSplit, indicators]);
+  }, [indicators]);
 
 
   const updateAlarmOverlays = useCallback(() => {
@@ -1821,90 +1697,6 @@ export default function CandleChart({
   }, [visibleData, symbol, provider]);
 
 
-  // Ayırıcı konumlarını hesapla — marj yerleşim formülünü birebir yansıtır (sıfır boşluk)
-  const hasSubPane = indicators.rsi || indicators.macd;
-  const hasBothSubPanes = indicators.rsi && indicators.macd;
-
-  const mainDividerY = chartHeight * (1 - subPaneRatio);
-
-  const subTop = 1 - subPaneRatio;
-  const subDividerY = hasBothSubPanes
-    ? chartHeight * (subTop + subPaneRatio * rsiMacdSplit)
-    : 0;
-
-  const mainHighlight = isDraggingDivider && activeDividerRef.current === 'main' || dividerHovered === 'main';
-  const subHighlight = isDraggingDivider && activeDividerRef.current === 'sub' || dividerHovered === 'sub';
-
-  // Ortak ayırıcı oluşturucu (renderer)
-  const renderDivider = (
-    pixelY: number,
-    which: 'main' | 'sub',
-    highlight: boolean,
-  ) => (
-    // Dış konteyner: çakışmaları önlemek için tamamen pixelY (alt panel sınırı) üzerinde konumlandırılmıştır
-    <div
-      key={which}
-      style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        top: `${pixelY - 16}px`,  // Çizginin 16px üzerinden başlar
-        height: '18px',            // Alt kenar pixelY + 2px konumundadır
-        zIndex: 10,
-        pointerEvents: 'none',
-      }}
-    >
-      {/* Tutma şeridi: çizginin üstünde 15px yüksekliğinde tutma alanı */}
-      <div
-        onMouseDown={(e) => handleDividerMouseDown(e, which)}
-        onMouseEnter={() => setDividerHovered(which)}
-        onMouseLeave={() => { if (!isDraggingDividerRef.current) setDividerHovered(null); }}
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: 0,
-          height: '21px',
-          cursor: 'ns-resize',
-          pointerEvents: 'auto',
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'center',
-          paddingBottom: '2px',
-        }}
-      >
-        {/* Tutamak noktaları */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '4px',
-            opacity: highlight ? 1 : 0.5,
-            transition: 'opacity 0.12s ease',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
-          <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
-          <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: highlight ? '#60a5fa' : '#94a3b8' }} />
-        </div>
-      </div>
-
-      {/* Görünür ayırıcı çizgi: konteynerin alt kenarına sabitlenmiştir (pixelY) */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: '2px',
-          height: highlight ? '2px' : '1px',
-          background: highlight ? '#3b82f6' : '#475569',
-          transition: 'all 0.12s ease',
-          boxShadow: highlight ? '0 0 6px rgba(59,130,246,0.5)' : 'none',
-          pointerEvents: 'none',
-        }}
-      />
-    </div>
-  );
 
 
   return (
@@ -2172,12 +1964,6 @@ export default function CandleChart({
           />
         ) : null}
       </div>
-
-      {/* Ana ayırıcı: fiyat grafiği ve alt paneller arasında */}
-      {hasSubPane && renderDivider(mainDividerY, 'main', mainHighlight)}
-
-      {/* Alt ayırıcı: RSI ve MACD arasında (yalnızca ikisi de aktifken) */}
-      {hasBothSubPanes && renderDivider(subDividerY, 'sub', subHighlight)}
 
       {/* Durum Gösterge Katmanları */}
       {loading && (

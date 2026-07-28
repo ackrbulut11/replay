@@ -1,6 +1,6 @@
 import type {
-  ISeriesPrimitivePaneView,
-  ISeriesPrimitivePaneRenderer,
+  IPrimitivePaneView,
+  IPrimitivePaneRenderer,
   SeriesAttachedParameter,
   ISeriesPrimitiveBase,
   IChartApiBase,
@@ -214,7 +214,7 @@ function computeRulerStats(p1: DrawingPoint, p2: DrawingPoint, candles: CandleDa
   return { line1, line2, line3, isPositive: priceDiff >= 0 };
 }
 
-class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
+class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
   private _drawings: PixelDrawing[] = [];
   private _preview: PixelDrawing | null = null;
   private _selectedId: string | null = null;
@@ -622,14 +622,14 @@ class DrawingsPaneRenderer implements ISeriesPrimitivePaneRenderer {
   }
 }
 
-class DrawingsPaneView implements ISeriesPrimitivePaneView {
+class DrawingsPaneView implements IPrimitivePaneView {
   private _renderer: DrawingsPaneRenderer;
 
   constructor(renderer: DrawingsPaneRenderer) {
     this._renderer = renderer;
   }
 
-  renderer(): ISeriesPrimitivePaneRenderer {
+  renderer(): IPrimitivePaneRenderer {
     return this._renderer;
   }
 }
@@ -712,7 +712,7 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
     this._requestUpdate = null;
   }
 
-  paneViews(): readonly ISeriesPrimitivePaneView[] {
+  paneViews(): readonly IPrimitivePaneView[] {
     return [this._paneView];
   }
 

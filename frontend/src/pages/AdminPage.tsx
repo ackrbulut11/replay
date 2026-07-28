@@ -402,6 +402,27 @@ function UserDetailPanel({
                     </span>
                   )}
                 </div>
+                {/* Giriş ve çıkış kurallarının detay metinleri */}
+                {(s.entry_rules_text?.length > 0 || s.exit_rules_text?.length > 0) && (
+                  <div className="mt-2 space-y-1">
+                    {s.entry_rules_text?.map((txt, i) => (
+                      <div
+                        key={`entry-${i}`}
+                        className="flex items-center gap-1.5 pl-2 border-l-2 border-emerald-500/40"
+                      >
+                        <span className="text-[10px] font-mono text-emerald-400/80 truncate">{txt}</span>
+                      </div>
+                    ))}
+                    {s.exit_rules_text?.map((txt, i) => (
+                      <div
+                        key={`exit-${i}`}
+                        className="flex items-center gap-1.5 pl-2 border-l-2 border-red-500/40"
+                      >
+                        <span className="text-[10px] font-mono text-red-400/80 truncate">{txt}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

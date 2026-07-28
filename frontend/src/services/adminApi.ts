@@ -75,6 +75,10 @@ export interface AdminStrategyItem {
   entry_rules_count: number;
   exit_rules_count: number;
   timeframe_filters: string[];
+  /** Her giriş koşulunun okunabilir metni, örn. ["RSI(14) < 30", "EMA(20) ↑ kesişir EMA(50)"] */
+  entry_rules_text: string[];
+  /** Her çıkış koşulunun okunabilir metni */
+  exit_rules_text: string[];
 }
 
 export interface AdminWatchlistItem {

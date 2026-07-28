@@ -245,6 +245,9 @@ class AdminStrategyItem(BaseModel):
     entry_rules_count: int = 0
     exit_rules_count: int = 0
     timeframe_filters: List[str] = []
+    # Her giriş/çıkış kuralı için okunabilir açıklama listesi
+    entry_rules_text: List[str] = []
+    exit_rules_text: List[str] = []
 
     class Config:
         from_attributes = True
@@ -283,25 +286,95 @@ def _describe_alert(alert: Alert) -> str:
     return f"{symbol} {field}{period} {threshold} {direction}"
 
 
-def _strategy_rule_counts(rules: Any) -> tuple[int, int, bool, Optional[float], Optional[float], List[str]]:
+def _describe_operand(op: Any) -> str:
+    """Bir operand dict'ini okunabilir kısa metne çevirir."""
+    if not isinstance(op, dict):
+        return "?"
+    t = op.get("type", "")
+    if t == "indicator":
+        name = op.get("name", "?")
+        period = op.get("period", "")
+        field = op.get("field", "")
+        tf = op.get("timeframe", "")
+        parts = f"{name}({period})" if period != "" else name
+        if field:
+            parts += f".{field}"
+        if tf:
+            parts += f"[{tf}]"
+        return parts
+    if t == "price":
+        field = op.get("field", "close")
+        tf = op.get("timeframe", "")
+        return f"{field}[{tf}]" if tf else field
+    if t == "value":
+        return str(op.get("value", "?"))
+    if t == "pnl":
+        return "PnL%"
+    return str(op)
+
+
+_OPERATOR_LABEL: dict[str, str] = {
+    ">": ">",
+    "<": "<",
+    ">=": ">=",
+    "<=": "<=",
+    "==": "==",
+    "!=": "!=",
+    "cross_above": "↑ kesişir",
+    "cross_below": "↓ kesişir",
+    "between": "arasında",
+}
+
+
+def _describe_condition(cond: Any) -> str:
+    """Tek bir condition dict'ini okunabilir Türkçe metne çevirir."""
+    if not isinstance(cond, dict):
+        return ""
+    left = _describe_operand(cond.get("left"))
+    op = _OPERATOR_LABEL.get(cond.get("operator", ""), cond.get("operator", ""))
+    right = _describe_operand(cond.get("right"))
+    if cond.get("operator") == "between" and cond.get("right2"):
+        right2 = _describe_operand(cond.get("right2"))
+        return f"{left} {op} {right} - {right2}"
+    return f"{left} {op} {right}"
+
+
+def _extract_rules_text(group: Any) -> List[str]:
+    """Bir condition grubunun koşullarını metin listesi olarak döndürür."""
+    if not isinstance(group, dict):
+        return []
+    logic = group.get("logic", "AND")
+    conditions = group.get("conditions") or []
+    texts = [_describe_condition(c) for c in conditions if isinstance(c, dict)]
+    return texts
+
+
+def _strategy_rule_counts(
+    rules: Any,
+) -> tuple[int, int, bool, Optional[float], Optional[float], List[str], List[str], List[str]]:
     """`Strategy.rules` JSON kolonundan özet alanları çıkarır."""
     if not isinstance(rules, dict):
-        return 0, 0, False, None, None, []
+        return 0, 0, False, None, None, [], [], []
 
     def _count(group: Any) -> int:
         if not isinstance(group, dict):
             return 0
         return len(group.get("conditions", []) or [])
 
-    entry_count = _count(rules.get("entry_rules"))
-    exit_count = _count(rules.get("exit_rules"))
+    entry_group = rules.get("entry_rules")
+    exit_group = rules.get("exit_rules")
+
+    entry_count = _count(entry_group)
+    exit_count = _count(exit_group)
     allow_short = bool(rules.get("allow_short", False))
     take_profit_pct = rules.get("take_profit_pct")
     stop_loss_pct = rules.get("stop_loss_pct")
     timeframe_filters = rules.get("timeframe_filters") or []
     if not isinstance(timeframe_filters, list):
         timeframe_filters = []
-    return entry_count, exit_count, allow_short, take_profit_pct, stop_loss_pct, timeframe_filters
+    entry_texts = _extract_rules_text(entry_group)
+    exit_texts = _extract_rules_text(exit_group)
+    return entry_count, exit_count, allow_short, take_profit_pct, stop_loss_pct, timeframe_filters, entry_texts, exit_texts
 
 
 @router.get("/users/{user_id}/detail", response_model=AdminUserDetail)
@@ -346,7 +419,7 @@ def get_user_detail(user_id: str, db: Session = Depends(get_db)):
     )
     strategy_items = []
     for s in strategies:
-        entry_count, exit_count, allow_short, tp, sl, tf_filters = _strategy_rule_counts(s.rules)
+        entry_count, exit_count, allow_short, tp, sl, tf_filters, entry_texts, exit_texts = _strategy_rule_counts(s.rules)
         strategy_items.append(
             AdminStrategyItem(
                 id=s.id,
@@ -360,6 +433,8 @@ def get_user_detail(user_id: str, db: Session = Depends(get_db)):
                 entry_rules_count=entry_count,
                 exit_rules_count=exit_count,
                 timeframe_filters=tf_filters,
+                entry_rules_text=entry_texts,
+                exit_rules_text=exit_texts,
             )
         )
 

@@ -61,7 +61,7 @@ Bu dosya, bu proje üzerinde çalışan AI ajanlarının ve geliştiricilerin uy
 
 - ❌ Chart/UI tarafına finansal hesaplama mantığı yazmak
 - ❌ Strateji için yeni `.py` dosyası açmak
-- ❌ Docker/production altyapısı eklemek (bu bir masaüstü uygulaması, sunucu değil)
+- ❌ Onaysız yeni deployment altyapısı eklemek (Vercel/Render dışında; mevcut web dağıtımı bkz. `CLAUDE.md` § Deployment)
 - ❌ Tek commit'te birden fazla fazı aynı anda geliştirmek
 - ❌ Onaysız üçüncü parti kütüphane/servis entegrasyonu eklemek
 - ❌ `shift(-1)` veya benzeri şekilde gelecekteki mumu değerlendirmeye dahil etmek (lookahead bias)

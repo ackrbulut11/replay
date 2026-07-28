@@ -5,18 +5,17 @@ Bu dosya, projenin farklı katmanlarında çalışırken uyulması gereken tekni
 ## Backend — Python / FastAPI
 
 - Route'lar ince tutulur; iş mantığı `engines/`, `rules/`, `journal/`, `reports/` altına yazılır.
-- Veri işleme: `pandas` + `numpy`, gösterge hesaplama için `pandas-ta`.
+- Veri işleme: `pandas` + `numpy`. Göstergeler `pandas-ta` gibi bir kütüphaneyle değil, `indicators/` altında saf (pure) fonksiyonlar olarak elle yazılır (bkz. `CLAUDE.md`).
 - Tüm request/response modelleri Pydantic ile tanımlanır.
 - WebSocket, canlı fiyat/replay akışı için kullanılır; REST, tek seferlik sorgular (strateji listeleme, backtest sonucu vb.) için.
 - Zaman serisi işlemlerinde index her zaman `datetime` (UTC) olmalı, timezone karışıklığına izin verilmez.
 
-## Frontend — React / TypeScript / Tauri
+## Frontend — React / TypeScript (web)
 
 - Grafik: `lightweight-charts`. Kendi candlestick renderer'ı yazılmaz.
 - UI bileşenleri: shadcn/ui + Tailwind, tutarlı tema (dark/light) üzerinden.
-- State yönetimi: `store/` altında modül bazlı (chartStore, replayStore, userStore) — global tek bir dev state'e izin verilmez.
-- Backend'e erişim sadece `services/api.ts` ve `services/websocket.ts` üzerinden yapılır; component içinden doğrudan fetch/WebSocket çağrısı yazılmaz.
-- Tauri komutları (`src-tauri/src/commands.rs`) sadece dosya sistemi/process yönetimi gibi native ihtiyaçlar için kullanılır, iş mantığı içermez.
+- State yönetimi: `store/` altında modül bazlı (chartStore, replayStore, strategyStore, watchlistStore, alertStore, userStore) — global tek bir dev state'e izin verilmez.
+- Backend'e erişim sadece `services/*.ts` (`api.ts`, `strategyApi.ts`, `adminApi.ts` vb.) üzerinden yapılır; component içinden doğrudan fetch çağrısı yazılmaz.
 
 ## Rule / Strategy Engine
 
@@ -35,7 +34,7 @@ Bu dosya, projenin farklı katmanlarında çalışırken uyulması gereken tekni
 
 - Şema değişiklikleri migration dosyası olmadan yapılmaz (`database/migrations/`). Migration'lar Alembic ile yönetilir; `backend/` dizininden `alembic revision -m "..."` ile oluşturulur, `alembic upgrade head` ile uygulanır. Uygulama açılışta migration'ları kendisi çalıştırır (`main.py: run_migrations()`), `Base.metadata.create_all()` kullanılmaz — create_all mevcut tabloya kolon ekleyemez ve alembic damgası bırakmadığı için sonraki migration'ları bozar.
 - SQLite ALTER TABLE'ı sınırlı desteklediğinden kolon ekleme/silme `op.batch_alter_table()` içinde yapılır.
-- Büyük OHLCV verisi SQLite'ta değil `storage/parquet/` altında tutulur; SQLite sadece strateji, trade, journal gibi ilişkisel veriler için kullanılır.
+- Büyük OHLCV verisi SQLite'ta değil `storage/market_data/<provider>/` altında parquet olarak tutulur; SQLite sadece strateji, trade, journal gibi ilişkisel veriler için kullanılır.
 
 ## Backtest / Optimizer
 
@@ -45,7 +44,7 @@ Bu dosya, projenin farklı katmanlarında çalışırken uyulması gereken tekni
 
 ## Test
 
-- Backend: `pytest`, her engine (`replay`, `rules`, `scanner`, `backtest`) için ayrı test dosyası.
+- Backend: `unittest` (pytest değil), her engine (`replay`, `rules`, `scanner`, `backtest`) için ayrı test dosyası; `tests/` dizininde `__init__.py` olmadığından `unittest discover` çalışmaz, modüller isimle çalıştırılır (bkz. `CLAUDE.md` Commands).
 - Frontend: component testleri + `e2e/` altında Playwright ile kritik akışlar (replay oynatma, strateji oluşturma, backtest çalıştırma).
 - Yeni bir rule/indicator eklerken en az bir unit test zorunlu.
 

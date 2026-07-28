@@ -1,11 +1,11 @@
 # Trading Research Platform — Yol Haritası
 
 ## Vizyon
-TradingView klonu değil; **manuel backtest, strateji araştırması ve teknik analiz odaklı** bir masaüstü platform.
+TradingView klonu değil; **manuel backtest, strateji araştırması ve teknik analiz odaklı** bir web platform.
 
 ## Tech Stack
-- **Frontend:** React + TypeScript + Tauri (UI shell), grafik için `lightweight-charts`
-- **Backend:** Python (FastAPI), Tauri sidecar olarak çalışır, WebSocket ile frontend'e veri sağlar
+- **Frontend:** React + TypeScript, grafik için `lightweight-charts`, Vercel'e deploy edilir
+- **Backend:** Python (FastAPI), REST API (`/api`), Render'a deploy edilir
 - **Veritabanı:** SQLite
 - **Strateji tanımı:** kod değil, JSON tabanlı Rule Engine
 

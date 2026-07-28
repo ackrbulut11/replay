@@ -1,18 +1,18 @@
 # Trading Research Platform
 
-Market replay, manuel backtest, strateji araştırmaları ve teknik analiz odaklı modüler bir masaüstü platformu.
+Market replay, manuel backtest, strateji araştırmaları ve teknik analiz odaklı modüler bir web platformu.
 
 ## Tech Stack
 
-- **Frontend:** React + TypeScript + TailwindCSS + Tauri (Grafik kütüphanesi: `lightweight-charts`)
-- **Backend:** Python + FastAPI (Tauri sidecar olarak çalışır, WebSocket üzerinden veri sağlar)
+- **Frontend:** React + TypeScript + TailwindCSS (Grafik kütüphanesi: `lightweight-charts`), Vercel'e deploy edilir
+- **Backend:** Python + FastAPI (REST API, `/api` altında), Render'a deploy edilir
 - **Veritabanı:** SQLite (`storage/database/app.db`)
 
 ## Proje Yapısı
 
 ```text
 ├── docs/               # Dokümantasyon
-├── frontend/           # React + TypeScript + Tauri arayüzü
+├── frontend/           # React + TypeScript web arayüzü
 ├── backend/            # Python FastAPI backend modülü
 ├── storage/            # Mum verileri, stratejiler ve yerel veritabanı
 ├── scripts/            # Veri indirme, güncelleme ve derleme betikleri

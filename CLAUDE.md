@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-"REPLAY" — a trading research platform for market replay, manual backtesting and JSON-defined strategy research. React + TypeScript frontend (Tauri shell), Python/FastAPI backend, parquet + SQLite storage.
+"REPLAY" — a trading research platform for market replay, manual backtesting and JSON-defined strategy research. React + TypeScript web frontend (deployed on Vercel), Python/FastAPI backend (deployed on Render), parquet + SQLite storage.
 
 **Code comments, docstrings and all UI text are in Turkish.** Match that when editing existing files.
 
@@ -116,10 +116,10 @@ Charts use `lightweight-charts` only — do not write a custom candlestick rende
 
 ### Implementation status — many files are 0–3 line placeholders
 Only Phases 1–3 are partially built. Verify a module is real before wiring to it:
-- **Implemented:** market data + symbols, indicators, rules/evaluator/engine, strategy engine + routes, scanner engine, alerts, auth, admin; frontend chart, strategy builder/list/condition editor, batch scanner, watchlist, alerts, replay controls.
-- **Stubs:** `engines/replay_engine.py`, `engines/backtest_engine.py`, `optimizer/`, `ai/`, `journal/`, `reports/`, `api/websocket.py`, routes `replay|scanner|backtest|journal|watchlist`, and frontend `pages/{Chart,Dashboard,Replay,Scanner,Backtest,Journal}Page.tsx`, `scanner/`, `journal/`, `workspace/`, `services/{websocket,backend}.ts`, `store/{chartStore,userStore}.ts`, `charts/{ChartManager,Indicators,Drawings}.ts`.
+- **Implemented:** market data + symbols, indicators, rules/evaluator/engine, strategy engine + routes, scanner engine, alerts, auth, admin, analytics; frontend chart, strategy builder/list/condition editor, batch scanner, watchlist, alerts, replay controls, admin page.
+- **Stubs:** `engines/replay_engine.py`, `engines/backtest_engine.py`, `optimizer/`, `ai/`, `journal/`, `reports/`, `api/websocket.py`, routes `replay|scanner|backtest|journal`, and frontend `pages/{Chart,Dashboard,Replay,Scanner,Backtest,Journal}Page.tsx`, `scanner/`, `journal/`, `workspace/`, `services/{websocket,backend}.ts`, `store/{chartStore,userStore}.ts`, `charts/{ChartManager,Indicators,Drawings}.ts`.
 
-`main.py` mounts only `auth`, `market`, `strategy`, `alerts`, `admin` under `/api`. New routers must be added there explicitly.
+`main.py` mounts `auth`, `market`, `strategy`, `alerts`, `watchlist`, `admin`, `analytics` under `/api`. New routers must be added there explicitly.
 
 ## Deployment
 

@@ -41,13 +41,16 @@ TradingResearchPlatform/
 │   │   │   ├── ScannerPage.tsx
 │   │   │   ├── StrategyPage.tsx
 │   │   │   ├── BacktestPage.tsx
-│   │   │   └── JournalPage.tsx
+│   │   │   ├── JournalPage.tsx
+│   │   │   └── AdminPage.tsx
 │   │   │
 │   │   ├── charts/
 │   │   │   ├── CandleChart.tsx       # Lightweight Charts integration
-│   │   │   ├── ChartManager.ts
-│   │   │   ├── Indicators.ts
-│   │   │   └── Drawings.ts
+│   │   │   ├── IndicatorToolbar.tsx
+│   │   │   ├── ChartManager.ts       # STUB
+│   │   │   ├── Indicators.ts         # STUB
+│   │   │   ├── Drawings.ts           # STUB
+│   │   │   └── drawings/
 │   │   │
 │   │   ├── replay/
 │   │   │   ├── ReplayControls.tsx
@@ -58,28 +61,34 @@ TradingResearchPlatform/
 │   │   │   ├── ConditionEditor.tsx
 │   │   │   └── StrategyList.tsx
 │   │   │
-│   │   ├── scanner/
+│   │   ├── scanner/                  # STUB
 │   │   │   ├── ScannerTable.tsx
 │   │   │   ├── FilterPanel.tsx
 │   │   │   └── WatchlistPanel.tsx
 │   │   │
-│   │   ├── journal/
+│   │   ├── journal/                  # STUB
 │   │   │   ├── TradeJournalTable.tsx
 │   │   │   └── PerformanceReport.tsx
 │   │   │
-│   │   ├── workspace/
+│   │   ├── workspace/                # STUB
 │   │   │   ├── WorkspaceManager.ts
 │   │   │   └── LayoutStore.ts
 │   │   │
 │   │   ├── services/
 │   │   │   ├── api.ts
-│   │   │   ├── websocket.ts
-│   │   │   └── backend.ts
+│   │   │   ├── strategyApi.ts
+│   │   │   ├── adminApi.ts
+│   │   │   ├── chartAnalytics.ts
+│   │   │   ├── websocket.ts          # STUB
+│   │   │   └── backend.ts            # STUB
 │   │   │
 │   │   ├── store/
-│   │   │   ├── chartStore.ts
 │   │   │   ├── replayStore.ts
-│   │   │   └── userStore.ts
+│   │   │   ├── strategyStore.ts
+│   │   │   ├── watchlistStore.ts
+│   │   │   ├── alertStore.ts
+│   │   │   ├── chartStore.ts         # STUB
+│   │   │   └── userStore.ts          # STUB
 │   │   │
 │   │   ├── hooks/
 │   │   │
@@ -90,7 +99,7 @@ TradingResearchPlatform/
 │   └── e2e/                          # Playwright test senaryoları
 │
 │
-├── backend/                          # Python FastAPI (Web REST & Auth Engine)
+├── backend/                          # Python FastAPI (REST API & Auth Engine)
 │   │
 │   ├── requirements.txt
 │   ├── pyproject.toml
@@ -109,14 +118,16 @@ TradingResearchPlatform/
 │   │   │   ├── routes/
 │   │   │   │   ├── market.py
 │   │   │   │   ├── strategy.py
-│   │   │   │   ├── replay.py
-│   │   │   │   ├── scanner.py
+│   │   │   │   ├── alerts.py
 │   │   │   │   ├── watchlist.py
-│   │   │   │   ├── backtest.py
-│   │   │   │   ├── journal.py
-│   │   │   │   └── alerts.py
+│   │   │   │   ├── admin.py
+│   │   │   │   ├── analytics.py
+│   │   │   │   ├── replay.py          # STUB
+│   │   │   │   ├── scanner.py         # STUB
+│   │   │   │   ├── backtest.py        # STUB
+│   │   │   │   └── journal.py         # STUB
 │   │   │   │
-│   │   │   └── websocket.py
+│   │   │   └── websocket.py          # STUB
 │   │   │
 │   │   ├── core/
 │   │   │   ├── config.py
@@ -132,8 +143,9 @@ TradingResearchPlatform/
 │   │   │   │
 │   │   │   └── loader.py             # L1 RAM Cache, Parquet storage & thread safety
 │   │   │
-│   │   ├── database/                 # PostgreSQL & SQLite ORM Models
-│   │   │   ├── postgres.py           # SQLAlchemy Engine & Session
+│   │   ├── database/                 # SQLite ORM Models (SQLAlchemy)
+│   │   │   ├── sqlite.py             # Engine & Session (aktif — DATABASE_URL sqlite:///./storage/database/app.db)
+│   │   │   ├── postgres.py           # Kullanılmıyor / gelecekteki Postgres desteği için
 │   │   │   ├── models.py             # User, Strategy, StrategyScan, StrategyEvaluation, Alert, Watchlist, ReplaySession, JournalTrade, ChartLayout
 │   │   │   └── migrations/           # Alembic
 │   │   │       ├── env.py
@@ -152,31 +164,34 @@ TradingResearchPlatform/
 │   │   │   └── evaluator.py
 │   │   │
 │   │   ├── engines/
-│   │   │   ├── replay_engine.py
 │   │   │   ├── strategy_engine.py
 │   │   │   ├── scanner_engine.py
-│   │   │   └── backtest_engine.py
+│   │   │   ├── replay_engine.py       # STUB
+│   │   │   └── backtest_engine.py     # STUB
 │   │   │
-│   │   ├── journal/
+│   │   ├── journal/                   # STUB
 │   │   │   └── trade_journal.py
 │   │   │
-│   │   ├── reports/
+│   │   ├── reports/                   # STUB
 │   │   │   └── performance_report.py
 │   │   │
-│   │   ├── optimizer/
+│   │   ├── optimizer/                 # STUB
 │   │   │   └── parameter_search.py
 │   │   │
 │   │   ├── alerts/
 │   │   │   ├── telegram.py
 │   │   │   └── notification.py
 │   │   │
-│   │   ├── ai/
+│   │   ├── ai/                        # STUB
 │   │   │   ├── strategy_generator.py
 │   │   │   └── analyzer.py
 │   │   │
 │   │   └── utils/
 │   │
-│   └── tests/                        # Automated Auth & Market API integration tests
+│   └── tests/                        # unittest tabanlı (pytest değil) — bkz. CLAUDE.md Commands
+│       ├── test_rules.py
+│       ├── test_strategy_api.py
+│       ├── test_alerts.py
 │       └── test_auth_api.py
 │
 │

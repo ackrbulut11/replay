@@ -170,8 +170,15 @@ function App() {
     
     const highest = Math.max(...highs);
     const lowest = Math.min(...lows);
-    const firstPrice = activeData[0].open;
-    const lastPrice = activeData[activeData.length - 1].close;
+
+    // "Fiyat Değişimi" son 1 yıla göre hesaplanır; yüklü veri (grafik varsayılanına göre)
+    // yıllarca geriye gidebildiğinden tüm aralığa göre hesap anlamsız derecede büyük
+    // (%1000+) yüzdeler üretebiliyordu.
+    const oneYearAgo = activeData[activeData.length - 1].time - 365 * 24 * 60 * 60;
+    const lastYearData = activeData.filter(c => c.time >= oneYearAgo);
+    const changeBase = lastYearData.length > 0 ? lastYearData : activeData;
+    const firstPrice = changeBase[0].open;
+    const lastPrice = changeBase[changeBase.length - 1].close;
     const changePercent = ((lastPrice - firstPrice) / firstPrice) * 100;
     const totalVolume = volumes.reduce((sum, v) => sum + v, 0);
     

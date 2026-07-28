@@ -163,6 +163,7 @@ export default function BatchScannerTab({
 
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Sonuçlar ve Geçmiş
   const [results, setResults] = useState<BatchEvaluateResultItem[]>([]);
@@ -252,35 +253,89 @@ export default function BatchScannerTab({
     };
   }, [strategy.id]);
 
-  // Taramayı Çalıştır
+  // Tek istekte kaç sembol taranacağı: Vercel proxy'sinin uzun süren backend
+  // isteklerinde verdiği ROUTER_EXTERNAL_TARGET_ERROR'ı önlemek için küçük
+  // parçalar halinde tarama yapılır (bkz. sohbet geçmişi / hata analizi).
+  const SCAN_CHUNK_SIZE = 4;
+
+  // Taramayı Çalıştır — sembolleri küçük parçalara bölerek arka arkaya tarar,
+  // her parça sonucunu anında tabloya yansıtır ve en sonda tek bir tarama
+  // kaydı olarak sunucuya kaydeder.
   const handleRunScan = async () => {
     const group = PRESET_GROUPS.find((g) => g.id === selectedGroup);
     if (!group) return;
 
     setIsScanning(true);
     setScanError(null);
+    setResults([]);
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < group.symbols.length; i += SCAN_CHUNK_SIZE) {
+      chunks.push(group.symbols.slice(i, i + SCAN_CHUNK_SIZE));
+    }
+    setScanProgress({ done: 0, total: group.symbols.length });
+
+    const mergedResults: BatchEvaluateResultItem[] = [];
+    let lastError: string | null = null;
+
+    for (const chunk of chunks) {
+      try {
+        const response = await strategyApi.batchEvaluateStrategy(strategy.id, {
+          symbols: chunk,
+          provider: group.provider,
+          timeframe: timeframe,
+          limit_bars: limitBars,
+          allow_short: strategy.allow_short,
+          save_scan: false,
+        });
+        mergedResults.push(...response.results);
+      } catch (err: any) {
+        lastError = err.message || 'Tarama sırasında bir hata oluştu';
+        // Hata alan parçadaki sembolleri hata bilgisiyle listeye ekle, taramaya devam et
+        for (const symbol of chunk) {
+          mergedResults.push({
+            symbol,
+            total_bars: 0,
+            buy_count: 0,
+            sell_count: 0,
+            total_trades: 0,
+            winning_trades: 0,
+            losing_trades: 0,
+            win_rate: 0,
+            total_pnl_percent: 0,
+            error: lastError,
+          });
+        }
+      }
+
+      setResults([...mergedResults]);
+      setScanProgress({ done: mergedResults.length, total: group.symbols.length });
+    }
+
+    const nowIso = new Date().toISOString();
+    setLatestScanTime(nowIso);
 
     try {
-      const response = await strategyApi.batchEvaluateStrategy(strategy.id, {
-        symbols: group.symbols,
+      await strategyApi.saveScanResult(strategy.id, {
         provider: group.provider,
         timeframe: timeframe,
-        limit_bars: limitBars,
-        allow_short: strategy.allow_short,
+        results: mergedResults,
       });
-
-      setResults(response.results);
-      setLatestScanTime(response.timestamp);
-      // Geçmiş listesini tazele
       const historyData = await strategyApi.getScanHistory(strategy.id);
       if (historyData.scans) {
         setHistoryList(historyData.scans);
       }
     } catch (err: any) {
-      setScanError(err.message || 'Tarama sırasında bir hata oluştu');
-    } finally {
-      setIsScanning(false);
+      // Kayıt başarısız olsa da tarama sonuçları ekranda kalmaya devam eder
+      lastError = err.message || lastError;
     }
+
+    if (lastError) {
+      setScanError(`Bazı semboller taranırken hata oluştu (son hata: ${lastError})`);
+    }
+
+    setScanProgress(null);
+    setIsScanning(false);
   };
 
   // Filtrelenmiş ve Sıralanmış Sonuçlar
@@ -458,7 +513,7 @@ export default function BatchScannerTab({
                 {isScanning ? (
                   <>
                     <RotateCw className="w-4 h-4 animate-spin text-white" />
-                    Tarayan...
+                    {scanProgress ? `Taranıyor (${scanProgress.done}/${scanProgress.total})` : 'Tarayan...'}
                   </>
                 ) : (
                   <>

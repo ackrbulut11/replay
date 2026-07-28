@@ -256,6 +256,7 @@ export interface BatchEvaluateRequest {
   limit_bars?: number;
   allow_short?: boolean;
   param_overrides?: Record<string, number>;
+  save_scan?: boolean;
 }
 
 export interface BatchEvaluateResultItem {

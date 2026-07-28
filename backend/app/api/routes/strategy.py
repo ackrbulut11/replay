@@ -435,15 +435,19 @@ def batch_evaluate_strategy(
     ]
 
     # Otomatik olarak tarama geçmişine de kaydet (kullanıcıya bağlı)
-    _scanner.save_scan(
-        db=db,
-        strategy_id=strategy["id"],
-        strategy_name=strategy.get("name", "Strateji"),
-        provider=request.provider,
-        timeframe=request.timeframe,
-        results=results_items,
-        user_id=current_user.id,
-    )
+    # Not: Büyük taramalar frontend'de parçalar halinde gönderilebilir; bu durumda
+    # her parça için ayrı kayıt oluşmaması adına save_scan=False geçilir ve
+    # birleşik sonuç /scans endpoint'i ile tek seferde kaydedilir.
+    if request.save_scan:
+        _scanner.save_scan(
+            db=db,
+            strategy_id=strategy["id"],
+            strategy_name=strategy.get("name", "Strateji"),
+            provider=request.provider,
+            timeframe=request.timeframe,
+            results=results_items,
+            user_id=current_user.id,
+        )
 
     return BatchEvaluateResponse(
         strategy_id=strategy["id"],

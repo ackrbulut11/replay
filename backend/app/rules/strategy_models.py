@@ -289,6 +289,7 @@ class BatchEvaluateRequest(BaseModel):
     limit_bars: Optional[int] = Field(1000, description="Maksimum mum sayısı")
     allow_short: Optional[bool] = Field(None, description="Short pozisyon izni")
     param_overrides: Dict[str, Union[int, float]] = Field(default_factory=dict)
+    save_scan: bool = Field(True, description="Sonucu tarama geçmişine otomatik kaydet")
 
 
 class BatchEvaluateResultItem(BaseModel):

@@ -172,6 +172,7 @@ export default function BatchScannerTab({
   const [results, setResults] = useState<BatchEvaluateResultItem[]>([]);
   const [latestScanTime, setLatestScanTime] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ScanHistoryItem[]>([]);
+  const [selectedScanId, setSelectedScanId] = useState<string>('');
 
   // Filtreleme & Arama
   const [searchQuery, setSearchQuery] = useState('');
@@ -242,6 +243,7 @@ export default function BatchScannerTab({
           setLatestScanTime(data.latest.created_at);
           setProvider(data.latest.provider || 'binance');
           setTimeframe(data.latest.timeframe || '1d');
+          setSelectedScanId(data.latest.scan_id);
 
           // Sayfa, tarama hâlâ arka planda devam ederken yenilenmiş olabilir; kaldığı yerden takibe devam et
           if (data.latest.status === 'running') {
@@ -341,6 +343,7 @@ export default function BatchScannerTab({
         allow_short: strategy.allow_short,
       });
       activeScanIdRef.current = scan.scan_id;
+      setSelectedScanId(scan.scan_id);
       pollScanStatus(scan.scan_id);
     } catch (err: any) {
       setScanError(err.message || 'Tarama başlatılırken bir hata oluştu');
@@ -432,22 +435,37 @@ export default function BatchScannerTab({
                   <History className="w-3.5 h-3.5 text-amber-400" />
                   <span>Geçmiş Tarama Seç:</span>
                   <select
+                    value={selectedScanId}
                     onChange={(e) => {
                       const scan = historyList.find((s) => s.scan_id === e.target.value);
                       if (scan) {
+                        setSelectedScanId(scan.scan_id);
                         setResults(scan.results);
                         setLatestScanTime(scan.created_at);
                         setProvider(scan.provider);
                         setTimeframe(scan.timeframe);
+                        setScanError(null);
+                        // "Sembol Grubu" seçicisi de geçmiş taramanın piyasasını yansıtsın;
+                        // aksi halde seçici eski değerde kalıp hiçbir şey değişmemiş izlenimi verir.
+                        const matchingGroup = PRESET_GROUPS.find((g) => g.provider === scan.provider);
+                        if (matchingGroup) {
+                          setSelectedGroup(matchingGroup.id);
+                        }
                       }
                     }}
                     className="bg-slate-950 border border-slate-700/80 text-slate-200 text-xs rounded-lg px-2 py-0.5 outline-none font-mono"
                   >
-                    {historyList.map((scan) => (
-                      <option key={scan.scan_id} value={scan.scan_id}>
-                        {new Date(scan.created_at).toLocaleString('tr-TR')} ({scan.provider} - {scan.timeframe})
-                      </option>
-                    ))}
+                    <option value="" disabled>
+                      Bir tarama seçin...
+                    </option>
+                    {historyList
+                      .filter((scan) => scan.status !== 'running')
+                      .map((scan) => (
+                        <option key={scan.scan_id} value={scan.scan_id}>
+                          {new Date(scan.created_at).toLocaleString('tr-TR')} ({scan.provider} - {scan.timeframe})
+                          {scan.status === 'error' ? ' — hata' : ''}
+                        </option>
+                      ))}
                   </select>
                 </div>
               )}

@@ -33,6 +33,32 @@ from app.rules.strategy_models import (
 
 MAX_LIMIT_BARS = 10000  # Strateji testinde (tekli/toplu) izin verilen azami mum sayısı
 
+# Zaman dilimi başına yaklaşık dakika (mum sayısından gereken takvim aralığını hesaplamak için).
+_TF_MINUTES = {
+    "1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240,
+    "1d": 1440, "1w": 1440 * 7, "1mo": 1440 * 30,
+}
+
+
+def _lookback_start_for_bars(end_dt: datetime, timeframe: str, limit_bars: int) -> datetime:
+    """`limit_bars` kadar mumu güvenle kapsayacak başlangıç tarihini hesaplar.
+
+    Sabit bir tabloya (ör. "1h için her zaman 3 yıl") göre değil, istenen mum
+    sayısına göre ölçeklenir. Aksi halde `limit_bars=200` gibi küçük bir istek
+    bile yıllarca veri çekip Binance klines gibi sayfa başına 1000 mum dönen
+    API'lerde onlarca sayfalı isteğe (ve dakikalarca süren taramalara) neden
+    olabiliyordu — bkz. "1h taraması dakikalarca bitmiyor" hatası.
+    Piyasa kapalı saatleri/hafta sonları için pay bırakılır: gün-içi zaman
+    dilimlerinde x3, günlük ve üzerinde x1.6, artı sabit bir tampon.
+    """
+    minutes_per_bar = _TF_MINUTES.get(timeframe, 1440)
+    raw_days = (minutes_per_bar * limit_bars) / 1440
+    if timeframe in ("1m", "5m", "15m", "1h", "4h"):
+        padded_days = raw_days * 3 + 5
+    else:
+        padded_days = raw_days * 1.6 + 10
+    return end_dt - timedelta(days=padded_days)
+
 
 class ImportEvaluationsRequest(BaseModel):
     """Tarayıcıda kalmış eski test geçmişinin tek seferlik aktarımı."""
@@ -231,28 +257,26 @@ def evaluate_strategy(
     else:
         end_dt = datetime.now()
 
+    limit_bars = request.limit_bars if request.limit_bars is not None else 1000
+    if limit_bars > MAX_LIMIT_BARS:
+        limit_bars = MAX_LIMIT_BARS
+
     if request.start:
         try:
             start_dt = datetime.strptime(request.start, "%Y-%m-%d")
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz başlangıç tarihi formatı (YYYY-MM-DD)")
-    else:
-        # Akıllı varsayılan
-        if request.limit_bars == 0:
-            if request.timeframe in ("1m", "5m", "15m"):
-                start_dt = end_dt - timedelta(days=90)
-            elif request.timeframe in ("1h", "4h"):
-                start_dt = end_dt - timedelta(days=365 * 3)
-            else:
-                start_dt = datetime(2010, 1, 1)
-        elif request.timeframe in ("1m", "5m", "15m"):
-            start_dt = end_dt - timedelta(days=182)  # ~6 ay
-        elif request.timeframe == "4h":
-            start_dt = end_dt - timedelta(days=3 * 365)
-        elif request.timeframe == "1h":
-            start_dt = end_dt - timedelta(days=3 * 365)
+    elif limit_bars == 0:
+        # "Tüm Veri (Sınırsız)" seçildiğinde geniş sabit pencere kullanılır;
+        # mum sayısına göre ölçekleme burada anlamsız olur.
+        if request.timeframe in ("1m", "5m", "15m"):
+            start_dt = end_dt - timedelta(days=90)
+        elif request.timeframe in ("1h", "4h"):
+            start_dt = end_dt - timedelta(days=365 * 3)
         else:
-            start_dt = end_dt - timedelta(days=10 * 365)
+            start_dt = datetime(2010, 1, 1)
+    else:
+        start_dt = _lookback_start_for_bars(end_dt, request.timeframe, limit_bars)
 
     # Ana zaman dilimi verisini yükle
     try:
@@ -309,13 +333,6 @@ def evaluate_strategy(
                                 multi_tf_data[tf] = tf_df
                         except Exception:
                             pass
-
-    # Limit bars logic
-    limit_bars = 1000
-    if request.limit_bars is not None:
-        limit_bars = request.limit_bars
-    if limit_bars > MAX_LIMIT_BARS:
-        limit_bars = MAX_LIMIT_BARS
 
     if limit_bars > 0 and len(df) > limit_bars:
         df = df.tail(limit_bars).reset_index(drop=True)
@@ -454,24 +471,26 @@ def batch_evaluate_strategy(
     else:
         end_dt = datetime.now()
 
+    limit_bars = request.limit_bars if request.limit_bars is not None else 1000
+    if limit_bars > MAX_LIMIT_BARS:
+        limit_bars = MAX_LIMIT_BARS
+
     if request.start:
         try:
             start_dt = datetime.strptime(request.start, "%Y-%m-%d")
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz başlangıç tarihi formatı (YYYY-MM-DD)")
-    else:
+    elif limit_bars <= 0:
+        # Toplu taramada "sınırsız" seçeneği yok, ama savunma amaçlı sabit
+        # pencereye düş (mum sayısına göre ölçekleme burada anlamsız olur).
         if request.timeframe in ("1m", "5m", "15m"):
             start_dt = end_dt - timedelta(days=182)  # ~6 ay
-        elif request.timeframe == "4h":
-            start_dt = end_dt - timedelta(days=3 * 365)
-        elif request.timeframe == "1h":
+        elif request.timeframe in ("1h", "4h"):
             start_dt = end_dt - timedelta(days=3 * 365)
         else:
             start_dt = end_dt - timedelta(days=10 * 365)
-
-    limit_bars = request.limit_bars if request.limit_bars is not None else 1000
-    if limit_bars > MAX_LIMIT_BARS:
-        limit_bars = MAX_LIMIT_BARS
+    else:
+        start_dt = _lookback_start_for_bars(end_dt, request.timeframe, limit_bars)
 
     scan = _scanner.create_running_scan(
         db=db,

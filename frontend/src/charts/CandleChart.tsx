@@ -9,6 +9,7 @@ import {
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY,
 } from './drawings/types';
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
+import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
 import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap } from 'lucide-react';
@@ -1086,6 +1087,10 @@ export default function CandleChart({
         if (tool === 'ruler') {
           // Cetveli drawingsRef'e ekle (sonraki tıklamada silinecek)
           primitive.setPreview(null);
+        } else {
+          // Cetvel geçici bir ölçüm aracı olduğu için istatistiklere dahil edilmez.
+          const [drawingProvider, drawingSymbol] = currentDrawingKeyRef.current.split(':');
+          logDrawingUsage(tool, drawingSymbol, drawingProvider.toLowerCase());
         }
         drawingsRef.current = [...drawingsRef.current, drawing];
         primitive.setDrawings(drawingsRef.current);

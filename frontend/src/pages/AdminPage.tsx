@@ -10,6 +10,7 @@ import React from 'react';
 import {
   Users, SlidersHorizontal, Bell, Star, RefreshCw, ShieldAlert,
   ChevronDown, TrendingUp, TrendingDown, Power, PowerOff, AlertTriangle,
+  PenTool, BarChart2,
 } from 'lucide-react';
 import {
   getAdminStats, getAdminUsers, getAdminUserDetail,
@@ -51,6 +52,55 @@ const StatCard: React.FC<{ label: string; value: number; icon: any }> = ({ label
     </div>
   </div>
 );
+
+const DRAWING_TOOL_LABELS: Record<string, string> = {
+  trendLine: 'Trend Çizgisi',
+  horizontalRay: 'Yatay Işın',
+  rectangle: 'Dikdörtgen',
+  parallelChannel: 'Paralel Kanal',
+  longPosition: 'Long Pozisyon',
+  shortPosition: 'Short Pozisyon',
+};
+
+/** Genel istatistik kartlarında kullanılan yatay sıralı liste (en çok kullanılan en üstte). */
+const RankedList: React.FC<{
+  icon: any;
+  title: string;
+  items: { label: string; count: number }[];
+  labelFormatter?: (label: string) => string;
+  barColorClass?: string;
+  emptyText: string;
+}> = ({ icon: Icon, title, items, labelFormatter, barColorClass = 'bg-indigo-500/60', emptyText }) => {
+  const max = items.length > 0 ? Math.max(...items.map((i) => i.count)) : 0;
+  return (
+    <div className="bg-[#0d1321]/80 border border-slate-800/80 rounded-xl p-4">
+      <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5 mb-3">
+        <Icon className="w-3.5 h-3.5 text-indigo-400" />
+        {title}
+      </h3>
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-600">{emptyText}</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div key={item.label} className="flex items-center gap-2">
+              <span className="text-[11px] font-mono text-slate-300 w-28 shrink-0 truncate">
+                {labelFormatter ? labelFormatter(item.label) : item.label}
+              </span>
+              <div className="flex-1 h-2 rounded-full bg-slate-800/80 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${barColorClass}`}
+                  style={{ width: max > 0 ? `${Math.max((item.count / max) * 100, 4)}%` : '0%' }}
+                />
+              </div>
+              <span className="text-[11px] font-mono text-slate-400 w-8 text-right shrink-0">{item.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function AdminPage() {
   const [stats, setStats] = React.useState<AdminStats | null>(null);
@@ -138,6 +188,33 @@ export default function AdminPage() {
           <StatCard label="Toplam Strateji" value={stats.total_strategies} icon={SlidersHorizontal} />
           <StatCard label="Toplam Alarm" value={stats.total_alerts} icon={Bell} />
           <StatCard label="İzlenen Parite" value={stats.total_watchlist_symbols} icon={Star} />
+        </div>
+      )}
+
+      {stats && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <RankedList
+            icon={PenTool}
+            title="Çizim Aracı Kullanımı"
+            items={stats.drawing_usage_by_tool.map((i) => ({ label: i.label, count: i.count }))}
+            labelFormatter={(l) => DRAWING_TOOL_LABELS[l] || l}
+            barColorClass="bg-emerald-500/60"
+            emptyText="Henüz çizim yapılmamış."
+          />
+          <RankedList
+            icon={BarChart2}
+            title="Paritede Çizim Sayısı"
+            items={stats.drawing_usage_by_symbol.map((i) => ({ label: i.label, count: i.count }))}
+            barColorClass="bg-indigo-500/60"
+            emptyText="Henüz çizim yapılmamış."
+          />
+          <RankedList
+            icon={Star}
+            title="En Çok Favorilenen Pariteler"
+            items={stats.top_favorite_symbols.map((i) => ({ label: i.label, count: i.count }))}
+            barColorClass="bg-amber-500/60"
+            emptyText="Henüz favori eklenmemiş."
+          />
         </div>
       )}
 

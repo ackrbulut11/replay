@@ -46,6 +46,9 @@ class User(Base):
     replay_sessions = relationship("ReplaySession", back_populates="user", cascade="all, delete-orphan")
     journal_trades = relationship("JournalTrade", back_populates="user", cascade="all, delete-orphan")
     chart_layouts = relationship("ChartLayout", back_populates="user", cascade="all, delete-orphan")
+    drawing_usage_events = relationship(
+        "DrawingUsageEvent", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Strategy(Base):
@@ -240,6 +243,28 @@ class JournalTrade(Base):
 
     user = relationship("User", back_populates="journal_trades")
     session = relationship("ReplaySession", back_populates="trades")
+
+
+class DrawingUsageEvent(Base):
+    """
+    Bir çizim aracının kullanıldığı her an için tek satırlık kayıt.
+
+    Çizimlerin kendisi kalıcı tutulmuyor (grafik bileşeni yalnızca sekme
+    açıkken bellekte tutar, bkz. CandleChart.tsx); bu tablo yalnızca admin
+    panelindeki genel istatistikler ("hangi araç ne kadar kullanıldı",
+    "hangi paritede kaç çizim yapıldı") için kullanım sayacı tutar.
+    """
+
+    __tablename__ = "drawing_usage_events"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    symbol = Column(String(50), nullable=False, index=True)
+    provider = Column(String(50), nullable=False)
+    tool = Column(String(30), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="drawing_usage_events")
 
 
 class ChartLayout(Base):

@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_admin
-from app.database.models import Alert, Strategy, User, Watchlist
+from app.database.models import Alert, DrawingUsageEvent, Strategy, User, Watchlist
 from app.database.postgres import get_db
 
 # Tüm admin uçları ADMIN_EMAILS beyaz listesiyle korunur (router seviyesinde).
@@ -34,12 +34,23 @@ class AdminUserItem(BaseModel):
         from_attributes = True
 
 
+class CountItem(BaseModel):
+    label: str
+    count: int
+
+
 class AdminStatsResponse(BaseModel):
     total_users: int
     total_strategies: int
     total_alerts: int
     total_watchlist_symbols: int
     latest_users: List[AdminUserItem]
+    # Genel (kullanıcı bazlı değil, platform geneli) istatistikler:
+    # hangi çizim aracı ne kadar kullanılmış, en çok çizim yapılan pariteler,
+    # en çok favorilere eklenen pariteler (hepsi azalan sırada).
+    drawing_usage_by_tool: List[CountItem] = []
+    drawing_usage_by_symbol: List[CountItem] = []
+    top_favorite_symbols: List[CountItem] = []
 
 
 def _alert_summary(db: Session, user_ids: List[str]) -> dict[str, tuple[int, List[str]]]:
@@ -98,6 +109,56 @@ def _count_watchlist_symbols(lists: Any) -> int:
             if isinstance(item, dict) and item.get("id"):
                 symbols.add(str(item["id"]))
     return len(symbols)
+
+
+def _drawing_usage_by_tool(db: Session, limit: int = 20) -> List[CountItem]:
+    """Platform genelinde çizim aracı başına kullanım sayısı (azalan sırada)."""
+    rows = (
+        db.query(DrawingUsageEvent.tool, func.count(DrawingUsageEvent.id))
+        .group_by(DrawingUsageEvent.tool)
+        .order_by(func.count(DrawingUsageEvent.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [CountItem(label=tool, count=count) for tool, count in rows]
+
+
+def _drawing_usage_by_symbol(db: Session, limit: int = 20) -> List[CountItem]:
+    """Platform genelinde parite başına çizim sayısı (azalan sırada, ilk N)."""
+    rows = (
+        db.query(DrawingUsageEvent.symbol, func.count(DrawingUsageEvent.id))
+        .group_by(DrawingUsageEvent.symbol)
+        .order_by(func.count(DrawingUsageEvent.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [CountItem(label=symbol, count=count) for symbol, count in rows]
+
+
+def _top_favorite_symbols(db: Session, limit: int = 20) -> List[CountItem]:
+    """
+    "Favoriler" listesine en çok eklenen pariteler (tüm kullanıcılar genelinde).
+
+    Yalnızca 'favoriler' grubu sayılır; BIST/NASDAQ/Kripto/Forex gibi türetilmiş
+    listeler zaten Favoriler'in bir alt kümesidir ve saklanmaz (bkz. CLAUDE.md).
+    """
+    rows = db.query(Watchlist.lists).all()
+    counts: dict[str, int] = {}
+    for (lists,) in rows:
+        if not isinstance(lists, list):
+            continue
+        for group in lists:
+            if not isinstance(group, dict) or group.get("id") != "favoriler":
+                continue
+            for item in group.get("items", []) or []:
+                if not isinstance(item, dict):
+                    continue
+                symbol = item.get("symbol") or item.get("id")
+                if symbol:
+                    counts[str(symbol)] = counts.get(str(symbol), 0) + 1
+
+    top = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:limit]
+    return [CountItem(label=symbol, count=count) for symbol, count in top]
 
 
 def _watchlist_counts(db: Session, user_ids: List[str]) -> dict[str, int]:
@@ -360,4 +421,7 @@ def get_admin_stats(db: Session = Depends(get_db)):
         total_alerts=db.query(Alert).count(),
         total_watchlist_symbols=len(all_symbols),
         latest_users=_build_items(db, users),
+        drawing_usage_by_tool=_drawing_usage_by_tool(db),
+        drawing_usage_by_symbol=_drawing_usage_by_symbol(db),
+        top_favorite_symbols=_top_favorite_symbols(db),
     )

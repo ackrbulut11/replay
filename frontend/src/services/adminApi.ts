@@ -24,12 +24,23 @@ export interface AdminUserItem {
   watchlist_count: number;
 }
 
+export interface CountItem {
+  label: string;
+  count: number;
+}
+
 export interface AdminStats {
   total_users: number;
   total_strategies: number;
   total_alerts: number;
   total_watchlist_symbols: number;
   latest_users: AdminUserItem[];
+  /** Çizim aracı başına toplam kullanım sayısı (azalan sırada) */
+  drawing_usage_by_tool: CountItem[];
+  /** Parite başına toplam çizim sayısı (azalan sırada) */
+  drawing_usage_by_symbol: CountItem[];
+  /** En çok Favoriler'e eklenen pariteler (azalan sırada) */
+  top_favorite_symbols: CountItem[];
 }
 
 export interface AdminAlertItem {

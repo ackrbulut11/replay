@@ -166,6 +166,11 @@ export default function CandleChart({
   const activeToolRef = useRef<DrawingTool>('pointer');
   const snapEnabledRef = useRef(false);
   const drawingsRef = useRef<Drawing[]>([]);
+  // Çizimler parite bazında saklanır (RULES.md: her sembolün kendi göstergesi);
+  // grafik bileşeni sembol değişse de yeniden mount olmadığı için drawingsRef
+  // burada tutulmazsa bir önceki paritenin çizimleri yeni paritede kalır.
+  const drawingsBySymbolRef = useRef<Map<string, Drawing[]>>(new Map());
+  const currentDrawingKeyRef = useRef<string>(`${provider}:${symbol}`.toUpperCase());
   const currentPointsRef = useRef<DrawingPoint[]>([]);
   const selectedDrawingRef = useRef<Drawing | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -1312,6 +1317,30 @@ export default function CandleChart({
       primitiveRef.current = null;
     };
   }, []);
+
+  // Sembol veya sağlayıcı değiştiğinde: aktif paritenin çizimlerini haritada
+  // sakla, devam eden çizimi/seçimi iptal et, yeni paritenin (varsa) kayıtlı
+  // çizimlerini yükle. Grafik bileşeni sembol değişince yeniden mount olmadığı
+  // için bu adım olmadan çizimler tüm paritelerde ortak görünürdü.
+  useEffect(() => {
+    const newKey = `${provider}:${symbol}`.toUpperCase();
+    const prevKey = currentDrawingKeyRef.current;
+    if (newKey === prevKey) return;
+
+    drawingsBySymbolRef.current.set(prevKey, drawingsRef.current);
+
+    currentPointsRef.current = [];
+    selectedDrawingRef.current = null;
+    setSelectedDrawing(null);
+    primitiveRef.current?.setPreview(null);
+    primitiveRef.current?.setSelectedId(null);
+
+    const nextDrawings = drawingsBySymbolRef.current.get(newKey) || [];
+    drawingsRef.current = nextDrawings;
+    primitiveRef.current?.setDrawings(nextDrawings);
+
+    currentDrawingKeyRef.current = newKey;
+  }, [symbol, provider]);
 
   useEffect(() => {
     if (!chartRef.current) return;

@@ -410,32 +410,58 @@ def _run_batch_scan_job(
     session'ı kullanılamaz (kapatılmış olur); kendi session'ını açar. Her
     sembol bittikçe sonucu veritabanına yazar, böylece frontend `/status`
     endpoint'inden ilerlemeyi kademeli olarak okuyabilir.
+
+    `requests`'e verilen `timeout` DNS çözümlemesini kapsamaz: sağlayıcı
+    (özellikle Yahoo Finance/BIST-Nasdaq) DNS veya bağlantı seviyesinde
+    donarsa, ilgili thread süresiz asılı kalabilir ve `as_completed` de onu
+    süresiz bekler — tarama sonsuza dek "running" görünür (scanned_count
+    hiç ilerlemez). Bu yüzden burada `concurrent.futures.wait` ile bir tur
+    içinde HİÇBİR görev bitmezse elde kalanları zaman aşımı hatası olarak
+    işaretleyip taramayı yine de sonlandırıyoruz.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+    ROUND_TIMEOUT_SECONDS = 30
 
     db = SessionLocal()
+    executor = ThreadPoolExecutor(max_workers=10)
     try:
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {
-                executor.submit(
-                    _engine.evaluate_symbol,
-                    strategy=strategy,
-                    symbol=sym,
-                    provider=provider,
-                    timeframe=timeframe,
-                    loader=_loader,
-                    start_dt=start_dt,
-                    end_dt=end_dt,
-                    limit_bars=limit_bars,
-                    param_overrides=param_overrides,
-                    allow_short=allow_short,
-                ): sym
-                for sym in symbols
-            }
-            for future in as_completed(futures):
-                sym = futures[future]
+        futures = {
+            executor.submit(
+                _engine.evaluate_symbol,
+                strategy=strategy,
+                symbol=sym,
+                provider=provider,
+                timeframe=timeframe,
+                loader=_loader,
+                start_dt=start_dt,
+                end_dt=end_dt,
+                limit_bars=limit_bars,
+                param_overrides=param_overrides,
+                allow_short=allow_short,
+            ): sym
+            for sym in symbols
+        }
+        pending = set(futures)
+        while pending:
+            done, pending = wait(pending, timeout=ROUND_TIMEOUT_SECONDS, return_when=FIRST_COMPLETED)
+            if not done:
+                # Bu turda hiçbir sembol bitmedi (muhtemelen ağ/DNS donması):
+                # kalanları hata olarak işaretleyip taramayı bitir, sonsuza
+                # kadar "running" kalmasını engelle.
+                for fut in pending:
+                    sym = futures[fut]
+                    _scanner.append_scan_result(
+                        db,
+                        scan_id=scan_id,
+                        result={"symbol": sym, "error": "Zaman aşımı: veri sağlayıcıdan yanıt alınamadı"},
+                    )
+                pending = set()
+                break
+            for fut in done:
+                sym = futures[fut]
                 try:
-                    result = future.result()
+                    result = fut.result()
                 except Exception as e:
                     result = {"symbol": sym, "error": str(e)}
                 _scanner.append_scan_result(db, scan_id=scan_id, result=result)
@@ -445,6 +471,9 @@ def _run_batch_scan_job(
         _scanner.fail_scan(db, scan_id=scan_id, error=str(e))
     finally:
         db.close()
+        # Hâlâ asılı duran (donmuş) thread'leri beklemeden çık; response zaten
+        # gönderildi ve tarama kaydı yukarıda sonuçlandırıldı.
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 @router.post("/{strategy_id}/batch-evaluate")

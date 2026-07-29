@@ -277,14 +277,34 @@ class IndicatorRegistry:
         return info["calc"](df, period)
 
     @staticmethod
-    def get_value(name: str, df: pd.DataFrame, period: int, bar_index: int, field: str | None = None) -> float:
+    def get_value(
+        name: str,
+        df: pd.DataFrame,
+        period: int,
+        bar_index: int,
+        field: str | None = None,
+        cache: dict | None = None,
+    ) -> float:
         """
         Belirli bir bar indeksindeki indikatör değerini döndürür.
+
+        `cache` verilirse (aynı df üzerinde bar-bar döngü yapan
+        `RuleEngine.evaluate_range` gibi çağrılarda), aynı (df, name, period)
+        kombinasyonu için indikatör serisi yalnızca bir kez hesaplanır ve
+        tekrar kullanılır — aksi halde her bar için tüm seri baştan
+        hesaplanır (O(n) yerine O(n^2)).
         """
         if bar_index < 0 or bar_index >= len(df) or bar_index < period:
             return float("nan")
 
-        result = IndicatorRegistry.calculate(name, df, period)
+        if cache is not None:
+            cache_key = (id(df), name, period)
+            result = cache.get(cache_key)
+            if result is None:
+                result = IndicatorRegistry.calculate(name, df, period)
+                cache[cache_key] = result
+        else:
+            result = IndicatorRegistry.calculate(name, df, period)
 
         if isinstance(result, dict):
             # Çoklu çıktılı indikatör

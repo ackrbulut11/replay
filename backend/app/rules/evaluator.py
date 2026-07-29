@@ -56,6 +56,7 @@ def resolve_operand(
     params: dict[str, Union[int, float]],
     multi_tf_data: dict[str, pd.DataFrame] | None = None,
     current_pnl: float = 0.0,
+    cache: dict | None = None,
 ) -> float:
     """
     Bir operandın değerini çözümler.
@@ -101,9 +102,9 @@ def resolve_operand(
             idx = _get_multi_tf_bar_index(df, bar_index, target_df)
             if idx < 0:
                 return float("nan")
-            return IndicatorRegistry.get_value(name, target_df, period, idx, field)
+            return IndicatorRegistry.get_value(name, target_df, period, idx, field, cache=cache)
 
-        return IndicatorRegistry.get_value(name, df, period, bar_index, field)
+        return IndicatorRegistry.get_value(name, df, period, bar_index, field, cache=cache)
 
     raise ValueError(f"Bilinmeyen operand tipi: {op_type}")
 
@@ -123,6 +124,7 @@ class RuleEvaluator:
         params: dict[str, Union[int, float]],
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
         current_pnl: float = 0.0,
+        cache: dict | None = None,
     ) -> tuple[bool, str]:
         """
         Tek bir koşulu değerlendirir.
@@ -135,8 +137,8 @@ class RuleEvaluator:
         operator_name = condition.get("operator", ">")
 
         # Mevcut bar değerlerini çözümle
-        left_val = resolve_operand(left_def, df, bar_index, params, multi_tf_data, current_pnl)
-        right_val = resolve_operand(right_def, df, bar_index, params, multi_tf_data, current_pnl)
+        left_val = resolve_operand(left_def, df, bar_index, params, multi_tf_data, current_pnl, cache)
+        right_val = resolve_operand(right_def, df, bar_index, params, multi_tf_data, current_pnl, cache)
 
         # NaN kontrolü — veri yetersizse koşul sağlanmaz
         if math.isnan(left_val) or math.isnan(right_val):
@@ -149,8 +151,8 @@ class RuleEvaluator:
         kwargs: dict = {}
         if operator_name in ("cross_above", "cross_below"):
             if bar_index > 0:
-                prev_left = resolve_operand(left_def, df, bar_index - 1, params, multi_tf_data, current_pnl)
-                prev_right = resolve_operand(right_def, df, bar_index - 1, params, multi_tf_data, current_pnl)
+                prev_left = resolve_operand(left_def, df, bar_index - 1, params, multi_tf_data, current_pnl, cache)
+                prev_right = resolve_operand(right_def, df, bar_index - 1, params, multi_tf_data, current_pnl, cache)
                 if not math.isnan(prev_left) and not math.isnan(prev_right):
                     kwargs["prev_left"] = prev_left
                     kwargs["prev_right"] = prev_right
@@ -159,7 +161,7 @@ class RuleEvaluator:
         if operator_name == "between":
             right2_def = condition.get("right2")
             if right2_def:
-                right2_val = resolve_operand(right2_def, df, bar_index, params, multi_tf_data, current_pnl)
+                right2_val = resolve_operand(right2_def, df, bar_index, params, multi_tf_data, current_pnl, cache)
                 if not math.isnan(right2_val):
                     kwargs["right2"] = right2_val
 
@@ -183,6 +185,7 @@ class RuleEvaluator:
         params: dict[str, Union[int, float]],
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
         current_pnl: float = 0.0,
+        cache: dict | None = None,
     ) -> tuple[bool, list[str]]:
         """
         Bir koşul grubunu AND/OR mantığıyla değerlendirir.
@@ -201,7 +204,7 @@ class RuleEvaluator:
 
         for condition in conditions:
             result, desc = RuleEvaluator.evaluate_condition(
-                condition, df, bar_index, params, multi_tf_data, current_pnl
+                condition, df, bar_index, params, multi_tf_data, current_pnl, cache
             )
             results.append(result)
             if result:

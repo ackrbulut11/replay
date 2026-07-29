@@ -65,7 +65,7 @@ def _alert_summary(db: Session, user_ids: List[str]) -> dict[str, tuple[int, Lis
 
     rows = (
         db.query(Alert.user_id, Alert.symbol, func.count(Alert.id))
-        .filter(Alert.user_id.in_(user_ids))
+        .filter(Alert.user_id.in_(user_ids), Alert.is_active.is_(True))
         .group_by(Alert.user_id, Alert.symbol)
         .all()
     )

@@ -354,6 +354,10 @@ export default function CandleChart({
   fullDataRef.current = data;
 
   const prevVisibleLengthRef = useRef<number>(0);
+  // Arkaplanda geçmişe dönük veri ekstansiyonunu (prepend) sembol/interval
+  // değişiminden ve replay adımlarından ayırt edebilmek için önceki verinin
+  // ilk/son zaman damgalarını tutar.
+  const prevDataBoundsRef = useRef<{ firstTime: number; lastTime: number } | null>(null);
 
   const visibleData = useMemo(() => {
     if (!replayState.isReplayActive || replayState.currentIndex === null) {
@@ -1344,7 +1348,21 @@ export default function CandleChart({
       const currentRange = chart ? chart.timeScale().getVisibleLogicalRange() : null;
       const prevLen = prevVisibleLengthRef.current;
       const currentLen = uniqueData.length;
+      const prevBounds = prevDataBoundsRef.current;
+      const newFirstTime = uniqueData[0].time as number;
+      const newLastTime = uniqueData[uniqueData.length - 1].time as number;
+      // Arkaplanda geçmişe dönük veri eklendiğinde (prepend) son mum aynı kalır,
+      // sadece ilk mum daha eskiye gider — sembol/interval değişiminde veya replay
+      // adımında ise son mumun zamanı da değişir, bu yüzden bu iki durumla
+      // karışmaz.
+      const isBackgroundPrepend =
+        !!prevBounds &&
+        prevLen > 0 &&
+        newLastTime === prevBounds.lastTime &&
+        newFirstTime < prevBounds.firstTime;
+      const savedTimeRange = isBackgroundPrepend && chart ? chart.timeScale().getVisibleRange() : null;
       prevVisibleLengthRef.current = currentLen;
+      prevDataBoundsRef.current = { firstTime: newFirstTime, lastTime: newLastTime };
 
       const candles: any[] = uniqueData.map((d) => ({
         time: d.time as Time,
@@ -1377,7 +1395,14 @@ export default function CandleChart({
 
       
       if (chart) {
-        if (replayState.isReplayActive && currentRange && prevLen > 0 && currentLen === prevLen + 1) {
+        if (isBackgroundPrepend) {
+          // Arkaplanda daha eski veri eklendi: kullanıcının baktığı zaman aralığını
+          // aynen koru (index'ler kaydığı için logical range değil, zaman bazlı
+          // aralık kullanılır) — sıçrama/kayma yaşanmaz.
+          if (savedTimeRange) {
+            chart.timeScale().setVisibleRange(savedTimeRange);
+          }
+        } else if (replayState.isReplayActive && currentRange && prevLen > 0 && currentLen === prevLen + 1) {
           // Replay sırasında yeni mum eklendiğinde ve ekran sağ kenarda ise pürüzsüz 1 birim sağa kaydır
           if (currentRange.to >= prevLen - 3) {
             chart.timeScale().setVisibleLogicalRange({

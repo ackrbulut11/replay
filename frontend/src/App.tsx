@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
 import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
@@ -29,6 +29,21 @@ interface CandleData {
   volume: number;
 }
 
+// Grafik ilk açıldığında hemen gösterilecek "hızlı" pencere — kalan geçmiş veri
+// bu pencere yüklenip ekrana yazıldıktan sonra arkaplanda ayrıca çekilir.
+// Böylece kullanıcı yıllarca veri istese bile grafik önce hızlıca görünür/
+// işlem yapılabilir hale gelir.
+const QUICK_WINDOW_DAYS: Record<string, number> = {
+  '1m': 14,
+  '5m': 30,
+  '15m': 45,
+  '1h': 120,
+  '4h': 240,
+  '1d': 730,
+  '1w': 1825,
+  '1mo': 3650,
+};
+
 function App() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -48,6 +63,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
+  const bgControllerRef = useRef<AbortController | null>(null);
 
   const [replayState] = useReplayStore();
   const [alertState] = useAlertStore();
@@ -93,14 +110,93 @@ function App() {
     setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Arkaplanda gelen daha eski mumları mevcut chartData'nın başına ekler.
+  // Replay aktifse currentIndex/cutoffIndex, chartData içindeki index'lere
+  // referans verdiğinden, başa eklenen mum sayısı kadar kaydırılır — aksi
+  // halde replay konumu sessizce yanlış muma kayar.
+  const mergeOlderData = useCallback((olderData: CandleData[]) => {
+    setChartData((prev) => {
+      if (prev.length === 0 || olderData.length === 0) return prev;
+      const existingTimes = new Set(prev.map((c) => c.time));
+      const newBars = olderData.filter((c) => !existingTimes.has(c.time));
+      if (newBars.length === 0) return prev;
+
+      const merged = [...newBars, ...prev].sort((a, b) => a.time - b.time);
+      const addedCount = merged.length - prev.length;
+
+      const rs = replayStore.getState();
+      if (rs.currentIndex !== null || rs.cutoffIndex !== null) {
+        replayStore.setState((s) => ({
+          currentIndex: s.currentIndex !== null ? s.currentIndex + addedCount : s.currentIndex,
+          cutoffIndex: s.cutoffIndex !== null ? s.cutoffIndex + addedCount : s.cutoffIndex,
+        }));
+      }
+
+      return merged;
+    });
+  }, []);
+
+  const loadOlderDataInBackground = useCallback((params: {
+    provider: string;
+    symbol: string;
+    timeframe: string;
+    olderEnd: string;
+    userStart: string | null;
+  }) => {
+    const controller = new AbortController();
+    bgControllerRef.current = controller;
+    setIsBackgroundLoading(true);
+
+    const startParam = params.userStart ?? '';
+    fetch(
+      `/api/market/data?provider=${params.provider}&symbol=${params.symbol}&timeframe=${params.timeframe}&start=${startParam}&end=${params.olderEnd}`,
+      { signal: controller.signal }
+    )
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Geçmiş veri yüklenemedi.'))))
+      .then((olderData: CandleData[]) => {
+        if (controller.signal.aborted) return;
+        mergeOlderData(olderData);
+      })
+      .catch((err: any) => {
+        if (err?.name === 'AbortError') return;
+        console.error("Background historical fetch failed:", err);
+      })
+      .finally(() => {
+        if (bgControllerRef.current === controller) {
+          setIsBackgroundLoading(false);
+          bgControllerRef.current = null;
+        }
+      });
+  }, [mergeOlderData]);
+
   const handleLoadChart = useCallback(async (signal: AbortSignal) => {
     if (!isAuthenticated) return;
     console.log("Fetching market data for:", { provider, symbol, timeframe, start, end });
+
+    // Bir önceki arkaplan (geçmiş veri) isteği hâlâ sürüyorsa iptal et —
+    // artık geçerli olmayan sembol/interval için sonuç birleştirilmesin.
+    bgControllerRef.current?.abort();
+    bgControllerRef.current = null;
+    setIsBackgroundLoading(false);
+
     setLoading(true);
     setError(null);
+
+    const userStart = start && start.trim() ? start : null;
+    const endParam = end && end.trim() ? end : '';
+    const quickDays = QUICK_WINDOW_DAYS[timeframe] ?? 365;
+    const endDate = endParam ? new Date(endParam) : new Date();
+    const quickStartDate = new Date(endDate.getTime() - quickDays * 24 * 60 * 60 * 1000);
+    const quickStartStr = quickStartDate.toISOString().slice(0, 10);
+
+    // Kullanıcı zaten hızlı pencereden daha dar bir aralık istemişse
+    // (örn. son 1 ay), arkaplanda ekstra bir şey yüklemeye gerek yok.
+    const needsBackgroundExtend = !userStart || new Date(userStart) < quickStartDate;
+    const initialStart = needsBackgroundExtend ? quickStartStr : (userStart ?? '');
+
     try {
       const response = await fetch(
-        `/api/market/data?provider=${provider}&symbol=${symbol}&timeframe=${timeframe}&start=${start}&end=${end}`,
+        `/api/market/data?provider=${provider}&symbol=${symbol}&timeframe=${timeframe}&start=${initialStart}&end=${endParam}`,
         { signal }
       );
       if (!response.ok) {
@@ -114,6 +210,11 @@ function App() {
         setChartData([]);
       } else {
         setChartData(data);
+        // Grafik artık görünür/işlem yapılabilir durumda — kalan geçmiş veriyi
+        // arkaplanda çekmeye devam et (sıçrama olmadan başa eklenecek).
+        if (needsBackgroundExtend) {
+          loadOlderDataInBackground({ provider, symbol, timeframe, olderEnd: quickStartStr, userStart });
+        }
       }
     } catch (err: any) {
       // Daha yeni bir istek başladığı için iptal edildi — bu istek artık
@@ -126,7 +227,7 @@ function App() {
     } finally {
       if (!signal.aborted) setLoading(false);
     }
-  }, [provider, symbol, timeframe, start, end, isAuthenticated]);
+  }, [provider, symbol, timeframe, start, end, isAuthenticated, loadOlderDataInBackground]);
 
   // Girdiler değiştiğinde grafiği otomatik olarak yükle (sembol yazımı için debounce uygulandı).
   // AbortController: bir önceki (henüz tamamlanmamış) istek burada iptal edilir; aksi halde
@@ -145,6 +246,7 @@ function App() {
       console.log("App inputs changed again, clearing previous timeout.");
       clearTimeout(timer);
       controller.abort();
+      bgControllerRef.current?.abort();
     };
   }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated]);
 
@@ -365,6 +467,11 @@ function App() {
                   <span className="text-[10px] text-slate-500 font-medium font-mono select-none">
                     ({stats.count} mum verisi)
                   </span>
+                  {isBackgroundLoading && (
+                    <span className="text-[10px] text-indigo-400 font-medium select-none animate-pulse">
+                      geçmiş veri yükleniyor…
+                    </span>
+                  )}
                 </div>
                 
                 <div className="flex items-center gap-4">

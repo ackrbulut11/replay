@@ -177,7 +177,8 @@ export default function StrategyPage({
   const handleNavigateToChartWithSymbol = async (
     targetSymbol: string,
     targetProvider?: string,
-    targetTimeframe?: string
+    targetTimeframe?: string,
+    overrides?: { limitBars?: number; allowShort?: boolean; start?: string; end?: string }
   ) => {
     const prov = targetProvider || autoDetectProvider(targetSymbol);
     const tf = targetTimeframe || evalTimeframe;
@@ -192,8 +193,10 @@ export default function StrategyPage({
         symbol: targetSymbol,
         provider: prov,
         timeframe: tf,
-        limit_bars: 1000,
-        allow_short: Boolean(activeStrategy.allow_short),
+        start: overrides?.start || undefined,
+        end: overrides?.end || undefined,
+        limit_bars: overrides?.limitBars ?? 1000,
+        allow_short: overrides?.allowShort ?? Boolean(activeStrategy.allow_short),
       };
       await strategyStore.evaluateStrategy(activeStrategy.id, request);
 
@@ -242,7 +245,12 @@ export default function StrategyPage({
   };
 
   const handleNavigateToChart = () => {
-    handleNavigateToChartWithSymbol(evalSymbol, autoDetectProvider(evalSymbol), evalTimeframe);
+    handleNavigateToChartWithSymbol(evalSymbol, autoDetectProvider(evalSymbol), evalTimeframe, {
+      limitBars: evalLimitBars,
+      allowShort: evalAllowShort,
+      start: evalStart,
+      end: evalEnd,
+    });
   };
 
 

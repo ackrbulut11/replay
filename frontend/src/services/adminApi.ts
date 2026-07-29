@@ -105,3 +105,10 @@ export async function getAdminUsers(): Promise<AdminUserItem[]> {
 export async function getAdminUserDetail(userId: string): Promise<AdminUserDetail> {
   return apiRequest<AdminUserDetail>(`${API_BASE}/users/${userId}/detail`);
 }
+
+/** Bir kullanıcının stratejisini, admin panelinden bakan admin'in kendi hesabına kopyalar. */
+export async function cloneStrategyToMe(strategyId: string): Promise<AdminStrategyItem> {
+  return apiRequest<AdminStrategyItem>(`${API_BASE}/strategies/${strategyId}/clone-to-me`, {
+    method: 'POST',
+  });
+}

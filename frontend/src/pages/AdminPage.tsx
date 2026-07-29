@@ -6,14 +6,14 @@
  * ADMIN_EMAILS ile doğrulanır.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Users, SlidersHorizontal, Bell, Star, RefreshCw, ShieldAlert,
   ChevronDown, TrendingUp, TrendingDown, Power, PowerOff, AlertTriangle,
-  PenTool, BarChart2,
+  PenTool, BarChart2, Copy, Check,
 } from 'lucide-react';
 import {
-  getAdminStats, getAdminUsers, getAdminUserDetail,
+  getAdminStats, getAdminUsers, getAdminUserDetail, cloneStrategyToMe,
   type AdminStats, type AdminUserItem, type AdminUserDetail,
 } from '../services/adminApi';
 
@@ -332,6 +332,45 @@ const statusLabels: Record<string, string> = {
   DISABLED: 'Devre Dışı',
 };
 
+/** Bir stratejiyi tek tuşla, giriş yapmış admin'in kendi hesabına kopyalar (test etmek için). */
+function CloneStrategyButton({ strategyId }: { strategyId: string }) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+
+  const handleClone = async () => {
+    if (status === 'loading') return;
+    setStatus('loading');
+    try {
+      await cloneStrategyToMe(strategyId);
+      setStatus('done');
+      setTimeout(() => setStatus('idle'), 2500);
+    } catch {
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 2500);
+    }
+  };
+
+  if (status === 'done') {
+    return (
+      <span className="flex items-center gap-1 text-[10px] text-emerald-400 flex-shrink-0 whitespace-nowrap">
+        <Check className="w-3 h-3" /> Hesabına eklendi
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClone}
+      disabled={status === 'loading'}
+      title="Bu stratejiyi kendi hesabıma kopyala (test etmek için)"
+      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 disabled:opacity-50 flex-shrink-0 whitespace-nowrap cursor-pointer"
+    >
+      <Copy className="w-3 h-3" />
+      {status === 'loading' ? 'Kopyalanıyor...' : status === 'error' ? 'Hata, tekrar dene' : 'Hesabıma Kopyala'}
+    </button>
+  );
+}
+
 function UserDetailPanel({
   detail,
   loading,
@@ -375,7 +414,10 @@ function UserDetailPanel({
           <div className="space-y-2">
             {detail.strategies.map((s) => (
               <div key={s.id} className="bg-[#0d1321]/80 border border-slate-800/60 rounded-lg px-3 py-2">
-                <div className="text-xs font-semibold text-slate-200 truncate">{s.name}</div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-xs font-semibold text-slate-200 truncate">{s.name}</div>
+                  <CloneStrategyButton strategyId={s.id} />
+                </div>
                 {s.description && (
                   <div className="text-[11px] text-slate-500 truncate mt-0.5">{s.description}</div>
                 )}

@@ -11,9 +11,13 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_admin
 from app.database.models import Alert, DrawingUsageEvent, Strategy, User, Watchlist
 from app.database.postgres import get_db
+from app.engines.strategy_engine import StrategyEngine
+from app.rules.strategy_models import StrategyCreateRequest
 
 # Tüm admin uçları ADMIN_EMAILS beyaz listesiyle korunur (router seviyesinde).
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(get_current_admin)])
+
+_strategy_engine = StrategyEngine()
 
 
 class AdminUserItem(BaseModel):
@@ -467,6 +471,59 @@ def get_user_detail(user_id: str, db: Session = Depends(get_db)):
         alerts=alert_items,
         strategies=strategy_items,
         watchlist_items=watchlist_items,
+    )
+
+
+@router.post("/strategies/{strategy_id}/clone-to-me", response_model=AdminStrategyItem)
+def clone_strategy_to_me(
+    strategy_id: str,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+) -> AdminStrategyItem:
+    """
+    Herhangi bir kullanıcıya ait bir stratejiyi (kural ağacı birebir aynı
+    kalacak şekilde) admin panelinden bakan admin'in KENDİ hesabına kopyalar
+    — böylece admin bir kullanıcının stratejisini kendi hesabında test
+    edebilir. Sahiplik yalnızca `current_admin.id`'den alınır, admin başka
+    bir kullanıcının hesabına yazamaz; sadece kendi hesabına kopya oluşturur
+    (RULES.md'deki sahiplik modeliyle tutarlı).
+    """
+    source = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Strateji bulunamadı")
+
+    rules = source.rules or {}
+    request = StrategyCreateRequest(
+        name=f"{source.name} (Kopya)",
+        description=source.description or "",
+        parameters=rules.get("parameters", []),
+        entry_rules=rules.get("entry_rules", {"logic": "AND", "conditions": []}),
+        exit_rules=rules.get("exit_rules", {"logic": "AND", "conditions": []}),
+        timeframe_filters=rules.get("timeframe_filters", []),
+        allow_short=rules.get("allow_short", False),
+        take_profit_pct=rules.get("take_profit_pct"),
+        stop_loss_pct=rules.get("stop_loss_pct"),
+    )
+    created = _strategy_engine.create_strategy(db, request, user_id=current_admin.id)
+    new_row = db.query(Strategy).filter(Strategy.id == created["id"]).first()
+
+    entry_count, exit_count, allow_short, tp, sl, tf_filters, entry_texts, exit_texts = _strategy_rule_counts(
+        new_row.rules
+    )
+    return AdminStrategyItem(
+        id=new_row.id,
+        name=new_row.name,
+        description=new_row.description,
+        created_at=new_row.created_at,
+        updated_at=new_row.updated_at,
+        allow_short=allow_short,
+        take_profit_pct=tp,
+        stop_loss_pct=sl,
+        entry_rules_count=entry_count,
+        exit_rules_count=exit_count,
+        timeframe_filters=tf_filters,
+        entry_rules_text=entry_texts,
+        exit_rules_text=exit_texts,
     )
 
 

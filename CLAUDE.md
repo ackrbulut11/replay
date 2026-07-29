@@ -103,7 +103,7 @@ Google OAuth 2.0 → `POST /api/auth/google` → app-issued JWT (access + refres
 
 All `/api/admin/*` routes are gated at the router level by `get_current_admin`. `ADMIN_EMAILS` is read from `.env` and empty by default, meaning nobody is an admin until it is configured — see [.env.example](backend/.env.example).
 
-A dev bypass exists: any credential equal to `dev_mock_google_token` or starting with `dev_` logs in as `demo.trader@example.com`. It still goes through the real `/auth/google` endpoint and yields a real JWT — the frontend no longer fabricates an offline session, since a fake token cannot pass the enforced auth.
+A dev bypass exists but is off by default: it only fires when `.env`'s `DEV_LOGIN_TOKEN` is non-empty and the submitted credential matches it exactly (constant-time compare), logging in as `DEV_LOGIN_EMAIL` (default `demo.trader@example.com`). It still goes through the real `/auth/google` endpoint and yields a real JWT. There is no public UI entry point for it (the old "Demo Login" button was removed) and no unverified-JWT fallback — if `GOOGLE_CLIENT_ID` isn't configured or verification fails, the request is rejected rather than falling back to a trust-the-claims decode.
 
 Frontend session keys live in one place: `TOKEN_STORAGE_KEY` and `clearStoredSession()` in [AuthContext.tsx](frontend/src/context/AuthContext.tsx). On 401, `notifyUnauthorized()` clears storage and fires the `replay:unauthorized` event, which `AuthProvider` listens for to drop back to the login screen.
 

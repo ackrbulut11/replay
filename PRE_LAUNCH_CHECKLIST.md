@@ -10,11 +10,19 @@ Tamamlanan maddeleri `[x]` yaparak işaretleyin.
 
 ## 🔴 Kritik — launch'u bloklar
 
-- [ ] **Dev-login backdoor'u kapat.** [backend/app/auth/router.py:61](backend/app/auth/router.py#L61) —
-  `credential == "dev_mock_google_token"` veya `dev_` ile başlayan **her token**, hiçbir ortam
-  kontrolü olmadan gerçek bir JWT ile `demo.trader@example.com` olarak giriş yaptırıyor. Şu an
-  canlı backend'de de koşulsuz aktif. Production'da bunu ya tamamen kaldırın ya da
-  `settings.ENVIRONMENT == "development"` gibi bir bayrakla kilitleyin.
+- [x] **Dev-login backdoor'u kapat.** [backend/app/auth/router.py](backend/app/auth/router.py) —
+  eskiden `credential == "dev_mock_google_token"` veya `dev_` ile başlayan **her token**, hiçbir
+  ortam kontrolü olmadan gerçek bir JWT ile `demo.trader@example.com` olarak giriş yaptırıyordu.
+  Ayrıca Google doğrulaması başarısız olduğunda veya `GOOGLE_CLIENT_ID` boşken imzası doğrulanmamış
+  herhangi bir JWT'yi (istenen `email` claim'i ile) kabul eden bir yedek yol vardı — bu, kimliği
+  sahtelenmiş bir token ile herhangi bir kullanıcı olarak giriş yapılmasına izin veriyordu.
+  Artık: (1) imzasız/yedek JWT kabulü tamamen kaldırıldı, `GOOGLE_CLIENT_ID` boşsa veya doğrulama
+  başarısız olursa istek reddediliyor; (2) dev girişi yalnızca `.env`'deki `DEV_LOGIN_TOKEN` boş
+  olmadığında ve gönderilen credential ona **birebir** eşit olduğunda çalışıyor (bkz.
+  [backend/.env.example](backend/.env.example)), varsayılan olarak kapalı; (3) frontend'deki
+  herkese açık "Demo/Test Hesabı ile Giriş Yap" butonu tamamen kaldırıldı. Kendi test hesabınız
+  için `DEV_LOGIN_TOKEN`'ı yalnızca kendi ortamınızda (yerelde veya kendi Render env'inizde),
+  rastgele üretilmiş uzun bir gizli değerle doldurun ve kimseyle paylaşmayın.
 
 - [ ] **Kalıcı veritabanı doğrulanmalı.** Render'da `DATABASE_URL` gerçek bir Postgres'e
   ayarlanmazsa uygulama SQLite dosyasına düşer; Render'ın diski kalıcı olmadığından her

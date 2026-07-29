@@ -5,7 +5,7 @@ import { ShieldCheck, BarChart2, Zap, TrendingUp, Activity, CheckCircle2 } from 
 import logoImg from '../assets/logo.jpg';
 
 export const LoginPage: React.FC = () => {
-  const { loginWithGoogle, loginDemoUser } = useAuth();
+  const { loginWithGoogle } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [animKey, setAnimKey] = React.useState(0);
 
@@ -74,27 +74,6 @@ export const LoginPage: React.FC = () => {
                   locale="tr"
                 />
               </div>
-
-              <div className="flex items-center gap-3 my-2">
-                <div className="h-[1px] bg-slate-800 flex-1" />
-                <span className="text-[11px] text-slate-500 font-medium uppercase">veya</span>
-                <div className="h-[1px] bg-slate-800 flex-1" />
-              </div>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    setError(null);
-                    await loginDemoUser();
-                  } catch (err: any) {
-                    setError(err?.message || 'Demo girişi sırasında bir hata oluştu.');
-                  }
-                }}
-                className="w-full py-3 px-5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 active:scale-[0.99] rounded-full text-xs font-semibold text-white transition-all flex items-center justify-center gap-2.5 shadow-lg shadow-indigo-600/25 cursor-pointer"
-              >
-                <span>🚀 Demo / Test Hesabı İle Giriş Yap</span>
-              </button>
             </div>
           </div>
 

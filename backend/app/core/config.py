@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Geliştirici test girişi: boş bırakılırsa tamamen kapalıdır (güvenli varsayılan).
+    # Doldurulursa, `POST /auth/google` isteğinde `credential` alanı bu değere BİREBİR
+    # eşit olduğunda tek bir sabit hesapla (DEV_LOGIN_EMAIL) giriş yapılabilir.
+    # Google doğrulamasını atlayan tek yol budur; başka hiçbir token bu şekilde kabul edilmez.
+    DEV_LOGIN_TOKEN: str = ""
+    DEV_LOGIN_EMAIL: str = "demo.trader@example.com"
+
     # Admin yetkisi olan e-posta adresleri (.env: ADMIN_EMAILS=a@x.com,b@y.com)
     # Boş bırakılırsa admin uçlarına hiç kimse erişemez (güvenli varsayılan).
     # Not: pydantic-settings karmaşık tipleri .env'den JSON olarak çözmeye çalıştığı için

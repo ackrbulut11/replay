@@ -17,7 +17,6 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   loginWithGoogle: (credential: string) => Promise<void>;
-  loginDemoUser: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -138,39 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const loginDemoUser = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: 'dev_mock_google_token' })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('replay_access_token', data.access_token);
-        localStorage.setItem('replay_user', JSON.stringify(data.user));
-        setAccessToken(data.access_token);
-        setUser(data.user);
-        setIsLoading(false);
-        return;
-      }
-    } catch (e) {
-      console.warn("Demo login failed:", e);
-    }
-
-    // Backend'e ulaşılamadıysa sahte bir oturum kurulmaz: stratejiler artık
-    // kullanıcıya bağlı olduğu için gerçek bir JWT olmadan hiçbir çağrı
-    // çalışmaz; sahte token kullanıcıyı anında giriş ekranına geri düşürürdü.
-    setIsLoading(false);
-    throw new Error('Sunucuya bağlanılamadı. Backend çalışıyor mu?');
-  };
-
   const loginWithGoogle = async (credential: string) => {
-    if (credential === 'dev_mock_google_token') {
-      loginDemoUser();
-      return;
-    }
-
     setIsLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/auth/google`, {
@@ -218,7 +185,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!accessToken && !!user,
         isLoading,
         loginWithGoogle,
-        loginDemoUser,
         logout
       }}
     >

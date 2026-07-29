@@ -1,3 +1,4 @@
+import hmac
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
@@ -58,56 +59,35 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
 
     # Google token doğrulama
     try:
-        if token == "dev_mock_google_token" or token.startswith("dev_"):
+        # Geliştirici test girişi: yalnızca DEV_LOGIN_TOKEN .env'de dolu VE
+        # gönderilen credential ona birebir eşitse çalışır. Varsayılan olarak
+        # DEV_LOGIN_TOKEN boş olduğu için bu yol tamamen kapalıdır.
+        if settings.DEV_LOGIN_TOKEN and hmac.compare_digest(token, settings.DEV_LOGIN_TOKEN):
             user_info = {
                 "google_id": "dev_google_12345",
-                "email": "demo.trader@example.com",
+                "email": settings.DEV_LOGIN_EMAIL,
                 "name": "Demo Trader",
                 "avatar_url": "https://lh3.googleusercontent.com/a/default-user"
             }
         elif settings.GOOGLE_CLIENT_ID:
-            try:
-                id_info = id_token.verify_oauth2_token(
-                    token, 
-                    google_requests.Request(), 
-                    settings.GOOGLE_CLIENT_ID
-                )
-                user_info = {
-                    "google_id": id_info.get("sub"),
-                    "email": id_info.get("email"),
-                    "name": id_info.get("name"),
-                    "avatar_url": id_info.get("picture")
-                }
-            except Exception:
-                import jwt as unverified_jwt
-                try:
-                    decoded = unverified_jwt.decode(token, options={"verify_signature": False})
-                    user_info = {
-                        "google_id": decoded.get("sub", "google_sub_id"),
-                        "email": decoded.get("email"),
-                        "name": decoded.get("name", "Google User"),
-                        "avatar_url": decoded.get("picture", "")
-                    }
-                except Exception:
-                    user_info = None
+            id_info = id_token.verify_oauth2_token(
+                token,
+                google_requests.Request(),
+                settings.GOOGLE_CLIENT_ID
+            )
+            user_info = {
+                "google_id": id_info.get("sub"),
+                "email": id_info.get("email"),
+                "name": id_info.get("name"),
+                "avatar_url": id_info.get("picture")
+            }
         else:
-            # Fallback for unverified JWT
-            import jwt as unverified_jwt
-            try:
-                decoded = unverified_jwt.decode(token, options={"verify_signature": False})
-                user_info = {
-                    "google_id": decoded.get("sub", "dev_google_id"),
-                    "email": decoded.get("email", "demo.trader@example.com"),
-                    "name": decoded.get("name", "Demo Trader"),
-                    "avatar_url": decoded.get("picture", "")
-                }
-            except Exception:
-                user_info = {
-                    "google_id": "dev_google_12345",
-                    "email": "demo.trader@example.com",
-                    "name": "Demo Trader",
-                    "avatar_url": ""
-                }
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Sunucu Google kimlik doğrulaması için yapılandırılmamış."
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

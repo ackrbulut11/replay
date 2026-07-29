@@ -371,7 +371,7 @@ function App() {
                   {!isStatsOpen && (
                     <div className="flex items-center gap-4 text-[11px] font-medium text-slate-400 font-sans">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 font-semibold select-none">Fiyat Değişimi:</span>
+                        <span className="text-slate-500 font-semibold select-none">Fiyat Değişimi (1Y):</span>
                         <span className={`${parseFloat(stats.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {parseFloat(stats.change) >= 0 ? '+' : ''}{stats.change}%
                         </span>
@@ -405,7 +405,7 @@ function App() {
                     <span className="text-sm font-bold text-slate-100 font-mono">{stats.count}</span>
                   </div>
                   <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Price Change</span>
+                    <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Price Change (1Y)</span>
                     <span className={`text-sm font-bold font-mono ${parseFloat(stats.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {parseFloat(stats.change) >= 0 ? '+' : ''}{stats.change}%
                     </span>

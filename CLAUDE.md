@@ -126,3 +126,9 @@ Only Phases 1–3 are partially built. Verify a module is real before wiring to 
 Frontend deploys to Vercel; `vercel.json` rewrites `/api/*` to the Render backend at `https://replay-xj3e.onrender.com/api`, which `.env.production` also sets as `VITE_API_BASE_URL`. CORS in `main.py` allows any `*.vercel.app` plus localhost via regex. CI ([.github/workflows/build.yml](.github/workflows/build.yml)) only runs the frontend build on windows-latest — no backend tests or lint in CI.
 
 Note: `backend/app/core/config.py` currently hardcodes a Google client ID and a dev JWT secret as pydantic-settings defaults. Real values belong in `.env` (RULES.md §17).
+
+### Error monitoring
+Sentry is wired on both sides but off by default (empty DSN = no-op, so local dev sends nothing):
+- Backend: `init_error_monitoring()` in [main.py](backend/main.py) calls `sentry_sdk.init()` only if `SENTRY_DSN` is set (see [.env.example](backend/.env.example)). Set `SENTRY_DSN` and `ENVIRONMENT=production` in Render's dashboard to turn it on for the live API — every unhandled exception and 500 response is then reported automatically via the FastAPI/Starlette integration.
+- Frontend: `initSentry()` in [utils/sentry.ts](frontend/src/utils/sentry.ts), called once from `main.tsx`, activates only if `VITE_SENTRY_DSN` is set. `ErrorBoundary.componentDidCatch` also forwards caught render errors via `Sentry.captureException`. Set `VITE_SENTRY_DSN` in Vercel's project environment variables (not committed to `.env.production`) to enable it for the deployed app.
+- Both DSNs are created manually in a Sentry account/project — that step isn't something to automate here. `tracesSampleRate`/`SENTRY_TRACES_SAMPLE_RATE` are kept low (0.1) by default to avoid burning a free/low-tier event quota; exception capture is unaffected by that setting.

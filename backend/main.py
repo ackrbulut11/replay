@@ -9,6 +9,28 @@ from app.auth.router import router as auth_router
 from app.api.routes import alerts, market, strategy, admin, watchlist, analytics
 
 
+def init_error_monitoring() -> None:
+    """
+    Sentry'yi başlatır — yalnızca `SENTRY_DSN` doluysa (güvenli varsayılan: kapalı).
+
+    Böylece yerel geliştirmede hiçbir olay gönderilmez; Render'da ortam
+    değişkeni set edilince otomatik açılır. Yakalanmamış her exception ve
+    500 yanıtı FastAPI entegrasyonu sayesinde otomatik raporlanır.
+    """
+    if not settings.SENTRY_DSN:
+        return
+
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        # Kullanıcı e-postası/IP gibi kişisel veriler varsayılan olarak gönderilmez.
+        send_default_pii=False,
+    )
+
+
 def run_migrations() -> None:
     """
     Şemayı Alembic ile güncel tutar (RULES.md #11).
@@ -40,6 +62,7 @@ def run_migrations() -> None:
     command.upgrade(alembic_cfg, "head")
 
 
+init_error_monitoring()
 run_migrations()
 
 app = FastAPI(

@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     DEV_LOGIN_TOKEN: str = ""
     DEV_LOGIN_EMAIL: str = "demo.trader@example.com"
 
+    # Hata izleme (Sentry). Boş bırakılırsa tamamen devre dışıdır (güvenli varsayılan,
+    # yerel geliştirmede hiçbir şey gönderilmez). Render'da bu değer set edilince açılır.
+    SENTRY_DSN: str = ""
+    # Render/Vercel ortam adı; Sentry olaylarını dev/staging/prod'a göre ayırmak için.
+    ENVIRONMENT: str = "development"
+    # Performans izleme (trace) örnekleme oranı — 0.0-1.0. Ücretsiz/düşük plan kotasını
+    # hızla tüketmemek için düşük tutulur; hata (exception) yakalama bundan etkilenmez.
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+
     # Admin yetkisi olan e-posta adresleri (.env: ADMIN_EMAILS=a@x.com,b@y.com)
     # Boş bırakılırsa admin uçlarına hiç kimse erişemez (güvenli varsayılan).
     # Not: pydantic-settings karmaşık tipleri .env'den JSON olarak çözmeye çalıştığı için

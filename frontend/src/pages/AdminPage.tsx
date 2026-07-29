@@ -16,6 +16,7 @@ import {
   getAdminStats, getAdminUsers, getAdminUserDetail, cloneStrategyToMe,
   type AdminStats, type AdminUserItem, type AdminUserDetail,
 } from '../services/adminApi';
+import { useAuth } from '../context/AuthContext';
 
 function formatDate(value?: string | null): string {
   if (!value) return '—';
@@ -103,6 +104,7 @@ const RankedList: React.FC<{
 };
 
 export default function AdminPage() {
+  const { user: currentUser } = useAuth();
   const [stats, setStats] = React.useState<AdminStats | null>(null);
   const [users, setUsers] = React.useState<AdminUserItem[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -300,6 +302,7 @@ export default function AdminPage() {
                               detail={details[u.id]}
                               loading={detailLoadingId === u.id}
                               error={detailErrors[u.id]}
+                              isOwnAccount={u.id === currentUser?.id}
                             />
                           </td>
                         </tr>
@@ -375,10 +378,12 @@ function UserDetailPanel({
   detail,
   loading,
   error,
+  isOwnAccount,
 }: {
   detail?: AdminUserDetail;
   loading: boolean;
   error?: string;
+  isOwnAccount?: boolean;
 }) {
   if (loading && !detail) {
     return (
@@ -416,7 +421,7 @@ function UserDetailPanel({
               <div key={s.id} className="bg-[#0d1321]/80 border border-slate-800/60 rounded-lg px-3 py-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="text-xs font-semibold text-slate-200 truncate">{s.name}</div>
-                  <CloneStrategyButton strategyId={s.id} />
+                  {!isOwnAccount && <CloneStrategyButton strategyId={s.id} />}
                 </div>
                 {s.description && (
                   <div className="text-[11px] text-slate-500 truncate mt-0.5">{s.description}</div>

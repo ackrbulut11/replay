@@ -293,46 +293,16 @@ def evaluate_strategy(
     if df.empty:
         raise HTTPException(status_code=404, detail="Belirtilen aralıkta veri bulunamadı")
 
-    # Çoklu timeframe verilerini yükle (varsa)
-    multi_tf_data: dict = {}
-    tf_filters = strategy.get("timeframe_filters", [])
-    for tf_filter in tf_filters:
-        tf = tf_filter.get("timeframe")
-        if tf and tf not in multi_tf_data:
-            try:
-                tf_df = _loader.load_data(
-                    provider_name=request.provider,
-                    symbol=request.symbol,
-                    timeframe=tf,
-                    start_time=start_dt,
-                    end_time=end_dt,
-                )
-                if not tf_df.empty:
-                    multi_tf_data[tf] = tf_df
-            except Exception as e:
-                print(f"Uyarı: {tf} timeframe verisi yüklenemedi: {e}")
-
-    # Stratejiye ait koşullardan da farklı timeframe referansları çıkar
-    for rule_key in ("entry_rules", "exit_rules"):
-        rules = strategy.get(rule_key, {})
-        for condition in rules.get("conditions", []):
-            for side in ("left", "right", "right2"):
-                operand = condition.get(side)
-                if operand and operand.get("timeframe"):
-                    tf = operand["timeframe"]
-                    if tf not in multi_tf_data:
-                        try:
-                            tf_df = _loader.load_data(
-                                provider_name=request.provider,
-                                symbol=request.symbol,
-                                timeframe=tf,
-                                start_time=start_dt,
-                                end_time=end_dt,
-                            )
-                            if not tf_df.empty:
-                                multi_tf_data[tf] = tf_df
-                        except Exception:
-                            pass
+    # Çoklu timeframe verilerini yükle (varsa) — tekli test ve toplu tarama
+    # arasında tutarlılık için ortak yardımcı kullanılır.
+    multi_tf_data = _engine.load_multi_tf_data(
+        strategy=strategy,
+        provider=request.provider,
+        symbol=request.symbol,
+        loader=_loader,
+        start_dt=start_dt,
+        end_dt=end_dt,
+    )
 
     if limit_bars > 0 and len(df) > limit_bars:
         df = df.tail(limit_bars).reset_index(drop=True)

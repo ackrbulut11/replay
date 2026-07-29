@@ -390,6 +390,60 @@ class StrategyEngine:
             "total_pnl_percent": total_pnl_percent,
         }
 
+    @staticmethod
+    def load_multi_tf_data(
+        strategy: dict,
+        provider: str,
+        symbol: str,
+        loader,
+        start_dt,
+        end_dt,
+    ) -> dict[str, pd.DataFrame]:
+        """Stratejinin `timeframe_filters` ve koşul operandlarında referans
+        verdiği ek zaman dilimlerini yükler (tekli test ve toplu tarama
+        arasında tutarlı davranış için ortak yardımcı)."""
+        multi_tf_data: dict[str, pd.DataFrame] = {}
+
+        tf_filters = strategy.get("timeframe_filters", [])
+        for tf_filter in tf_filters:
+            tf = tf_filter.get("timeframe")
+            if tf and tf not in multi_tf_data:
+                try:
+                    tf_df = loader.load_data(
+                        provider_name=provider,
+                        symbol=symbol,
+                        timeframe=tf,
+                        start_time=start_dt,
+                        end_time=end_dt,
+                    )
+                    if not tf_df.empty:
+                        multi_tf_data[tf] = tf_df
+                except Exception:
+                    pass
+
+        for rule_key in ("entry_rules", "exit_rules"):
+            rules = strategy.get(rule_key, {})
+            for condition in rules.get("conditions", []):
+                for side in ("left", "right", "right2"):
+                    operand = condition.get(side)
+                    if operand and operand.get("timeframe"):
+                        tf = operand["timeframe"]
+                        if tf not in multi_tf_data:
+                            try:
+                                tf_df = loader.load_data(
+                                    provider_name=provider,
+                                    symbol=symbol,
+                                    timeframe=tf,
+                                    start_time=start_dt,
+                                    end_time=end_dt,
+                                )
+                                if not tf_df.empty:
+                                    multi_tf_data[tf] = tf_df
+                            except Exception:
+                                pass
+
+        return multi_tf_data
+
     def evaluate_symbol(
         self,
         strategy: dict,
@@ -421,10 +475,20 @@ class StrategyEngine:
             if limit_bars > 0 and len(df) > limit_bars:
                 df = df.tail(limit_bars).reset_index(drop=True)
 
+            multi_tf_data = self.load_multi_tf_data(
+                strategy=strategy,
+                provider=provider,
+                symbol=symbol,
+                loader=loader,
+                start_dt=start_dt,
+                end_dt=end_dt,
+            )
+
             res = self.evaluate(
                 strategy=strategy,
                 df=df,
                 param_overrides=param_overrides,
+                multi_tf_data=multi_tf_data if multi_tf_data else None,
                 allow_short=allow_short,
             )
 

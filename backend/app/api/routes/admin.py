@@ -9,7 +9,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_admin
-from app.database.models import Alert, DrawingUsageEvent, Strategy, User, Watchlist
+from app.database.models import (
+    Alert,
+    DrawingUsageEvent,
+    Strategy,
+    User,
+    WaitlistSignup,
+    Watchlist,
+)
 from app.database.postgres import get_db
 from app.engines.strategy_engine import StrategyEngine
 from app.rules.strategy_models import StrategyCreateRequest
@@ -556,4 +563,27 @@ def get_admin_stats(db: Session = Depends(get_db)):
         drawing_usage_by_tool=_drawing_usage_by_tool(db),
         drawing_usage_by_symbol=_drawing_usage_by_symbol(db),
         top_favorite_symbols=_top_favorite_symbols(db),
+    )
+
+
+class WaitlistEntry(BaseModel):
+    email: str
+    source: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/waitlist", response_model=List[WaitlistEntry])
+def get_waitlist(db: Session = Depends(get_db)):
+    """
+    Landing page'deki erken erişim formuna bırakılan e-postaları getirir
+    (en yeni önce). Yazma ucu herkese açık, okuma ucu yalnızca admin.
+    """
+    return (
+        db.query(WaitlistSignup)
+        .order_by(WaitlistSignup.created_at.desc())
+        .limit(500)
+        .all()
     )

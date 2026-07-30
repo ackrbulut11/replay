@@ -267,6 +267,25 @@ class DrawingUsageEvent(Base):
     user = relationship("User", back_populates="drawing_usage_events")
 
 
+class WaitlistSignup(Base):
+    """
+    Landing page'de erken erişim listesine bırakılan e-posta adresi.
+
+    Bilinçli olarak `users` tablosuna bağlı değildir: listeye katılanların
+    çoğunun henüz hesabı yok. E-posta benzersizdir, böylece aynı adres ikinci
+    kez gönderildiğinde yeni satır açılmaz (uç nokta fikir olarak idempotent).
+    """
+
+    __tablename__ = "waitlist_signups"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    # Formun bulunduğu bölüm ("hero", "footer" vb.) — hangi CTA'nın çalıştığını
+    # görmek için. Kişisel veri değildir, boş olabilir.
+    source = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 class ChartLayout(Base):
     __tablename__ = "chart_layouts"
 

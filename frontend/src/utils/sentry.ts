@@ -15,14 +15,7 @@ export function initSentry(): void {
     // Ücretsiz/düşük plan kotasını hızla tüketmemek için düşük tutulur;
     // hata (exception) yakalama bundan etkilenmez.
     tracesSampleRate: 0.1,
-    // GEÇİCİ: event gönderim sorununu teşhis etmek için. Doğrulandıktan
-    // sonra kaldırılacak.
-    debug: true,
   });
-
-  // GEÇİCİ: konsoldan elle Sentry.captureException(...) çağırıp global
-  // window.onerror bağımlılığı olmadan gönderimi test edebilmek için.
-  (window as unknown as { Sentry: typeof Sentry }).Sentry = Sentry;
 }
 
 export { Sentry };

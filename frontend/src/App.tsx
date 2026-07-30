@@ -18,6 +18,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import type { NavigationTab } from './components/Sidebar';
 import { useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
+import { LandingPage } from './pages/LandingPage';
 
 
 interface CandleData {
@@ -48,6 +49,8 @@ function App() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<NavigationTab>('chart');
+  // Oturum yoksa tanıtım sayfası mı giriş ekranı mı görünecek.
+  const [showLogin, setShowLogin] = useState(false);
 
   const [provider, setProvider] = useState('binance');
   const [symbol, setSymbol] = useState('BTCUSDT');
@@ -261,8 +264,14 @@ function App() {
     );
   }
 
+  // Giriş yapılmadığında önce tanıtım sayfası açılır; giriş ekranı oradan
+  // istenince gösterilir. Router yok, bu yüzden tek bir state yeterli.
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return showLogin ? (
+      <LoginPage onBack={() => setShowLogin(false)} />
+    ) : (
+      <LandingPage onLogin={() => setShowLogin(true)} />
+    );
   }
 
 

@@ -16,4 +16,5 @@ google-auth>=2.30.0
 python-jose[cryptography]>=3.3.0
 passlib>=1.7.4
 sentry-sdk[fastapi]>=2.0.0
+APScheduler>=3.10
 

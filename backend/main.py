@@ -1,4 +1,5 @@
 import os
+import sys
 
 import uvicorn
 from fastapi import FastAPI
@@ -62,8 +63,31 @@ def run_migrations() -> None:
     command.upgrade(alembic_cfg, "head")
 
 
+def start_market_update_scheduler() -> None:
+    """
+    Gece yarısı toplu piyasa verisi güncellemesini zamanlar (`scripts/update_market.py`).
+
+    Kullanıcı isteği anında sağlayıcıya (Yahoo Finance vb.) gitmek yerine, veri
+    her gece tek kontrollü bir işle önceden çekilip parquet önbelleğine yazılır;
+    gün içindeki tüm istekler bu önbellekten okur. Tek uvicorn worker varsayılır —
+    birden fazla worker'a geçilirse job'ın tekrar tetiklenmemesi için ek bir
+    koruma (ör. sadece "primary" worker'da başlatma) eklenmesi gerekir.
+    """
+    scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")
+    sys.path.insert(0, os.path.abspath(scripts_dir))
+    from update_market import run_market_update
+
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_market_update, trigger="cron", hour=0, minute=0, id="nightly_market_update")
+    scheduler.start()
+    print(f"Gece yarısı piyasa verisi güncelleme işi zamanlandı: {scheduler.get_jobs()}")
+
+
 init_error_monitoring()
 run_migrations()
+start_market_update_scheduler()
 
 app = FastAPI(
     title="Trading Research Platform API",

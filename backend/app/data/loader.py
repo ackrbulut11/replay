@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import os
 import time
 import pandas as pd
 import threading
 from collections import defaultdict
 from datetime import datetime, timedelta
+from ..core.config import settings
 from .providers.binance import BinanceProvider
 from .providers.nasdaq import NasdaqProvider
 from .providers.bist import BistProvider
@@ -53,6 +56,22 @@ class DataLoader:
     def _get_file_lock(self, key_path: str) -> threading.Lock:
         with self._global_lock:
             return self._locks[key_path]
+
+    def _retention_limit(self, timeframe: str) -> int | None:
+        if timeframe in ("1m", "5m", "15m"):
+            return settings.RETENTION_1M
+        if timeframe in ("1h", "4h"):
+            return settings.RETENTION_1H
+        if timeframe in ("1d", "1w", "1mo"):
+            return settings.RETENTION_1D
+        return None
+
+    def _prune_to_retention(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+        """RULES.md #24-27: her zaman dilimi için ham veriyi sınırsız biriktirmez."""
+        limit = self._retention_limit(timeframe)
+        if limit is None or len(df) <= limit:
+            return df
+        return df.tail(limit).reset_index(drop=True)
 
     def resample_ohlcv(self, df: pd.DataFrame, target_rule: str) -> pd.DataFrame:
         if df.empty:
@@ -140,6 +159,7 @@ class DataLoader:
                     if timeframe in ["1d", "1w", "1mo"]:
                         df['timestamp'] = pd.to_datetime(df['timestamp']).dt.normalize()
                         df.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
+                    df = self._prune_to_retention(df, timeframe)
                     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                     df.to_parquet(cache_path, index=False)
                     file_mtime = os.path.getmtime(cache_path)
@@ -195,7 +215,8 @@ class DataLoader:
                 df_combined.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
                 df_combined.sort_values('timestamp', inplace=True)
                 df_combined.reset_index(drop=True, inplace=True)
-                
+                df_combined = self._prune_to_retention(df_combined, timeframe)
+
                 try:
                     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                     df_combined.to_parquet(cache_path, index=False)

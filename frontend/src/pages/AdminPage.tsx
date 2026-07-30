@@ -10,11 +10,11 @@ import React, { useState } from 'react';
 import {
   Users, SlidersHorizontal, Bell, Star, RefreshCw, ShieldAlert,
   ChevronDown, TrendingUp, TrendingDown, Power, PowerOff, AlertTriangle,
-  PenTool, BarChart2, Copy, Check,
+  PenTool, BarChart2, Copy, Check, Mail,
 } from 'lucide-react';
 import {
-  getAdminStats, getAdminUsers, getAdminUserDetail, cloneStrategyToMe,
-  type AdminStats, type AdminUserItem, type AdminUserDetail,
+  getAdminStats, getAdminUsers, getAdminUserDetail, cloneStrategyToMe, getAdminWaitlist,
+  type AdminStats, type AdminUserItem, type AdminUserDetail, type AdminWaitlistEntry,
 } from '../services/adminApi';
 import { useAuth } from '../context/AuthContext';
 
@@ -107,6 +107,7 @@ export default function AdminPage() {
   const { user: currentUser } = useAuth();
   const [stats, setStats] = React.useState<AdminStats | null>(null);
   const [users, setUsers] = React.useState<AdminUserItem[]>([]);
+  const [waitlist, setWaitlist] = React.useState<AdminWaitlistEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -119,9 +120,10 @@ export default function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [s, u] = await Promise.all([getAdminStats(), getAdminUsers()]);
+      const [s, u, w] = await Promise.all([getAdminStats(), getAdminUsers(), getAdminWaitlist()]);
       setStats(s);
       setUsers(u);
+      setWaitlist(w);
     } catch (err: any) {
       setError(err?.message || 'Admin verileri yüklenemedi.');
     } finally {
@@ -319,6 +321,41 @@ export default function AdminPage() {
       {!loading && !error && users.length === 0 && (
         <div className="text-center py-12 text-slate-500 text-sm">Henüz kayıtlı kullanıcı yok.</div>
       )}
+
+      {waitlist.length > 0 && (
+        <div className="bg-[#0d1321]/80 border border-slate-800/80 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-800/80 flex items-center justify-between gap-3">
+            <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-emerald-400" />
+              Erken Erişim Listesi ({waitlist.length})
+            </h3>
+            <CopyEmailsButton emails={waitlist.map((w) => w.email)} />
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-800/60">
+                  <th className="text-left font-semibold px-4 py-2.5">E-posta</th>
+                  <th className="text-left font-semibold px-4 py-2.5">Kaynak</th>
+                  <th className="text-left font-semibold px-4 py-2.5">Katılım</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waitlist.map((w) => (
+                  <tr key={w.email} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20">
+                    <td className="px-4 py-2.5 text-slate-200 font-mono">{w.email}</td>
+                    <td className="px-4 py-2.5 text-slate-400">
+                      {w.source === 'hero' ? 'Üst form' : w.source === 'footer' ? 'Alt form' : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-400 font-mono whitespace-nowrap">{formatDateTime(w.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -334,6 +371,32 @@ const statusLabels: Record<string, string> = {
   TRIGGERED: 'Tetiklendi',
   DISABLED: 'Devre Dışı',
 };
+
+/**
+ * Erken erişim listesindeki tüm e-postaları panoya kopyalar — toplu mail
+ * aracına (Mailchimp, Google Groups vb.) yapıştırmak için. Otomatik gönderim
+ * henüz yok; bu buton yalnızca listeyi dışarı taşımayı kolaylaştırıyor.
+ */
+function CopyEmailsButton({ emails }: { emails: string[] }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(emails.join('\n'));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-[11px] font-semibold flex-shrink-0 whitespace-nowrap cursor-pointer transition-colors"
+    >
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? 'Kopyalandı' : 'Tüm E-postaları Kopyala'}
+    </button>
+  );
+}
 
 /** Bir stratejiyi tek tuşla, giriş yapmış admin'in kendi hesabına kopyalar (test etmek için). */
 function CloneStrategyButton({ strategyId }: { strategyId: string }) {

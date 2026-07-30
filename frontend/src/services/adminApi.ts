@@ -106,6 +106,17 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
   return apiRequest<AdminUserDetail>(`${API_BASE}/users/${userId}/detail`);
 }
 
+/** Landing page'deki erken erişim formuna bırakılan bir e-posta kaydı. */
+export interface AdminWaitlistEntry {
+  email: string;
+  source?: string | null;
+  created_at?: string | null;
+}
+
+export async function getAdminWaitlist(): Promise<AdminWaitlistEntry[]> {
+  return apiRequest<AdminWaitlistEntry[]>(`${API_BASE}/waitlist`);
+}
+
 /** Bir kullanıcının stratejisini, admin panelinden bakan admin'in kendi hesabına kopyalar. */
 export async function cloneStrategyToMe(strategyId: string): Promise<AdminStrategyItem> {
   return apiRequest<AdminStrategyItem>(`${API_BASE}/strategies/${strategyId}/clone-to-me`, {

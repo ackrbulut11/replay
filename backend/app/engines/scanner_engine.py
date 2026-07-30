@@ -8,7 +8,7 @@ taramalarını görebilir.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -18,6 +18,14 @@ from app.rules.strategy_models import BatchEvaluateResultItem, ScanHistoryItem
 
 # Strateji başına saklanacak azami tarama sayısı; aşan en eski kayıtlar silinir.
 MAX_SCANS_PER_STRATEGY = 20
+
+# Arka plan tarama işini yürüten process (dev server reload, Render restart/deploy)
+# iş bitmeden ölürse `finally` bloğu hiç çalışmaz ve kayıt sonsuza dek status="running"
+# kalır — frontend de sayfa her açıldığında bunu "hâlâ sürüyor" sanıp süresiz "Taranıyor..."
+# gösterir. Bu eşikten uzun süre ilerlemeyen (updated_at bayatlamış) "running" kayıtlar
+# okuma anında takılı kabul edilip hataya çevrilir; `_run_batch_scan_job` içindeki
+# ROUND_TIMEOUT_SECONDS (30sn) normal bir sembol turunun bu eşiği aşmayacağını garanti eder.
+STALE_SCAN_SECONDS = 120
 
 
 class ScannerEngine:
@@ -101,6 +109,18 @@ class ScannerEngine:
             db.delete(row)
         db.commit()
 
+    def _heal_if_stale(self, db: Session, row: StrategyScan) -> StrategyScan:
+        """Süresi geçmiş (process ölmüş) "running" kaydı hataya çevirip kalıcı hâle getirir."""
+        if row.status != "running":
+            return row
+        last_update = row.updated_at or row.created_at or datetime.utcnow()
+        if datetime.utcnow() - last_update > timedelta(seconds=STALE_SCAN_SECONDS):
+            row.status = "error"
+            row.error = "Tarama yarıda kesildi (sunucu yeniden başlatılmış olabilir)"
+            db.commit()
+            db.refresh(row)
+        return row
+
     def get_scans(self, db: Session, strategy_id: str, user_id: str) -> list[dict]:
         """Bir stratejiye ait tarama geçmişini döndürür (en yeni en başta)."""
         rows = (
@@ -110,6 +130,7 @@ class ScannerEngine:
             .limit(MAX_SCANS_PER_STRATEGY)
             .all()
         )
+        rows = [self._heal_if_stale(db, r) for r in rows]
         return [self._row_to_item(r) for r in rows]
 
     def get_latest_scan(self, db: Session, strategy_id: str, user_id: str) -> Optional[dict]:
@@ -120,7 +141,10 @@ class ScannerEngine:
             .order_by(StrategyScan.created_at.desc())
             .first()
         )
-        return self._row_to_item(row) if row else None
+        if not row:
+            return None
+        row = self._heal_if_stale(db, row)
+        return self._row_to_item(row)
 
     def get_scan(self, db: Session, strategy_id: str, scan_id: str, user_id: str) -> Optional[dict]:
         """Tek bir taramanın (devam eden veya biten) güncel durumunu döndürür (yalnızca sahibi)."""
@@ -133,7 +157,10 @@ class ScannerEngine:
             )
             .first()
         )
-        return self._row_to_item(row) if row else None
+        if not row:
+            return None
+        row = self._heal_if_stale(db, row)
+        return self._row_to_item(row)
 
     def create_running_scan(
         self,

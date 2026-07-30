@@ -102,6 +102,7 @@ class StrategyScan(Base):
     error = Column(Text, nullable=True)
     results = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="strategy_scans")
     strategy = relationship("Strategy", back_populates="scans")

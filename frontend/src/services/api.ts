@@ -1,4 +1,4 @@
-import { TOKEN_STORAGE_KEY, notifyUnauthorized } from '../context/AuthContext';
+import { TOKEN_STORAGE_KEY, notifyUnauthorized, refreshAccessToken } from '../context/AuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://replay-xj3e.onrender.com/api' : '/api');
 
@@ -41,10 +41,20 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, { ...options, headers });
+  let response = await fetch(url, { ...options, headers });
+
+  // Access token 30 dakikada doluyor: doğrudan oturumu düşürmeden önce
+  // refresh_token cookie'siyle bir kez yeni token almayı dene.
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`;
+      response = await fetch(url, { ...options, headers });
+    }
+  }
 
   if (!response.ok) {
-    // Token yok/geçersiz/süresi dolmuş: oturumu düşür, giriş ekranına dön.
+    // Token yok/geçersiz/süresi dolmuş ve refresh de başarısız: oturumu düşür.
     if (response.status === 401) {
       notifyUnauthorized();
       throw new Error('Oturumunuz sona erdi. Lütfen tekrar giriş yapın.');

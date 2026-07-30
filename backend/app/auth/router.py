@@ -16,6 +16,18 @@ from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Frontend (Vercel) ve backend (Render) farklı origin'lerde çalışıyor, yani
+# refresh_token cookie'si cross-site gönderiliyor. Tarayıcılar SameSite=Lax
+# cookie'leri cross-site fetch/XHR isteklerinde göndermez; bu yüzden prod'da
+# SameSite=None + Secure=True şart. Dev'de localhost HTTP olduğu için Lax/False
+# kalıyor (Secure cookie'ler HTTP üzerinden hiç set edilemez).
+_IS_PROD = settings.ENVIRONMENT == "production"
+_REFRESH_COOKIE_KWARGS = {
+    "httponly": True,
+    "secure": _IS_PROD,
+    "samesite": "none" if _IS_PROD else "lax",
+}
+
 class GoogleAuthRequest(BaseModel):
     credential: str
 
@@ -127,10 +139,8 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        httponly=True,
-        secure=False,  # Dev için False, Prod HTTPS için True
-        samesite="lax",
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        **_REFRESH_COOKIE_KWARGS,
     )
 
     return TokenResponse(
@@ -166,5 +176,9 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/logout")
 def logout(response: Response):
-    response.delete_cookie(key="refresh_token")
+    response.delete_cookie(
+        key="refresh_token",
+        secure=_REFRESH_COOKIE_KWARGS["secure"],
+        samesite=_REFRESH_COOKIE_KWARGS["samesite"],
+    )
     return {"message": "Başarıyla çıkış yapıldı"}

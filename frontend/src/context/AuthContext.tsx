@@ -65,6 +65,28 @@ export function notifyUnauthorized(): void {
   window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
 }
 
+/**
+ * httpOnly refresh_token cookie'siyle yeni bir access token almayı dener.
+ * Access token 30 dakikada dolduğu için API katmanı 401 aldığında bunu
+ * çağırıp isteği bir kez tekrar dener — aksi halde her 30 dakikada bir
+ * oturum düşer. Başarısız olursa (cookie yok/expired) null döner.
+ */
+export async function refreshAccessToken(): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
+    return data.access_token as string;
+  } catch {
+    return null;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);

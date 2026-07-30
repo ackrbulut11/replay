@@ -109,11 +109,6 @@ def read_root():
     return {"message": "Trading Research Platform Backend API is running"}
 
 
-# GEÇİCİ: Sentry hata yakalamayı doğrulamak için. Doğrulandıktan sonra kaldırılacak.
-@app.get("/api/sentry-debug")
-def trigger_sentry_test_error():
-    1 / 0
-
 if __name__ == "__main__":
     uvicorn.run("main:app", host=settings.HOST, port=settings.PORT, reload=settings.RELOAD)
 

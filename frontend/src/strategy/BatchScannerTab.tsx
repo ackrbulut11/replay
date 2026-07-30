@@ -23,14 +23,24 @@ import {
 } from 'lucide-react';
 import type { Strategy, BatchEvaluateResultItem, ScanHistoryItem } from '../types/strategy';
 import { strategyApi } from '../services/strategyApi';
+import { useWatchlistStore } from '../store/watchlistStore';
 
 interface BatchScannerTabProps {
   strategy: Strategy;
   onSelectSymbolAndShowChart: (symbol: string, provider: string, timeframe: string) => void;
 }
 
+interface ScanGroup {
+  id: string;
+  name: string;
+  provider: string;
+  symbols: string[];
+  // Yalnızca Favoriler grubunda bulunur: birden fazla sağlayıcıya ait sembolleri taşır
+  entries?: { provider: string; symbol: string }[];
+}
+
 // Hazır Sembol Grupları
-const PRESET_GROUPS = [
+const PRESET_GROUPS: ScanGroup[] = [
   {
     id: 'binance_top',
     name: 'Binance USDT Popüler Çiftler (30 Sembol)',
@@ -155,12 +165,43 @@ const PRESET_GROUPS = [
 // Strateji testinde izin verilen azami mum sayısı (backend ile aynı sınır)
 const MAX_LIMIT_BARS = 10000;
 
+// Tabloda gösterilen her satıra, hangi sağlayıcıdan geldiğini de taşıyan biçim
+// (Favoriler taraması birden fazla sağlayıcının sonucunu tek listede birleştirir).
+type DisplayResultItem = BatchEvaluateResultItem & { provider: string };
+
+function withProvider(items: BatchEvaluateResultItem[], provider: string): DisplayResultItem[] {
+  return items.map((item) => ({ ...item, provider }));
+}
+
 export default function BatchScannerTab({
   strategy,
   onSelectSymbolAndShowChart,
 }: BatchScannerTabProps) {
+  const [watchlistState] = useWatchlistStore();
+
+  // Kullanıcının Favoriler listesine eklediği tüm semboller — hangi borsada/sağlayıcıda
+  // olduğuna bakılmaksızın tek bir grup olarak sunulur. Tarama backend'i tek seferde tek
+  // provider kabul ettiği için, taşıma anında sağlayıcıya göre ayrı isteklere bölünüp
+  // sonuçlar tek tabloda birleştirilir (bkz. runFavoriScan).
+  const favoriGroup = useMemo((): ScanGroup | null => {
+    const favorilerList = watchlistState.lists.find((g) => g.id === 'favoriler');
+    const items = favorilerList ? favorilerList.items : [];
+    if (items.length === 0) return null;
+    return {
+      id: 'favoriler_all',
+      name: `⭐ Favorilerim (${items.length} Sembol)`,
+      provider: '',
+      symbols: items.map((i) => i.symbol),
+      entries: items.map((i) => ({ provider: i.provider, symbol: i.symbol })),
+    };
+  }, [watchlistState.lists]);
+
+  const allGroups = useMemo(
+    () => (favoriGroup ? [favoriGroup, ...PRESET_GROUPS] : PRESET_GROUPS),
+    [favoriGroup]
+  );
+
   const [selectedGroup, setSelectedGroup] = useState(PRESET_GROUPS[0].id);
-  const [provider, setProvider] = useState('binance');
   const [timeframe, setTimeframe] = useState('1d');
   const [limitBars, setLimitBars] = useState(1000);
 
@@ -169,7 +210,7 @@ export default function BatchScannerTab({
   const [scanProgress, setScanProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Sonuçlar ve Geçmiş
-  const [results, setResults] = useState<BatchEvaluateResultItem[]>([]);
+  const [results, setResults] = useState<DisplayResultItem[]>([]);
   const [latestScanTime, setLatestScanTime] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ScanHistoryItem[]>([]);
   const [selectedScanId, setSelectedScanId] = useState<string>('');
@@ -223,13 +264,8 @@ export default function BatchScannerTab({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Grup değiştiğinde provider'ı otomatik güncelle
   const handleGroupChange = (groupId: string) => {
     setSelectedGroup(groupId);
-    const group = PRESET_GROUPS.find((g) => g.id === groupId);
-    if (group) {
-      setProvider(group.provider);
-    }
   };
 
   // Sayfa yüklendiğinde stratejinin kayıtlı son tarama sonuçlarını getir
@@ -239,9 +275,8 @@ export default function BatchScannerTab({
       try {
         const data = await strategyApi.getScanHistory(strategy.id);
         if (isMounted && data.latest) {
-          setResults(data.latest.results || []);
+          setResults(withProvider(data.latest.results || [], data.latest.provider || 'binance'));
           setLatestScanTime(data.latest.created_at);
-          setProvider(data.latest.provider || 'binance');
           setTimeframe(data.latest.timeframe || '1d');
           setSelectedScanId(data.latest.scan_id);
 
@@ -288,7 +323,7 @@ export default function BatchScannerTab({
 
       try {
         const scan = await strategyApi.getScanStatus(strategy.id, scanId);
-        setResults(scan.results);
+        setResults(withProvider(scan.results, scan.provider));
         setScanProgress({ done: scan.scanned_count, total: scan.total_symbols ?? scan.scanned_count });
 
         if (scan.status === 'running') {
@@ -322,16 +357,107 @@ export default function BatchScannerTab({
     tick();
   };
 
+  // Favoriler grubu birden fazla sağlayıcı içerebilir: her sağlayıcı için ayrı bir
+  // arka plan taraması başlatılır, sırayla tamamlanması beklenir ve sonuçlar tek
+  // tabloda (sağlayıcı etiketiyle) birleştirilir.
+  const runFavoriScan = async (entries: { provider: string; symbol: string }[]) => {
+    const byProvider = new Map<string, string[]>();
+    entries.forEach(({ provider: prov, symbol }) => {
+      const list = byProvider.get(prov) || [];
+      list.push(symbol);
+      byProvider.set(prov, list);
+    });
+
+    setScanProgress({ done: 0, total: entries.length });
+
+    const collected: DisplayResultItem[] = [];
+    const doneCounts = new Map<string, number>();
+    let firstError: string | null = null;
+
+    for (const [prov, symbols] of byProvider) {
+      try {
+        const scan = await strategyApi.batchEvaluateStrategy(strategy.id, {
+          symbols,
+          provider: prov,
+          timeframe,
+          limit_bars: limitBars,
+          allow_short: strategy.allow_short,
+        });
+        activeScanIdRef.current = scan.scan_id;
+
+        const finalScan = await new Promise<ScanHistoryItem>((resolve) => {
+          const tick = async (failureCount = 0) => {
+            try {
+              const s = await strategyApi.getScanStatus(strategy.id, scan.scan_id);
+              doneCounts.set(prov, s.scanned_count);
+              const totalDone = Array.from(doneCounts.values()).reduce((a, b) => a + b, 0);
+              setScanProgress({ done: totalDone, total: entries.length });
+              setResults([...collected, ...withProvider(s.results, prov)]);
+
+              if (s.status === 'running') {
+                pollTimeoutRef.current = setTimeout(() => tick(0), POLL_INTERVAL_MS);
+                return;
+              }
+              resolve(s);
+            } catch (err: any) {
+              if (failureCount + 1 >= MAX_POLL_FAILURES) {
+                resolve({
+                  scan_id: '',
+                  strategy_id: strategy.id,
+                  strategy_name: strategy.name,
+                  provider: prov,
+                  timeframe,
+                  created_at: new Date().toISOString(),
+                  scanned_count: 0,
+                  status: 'error',
+                  error: err.message || `${prov} taraması sorgulanırken bağlantı hatası oluştu`,
+                  results: [],
+                });
+                return;
+              }
+              pollTimeoutRef.current = setTimeout(() => tick(failureCount + 1), POLL_INTERVAL_MS);
+            }
+          };
+          tick();
+        });
+
+        if (finalScan.status === 'error') {
+          firstError = firstError || finalScan.error || `${prov} taraması sırasında hata oluştu`;
+        }
+        collected.push(...withProvider(finalScan.results, prov));
+        setResults([...collected]);
+      } catch (err: any) {
+        firstError = firstError || err.message || `${prov} taraması başlatılırken bir hata oluştu`;
+      }
+    }
+
+    if (firstError) setScanError(firstError);
+    setLatestScanTime(new Date().toISOString());
+    setSelectedScanId('');
+    setScanProgress(null);
+    setIsScanning(false);
+
+    const historyData = await strategyApi.getScanHistory(strategy.id);
+    if (historyData.scans) setHistoryList(historyData.scans);
+  };
+
   // Taramayı Çalıştır — backend'de arka plan taramasını başlatır ve anında
   // dönen scan_id ile ilerlemeyi sorgulamaya başlar.
   const handleRunScan = async () => {
-    const group = PRESET_GROUPS.find((g) => g.id === selectedGroup);
+    const group = allGroups.find((g) => g.id === selectedGroup);
     if (!group) return;
 
     if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    activeScanIdRef.current = null;
     setIsScanning(true);
     setScanError(null);
     setResults([]);
+
+    if (group.entries) {
+      await runFavoriScan(group.entries);
+      return;
+    }
+
     setScanProgress({ done: 0, total: group.symbols.length });
 
     try {
@@ -440,9 +566,8 @@ export default function BatchScannerTab({
                       const scan = historyList.find((s) => s.scan_id === e.target.value);
                       if (scan) {
                         setSelectedScanId(scan.scan_id);
-                        setResults(scan.results);
+                        setResults(withProvider(scan.results, scan.provider));
                         setLatestScanTime(scan.created_at);
-                        setProvider(scan.provider);
                         setTimeframe(scan.timeframe);
                         setScanError(null);
                         // "Sembol Grubu" seçicisi de geçmiş taramanın piyasasını yansıtsın;
@@ -494,7 +619,7 @@ export default function BatchScannerTab({
                 onChange={(e) => handleGroupChange(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700/80 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500 transition-colors"
               >
-                {PRESET_GROUPS.map((g) => (
+                {allGroups.map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.name}
                   </option>
@@ -713,7 +838,7 @@ export default function BatchScannerTab({
                   return (
                     <tr
 
-                      key={item.symbol}
+                      key={`${item.provider}-${item.symbol}`}
                       className="hover:bg-slate-800/40 transition-colors group"
                     >
                       {/* Sembol */}
@@ -723,7 +848,7 @@ export default function BatchScannerTab({
                             {item.symbol}
                           </span>
                           <span className="text-[10px] text-slate-500 uppercase bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 font-mono">
-                            {provider}
+                            {item.provider}
                           </span>
                         </div>
                       </td>
@@ -784,7 +909,7 @@ export default function BatchScannerTab({
                       <td className="py-3 px-4 text-right">
                         <button
                           onClick={() =>
-                            onSelectSymbolAndShowChart(item.symbol, provider, timeframe)
+                            onSelectSymbolAndShowChart(item.symbol, item.provider, timeframe)
                           }
                           className="inline-flex items-center gap-1.5 py-1 px-3 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 rounded-xl font-semibold text-xs transition-all active:scale-95 cursor-pointer shadow-sm"
                           title={`${item.symbol} sembolünü grafikte aç`}

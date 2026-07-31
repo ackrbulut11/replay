@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
-import { IndicatorsState, DEFAULT_INDICATORS_STATE } from './charts/IndicatorToolbar';
+import { IndicatorsState } from './charts/IndicatorToolbar';
 import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import { watchlistStore } from './store/watchlistStore';
-import { chartSettingsStore } from './store/chartSettingsStore';
+import { useChartSettingsStore, chartSettingsStore, DEFAULT_ACTIVE_INDICATORS } from './store/chartSettingsStore';
 import { strategyStore } from './store/strategyStore';
 import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';

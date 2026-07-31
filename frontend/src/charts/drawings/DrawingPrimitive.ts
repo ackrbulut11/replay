@@ -11,7 +11,7 @@ import type {
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 import type { Drawing, DrawingLineStyle, DrawingPoint } from './types';
-import { HIT_THRESHOLD } from './types';
+import { HIT_THRESHOLD, LINE_STYLE_CAPABLE_TOOLS } from './types';
 
 export interface CandleData {
   time: number;
@@ -42,36 +42,42 @@ export interface PixelDrawing {
 /**
  * `lineStyle`'ı canvas'ın `setLineDash` deseline çevirir.
  *
- * Alt sınırlar sabit tutulur: saf `lineWidth`'e orantılı bir desen (ör. 1-2px
- * kalınlıkta) segmentleri birkaç piksele düşürüyor ve aralık gözle neredeyse
- * hiç görünmüyordu. "Noktalı" için gerçek yuvarlak nokta efekti, neredeyse
- * sıfır uzunluklu bir segmenti `lineCap: 'round'` ile birleştirerek elde edilir.
+ * Desen `lineWidth` ile ölçeklenir; aksi halde kalın çizgilerde boşluklar
+ * kapanıp üç stil de birbirinin aynısı görünüyor. `solid` her zaman boş dizi
+ * döndürür, böylece önceki çizimden kalan desen sıfırlanır.
  */
 function dashPatternFor(lineStyle: DrawingLineStyle | undefined, lineWidth: number): number[] {
-  if (lineStyle === 'dashed') return [Math.max(12, lineWidth * 6), Math.max(8, lineWidth * 4)];
-  if (lineStyle === 'dotted') return [0.01, Math.max(6, lineWidth * 3)];
-  return [];
+  const w = Math.max(1, lineWidth);
+  switch (lineStyle) {
+    case 'dashed':
+      return [8 * w, 4 * w];
+    case 'dotted':
+      return [2 * w, 4 * w];
+    case 'solid':
+    default:
+      return [];
+  }
 }
 
 /**
- * Çizginin arkasına koyu bir "hale" (halo) çizerek gerçek çizim rengini
- * arka plandaki gridler/mumlarla karışıp bulanıklaşmaktan korur. Kenar
- * yumuşatma (anti-aliasing) ince çizgilerde arka planla renk karışımına
- * (color bleeding) yol açıyor, bu yüzden asıl renk her zaman koyu bir
- * kontur üzerine çizilir.
+ * Tek bir çizim için canvas durumunu sıfırdan kurar: renk yalnızca
+ * `color`'dan gelir, desen yalnızca `lineStyle`'dan. Böylece bir önceki
+ * çizimden (ör. pozisyon aracının kırmızı/yeşil konturu ya da cetvelin
+ * kesikli deseni) sızan hiçbir stil kalmaz.
  */
-function strokeWithHalo(ctx: CanvasRenderingContext2D, color: string, lineWidth: number, dash: number[]) {
-  ctx.save();
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-  ctx.lineWidth = lineWidth + 2;
-  ctx.setLineDash(dash);
-  ctx.stroke();
-  ctx.restore();
-
+function applyLineStyle(
+  ctx: CanvasRenderingContext2D,
+  color: string,
+  lineWidth: number,
+  lineStyle: DrawingLineStyle | undefined,
+) {
   ctx.strokeStyle = color;
+  ctx.fillStyle = color;
   ctx.lineWidth = lineWidth;
-  ctx.setLineDash(dash);
-  ctx.stroke();
+  ctx.setLineDash(dashPatternFor(lineStyle, lineWidth));
+  ctx.lineDashOffset = 0;
+  ctx.lineCap = lineStyle === 'dotted' ? 'round' : 'butt';
+  ctx.lineJoin = 'round';
 }
 
 const HANDLE_RADIUS = 5;
@@ -279,23 +285,26 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
 
   draw(target: CanvasRenderingTarget2D): void {
     target.useMediaCoordinateSpace(({ context: ctx }) => {
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
+      // Her çizim kendi save/restore çiftiyle tam izole edilir: bir çizimin
+      // rengi, dash deseni veya globalAlpha'sı bir sonrakine sızamaz.
       for (const d of this._drawings) {
+        ctx.save();
         ctx.globalAlpha = d.tool === 'ruler' ? 1 : d.opacity;
         const showHandles = d.id === this._selectedId || d.id === this._hoveredId;
         this._render(ctx, d, false, showHandles);
-        ctx.globalAlpha = 1;
+        ctx.restore();
       }
 
       if (this._preview) {
-        ctx.setLineDash([6, 3]);
+        ctx.save();
         ctx.globalAlpha = this._preview.tool === 'ruler' ? 1 : this._preview.opacity;
         this._render(ctx, this._preview, true, false);
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
+        ctx.restore();
       }
+
+      // Canvas durumunu tamamen temizle (reset context).
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
     });
   }
 
@@ -303,12 +312,14 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
     if (d.points.length < 1) return;
 
     const lw = isPreview ? 1.5 : d.lineWidth;
-    ctx.strokeStyle = d.color;
-    ctx.lineWidth = lw;
-    // Önizlemede kesikli çizim zaten dışarıdan (draw()) uygulanıyor; kullanıcının
-    // seçtiği çizgi tipi yalnızca kalıcı çizimlerde uygulanır.
-    const dash = isPreview ? null : dashPatternFor(d.lineStyle, lw);
-    if (dash) ctx.setLineDash(dash);
+    // Önizleme her zaman kesikli bir "taslak" olarak gösterilir. Kalıcı çizimde
+    // kullanıcının seçtiği stil yalnızca çizgi tabanlı araçlarda geçerlidir;
+    // cetvel/pozisyon araçları kendi sabit stilini kullandığı için 'solid'e
+    // sabitlenir, aksi halde bir önceki çizimin deseni onlara sızar.
+    const effectiveStyle: DrawingLineStyle = isPreview
+      ? 'dashed'
+      : (LINE_STYLE_CAPABLE_TOOLS.has(d.tool) ? (d.lineStyle ?? 'solid') : 'solid');
+    applyLineStyle(ctx, d.color, lw, effectiveStyle);
 
     switch (d.tool) {
       case 'trendLine': {
@@ -316,8 +327,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         ctx.beginPath();
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[1].x, d.points[1].y);
-        if (isPreview) ctx.stroke();
-        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
+        ctx.stroke();
         break;
       }
 
@@ -325,8 +335,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         ctx.beginPath();
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[0].x + 99999, d.points[0].y);
-        if (isPreview) ctx.stroke();
-        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
+        ctx.stroke();
         break;
       }
 
@@ -340,31 +349,19 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
 
         // İç dolgu (dolgu her zaman düz renk; çizgi tipi yalnızca kenarlığa uygulanır)
         if (d.fillOpacity != null && d.fillOpacity > 0) {
-          const savedAlpha = ctx.globalAlpha;
-          const savedDash = ctx.getLineDash();
+          ctx.save();
           ctx.setLineDash([]);
-          ctx.globalAlpha = savedAlpha * d.fillOpacity;
+          ctx.globalAlpha = ctx.globalAlpha * d.fillOpacity;
           ctx.fillStyle = d.color;
           ctx.fillRect(x, y, w, h);
-          ctx.globalAlpha = savedAlpha;
-          ctx.setLineDash(savedDash);
+          ctx.restore();
         }
 
-        // Kenar çizgisi
-        if (isPreview) {
-          ctx.strokeRect(x, y, w, h);
-        } else {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-          ctx.lineWidth = lw + 2;
-          ctx.setLineDash(dash ?? []);
-          ctx.strokeRect(x, y, w, h);
-          ctx.restore();
-          ctx.strokeStyle = d.color;
-          ctx.lineWidth = lw;
-          ctx.setLineDash(dash ?? []);
-          ctx.strokeRect(x, y, w, h);
-        }
+        // Kenar çizgisi — stil dolgudan etkilenmesin diye yeniden uygulanır.
+        applyLineStyle(ctx, d.color, lw, effectiveStyle);
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.stroke();
         break;
       }
 
@@ -380,25 +377,22 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         ctx.beginPath();
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[1].x, d.points[1].y);
-        if (isPreview) ctx.stroke();
-        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
+        ctx.stroke();
 
         // Alt sınır çizgisi (3. tıklamayla ofsetlenmiş paralel)
         ctx.beginPath();
         ctx.moveTo(d.points[2].x, d.points[2].y);
         ctx.lineTo(p2x, p2y);
-        if (isPreview) ctx.stroke();
-        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
+        ctx.stroke();
 
-        // Ortadaki kesikli orta çizgi
+        // Ortadaki orta çizgi — her zaman kesikli ve biraz daha ince.
         const midStartX = (d.points[0].x + d.points[2].x) / 2;
         const midStartY = (d.points[0].y + d.points[2].y) / 2;
         const midEndX = (d.points[1].x + p2x) / 2;
         const midEndY = (d.points[1].y + p2y) / 2;
 
         ctx.save();
-        ctx.setLineDash([lw * 2, lw * 2]);
-        ctx.lineWidth = Math.max(1, lw - 0.5);
+        applyLineStyle(ctx, d.color, Math.max(1, lw - 0.5), 'dashed');
         ctx.beginPath();
         ctx.moveTo(midStartX, midStartY);
         ctx.lineTo(midEndX, midEndY);
@@ -664,7 +658,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
     }
 
     // Tutamaçlar (handles) her zaman düz çizilir; kesikli/noktalı çizgi
-    // deseni sonraki çizimlere sızmasın diye burada sıfırlanır.
+    // deseni tutamaçlara sızmasın diye burada sıfırlanır.
     ctx.setLineDash([]);
 
     if (showHandles) {
@@ -674,15 +668,19 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
 
   private _drawHandles(ctx: CanvasRenderingContext2D, d: PixelDrawing) {
     const positions = getHandlePositions(d);
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineCap = 'butt';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = d.color;
     for (const p of positions) {
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = d.color;
-      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(p.x, p.y, HANDLE_RADIUS, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
+    ctx.restore();
   }
 }
 

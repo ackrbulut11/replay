@@ -1,4 +1,5 @@
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Settings2 } from 'lucide-react';
+import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 
 export interface IndicatorsState {
   ema20: boolean;
@@ -23,17 +24,18 @@ export const DEFAULT_INDICATORS_STATE: IndicatorsState = {
 interface IndicatorToolbarProps {
   state: IndicatorsState;
   onToggle: (key: keyof IndicatorsState) => void;
+  onOpenSettings?: (key: keyof IndicatorSettingsMap) => void;
 }
 
-export default function IndicatorToolbar({ state, onToggle }: IndicatorToolbarProps) {
+export default function IndicatorToolbar({ state, onToggle, onOpenSettings }: IndicatorToolbarProps) {
   const indicatorsList: { key: keyof IndicatorsState; label: string; badgeColor: string }[] = [
     { key: 'ema20', label: 'EMA 20', badgeColor: 'border-amber-500/60 text-amber-400 bg-amber-500/10' },
     { key: 'ema50', label: 'EMA 50', badgeColor: 'border-cyan-500/60 text-cyan-400 bg-cyan-500/10' },
     { key: 'ema100', label: 'EMA 100', badgeColor: 'border-purple-500/60 text-purple-400 bg-purple-500/10' },
     { key: 'ema200', label: 'EMA 200', badgeColor: 'border-pink-500/60 text-pink-400 bg-pink-500/10' },
     { key: 'rsi', label: 'RSI', badgeColor: 'border-slate-300/60 text-slate-200 bg-slate-500/10' },
-    { key: 'macd', label: 'MACD (12,26,9)', badgeColor: 'border-emerald-500/60 text-emerald-400 bg-emerald-500/10' },
-    { key: 'bb', label: 'Bollinger (20,2)', badgeColor: 'border-yellow-500/60 text-yellow-400 bg-yellow-500/10' },
+    { key: 'macd', label: 'MACD', badgeColor: 'border-emerald-500/60 text-emerald-400 bg-emerald-500/10' },
+    { key: 'bb', label: 'Bollinger', badgeColor: 'border-yellow-500/60 text-yellow-400 bg-yellow-500/10' },
   ];
 
   return (
@@ -47,22 +49,41 @@ export default function IndicatorToolbar({ state, onToggle }: IndicatorToolbarPr
         {indicatorsList.map(({ key, label, badgeColor }) => {
           const isActive = state[key];
           return (
-            <button
+            <div
               key={key}
-              type="button"
-              onClick={() => onToggle(key)}
               className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all duration-150 flex items-center gap-1.5 select-none ${
                 isActive
                   ? `${badgeColor} shadow-sm font-semibold`
                   : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-current animate-pulse' : 'bg-slate-600'}`} />
-              {label}
-            </button>
+              <button
+                type="button"
+                onClick={() => onToggle(key)}
+                className="flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-current animate-pulse' : 'bg-slate-600'}`} />
+                <span>{label}</span>
+              </button>
+
+              {isActive && onOpenSettings && (
+                <button
+                  type="button"
+                  title={`${label} Ayarları`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSettings(key as keyof IndicatorSettingsMap);
+                  }}
+                  className="p-0.5 rounded hover:bg-slate-800/80 text-slate-400 hover:text-white transition-colors cursor-pointer ml-0.5"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
     </div>
   );
 }
+

@@ -24,6 +24,8 @@ import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
+import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
+import IndicatorSettingsModal from './IndicatorSettingsModal';
 
 
 
@@ -141,10 +143,11 @@ export default function CandleChart({
   const [selectedDrawing, setSelectedDrawing] = useState<Drawing | null>(null);
 
   // Çizim araçlarının varsayılan stilleri (renk/kalınlık/opaklık/çizgi tipi) ve
-  // RSI ayarları kullanıcıya bağlı olarak sunucuda saklanır (bkz. chartSettingsStore).
+  // gösterge ayarları kullanıcıya bağlı olarak sunucuda saklanır (bkz. chartSettingsStore).
   const [chartSettings, chartSettingsApi] = useChartSettingsStore();
   const toolSettings = chartSettings.drawingDefaults;
-  const rsiSettings = chartSettings.rsi;
+  const indicatorSettings = chartSettings.indicators;
+  const [editingIndicator, setEditingIndicator] = useState<keyof IndicatorSettingsMap | null>(null);
 
   const toolSettingsRef = useRef(toolSettings);
   toolSettingsRef.current = toolSettings;
@@ -331,7 +334,6 @@ export default function CandleChart({
   }, []);
 
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
-  const [isRsiSettingsOpen, setIsRsiSettingsOpen] = useState(false);
   const [isDatesOpen, setIsDatesOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
@@ -1433,14 +1435,19 @@ export default function CandleChart({
     if (indicators.ema20) {
       if (!ema20Ref.current) {
         ema20Ref.current = chart.addSeries(LineSeries, {
-          color: '#f59e0b',
-          lineWidth: 2,
+          color: indicatorSettings.ema20.color,
+          lineWidth: indicatorSettings.ema20.lineWidth as any,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
+      } else {
+        ema20Ref.current.applyOptions({
+          color: indicatorSettings.ema20.color,
+          lineWidth: indicatorSettings.ema20.lineWidth as any,
+        });
       }
-      const ema20 = calculateEMA(visibleData, 20);
+      const ema20 = calculateEMA(visibleData, indicatorSettings.ema20.period);
       ema20Ref.current.setData(ema20.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema20Ref.current) {
       chart.removeSeries(ema20Ref.current);
@@ -1451,14 +1458,19 @@ export default function CandleChart({
     if (indicators.ema50) {
       if (!ema50Ref.current) {
         ema50Ref.current = chart.addSeries(LineSeries, {
-          color: '#06b6d4',
-          lineWidth: 2,
+          color: indicatorSettings.ema50.color,
+          lineWidth: indicatorSettings.ema50.lineWidth as any,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
+      } else {
+        ema50Ref.current.applyOptions({
+          color: indicatorSettings.ema50.color,
+          lineWidth: indicatorSettings.ema50.lineWidth as any,
+        });
       }
-      const ema50 = calculateEMA(visibleData, 50);
+      const ema50 = calculateEMA(visibleData, indicatorSettings.ema50.period);
       ema50Ref.current.setData(ema50.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema50Ref.current) {
       chart.removeSeries(ema50Ref.current);
@@ -1469,14 +1481,19 @@ export default function CandleChart({
     if (indicators.ema100) {
       if (!ema100Ref.current) {
         ema100Ref.current = chart.addSeries(LineSeries, {
-          color: '#8b5cf6',
-          lineWidth: 2,
+          color: indicatorSettings.ema100.color,
+          lineWidth: indicatorSettings.ema100.lineWidth as any,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
+      } else {
+        ema100Ref.current.applyOptions({
+          color: indicatorSettings.ema100.color,
+          lineWidth: indicatorSettings.ema100.lineWidth as any,
+        });
       }
-      const ema100 = calculateEMA(visibleData, 100);
+      const ema100 = calculateEMA(visibleData, indicatorSettings.ema100.period);
       ema100Ref.current.setData(ema100.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema100Ref.current) {
       chart.removeSeries(ema100Ref.current);
@@ -1487,32 +1504,34 @@ export default function CandleChart({
     if (indicators.ema200) {
       if (!ema200Ref.current) {
         ema200Ref.current = chart.addSeries(LineSeries, {
-          color: '#ec4899',
-          lineWidth: 2,
+          color: indicatorSettings.ema200.color,
+          lineWidth: indicatorSettings.ema200.lineWidth as any,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
+      } else {
+        ema200Ref.current.applyOptions({
+          color: indicatorSettings.ema200.color,
+          lineWidth: indicatorSettings.ema200.lineWidth as any,
+        });
       }
-      const ema200 = calculateEMA(visibleData, 200);
+      const ema200 = calculateEMA(visibleData, indicatorSettings.ema200.period);
       ema200Ref.current.setData(ema200.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (ema200Ref.current) {
       chart.removeSeries(ema200Ref.current);
       ema200Ref.current = null;
     }
 
-
-    // RSI ve MACD kendi pane'lerinde (v5 çoklu panel API'si) yaşar: her pane'in
-    // kendi fiyat cetveli vardır, bu yüzden ne birbirleriyle ne de fiyat ekseniyle
-    // çakışırlar. Pane 0 fiyat grafiğidir; alt göstergeler sırayla 1 ve 2'dir.
+    // RSI ve MACD kendi pane'lerinde (v5 çoklu panel API'si) yaşar
     const rsiPaneIndex = 1;
     const macdPaneIndex = indicators.rsi ? 2 : 1;
 
     if (indicators.rsi) {
       if (!rsiRef.current) {
         rsiRef.current = chart.addSeries(LineSeries, {
-          color: '#ffffff',
-          lineWidth: 2,
+          color: indicatorSettings.rsi.color,
+          lineWidth: indicatorSettings.rsi.lineWidth as any,
           title: '',
           lastValueVisible: false,
           priceLineVisible: false,
@@ -1522,16 +1541,48 @@ export default function CandleChart({
           }),
         }, rsiPaneIndex);
 
-        rsiPriceLinesRef.current.overbought = rsiRef.current.createPriceLine({ price: rsiSettings.overbought, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
-        rsiPriceLinesRef.current.middle = rsiRef.current.createPriceLine({ price: 50, color: 'rgba(148, 163, 184, 0.4)', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '' });
-        rsiPriceLinesRef.current.oversold = rsiRef.current.createPriceLine({ price: rsiSettings.oversold, color: 'rgba(16, 185, 129, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+        rsiPriceLinesRef.current.overbought = rsiRef.current.createPriceLine({
+          price: indicatorSettings.rsi.overbought,
+          color: indicatorSettings.rsi.overboughtColor,
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        });
+        rsiPriceLinesRef.current.middle = rsiRef.current.createPriceLine({
+          price: 50,
+          color: indicatorSettings.rsi.middleColor,
+          lineWidth: 1,
+          lineStyle: 3,
+          axisLabelVisible: true,
+          title: '',
+        });
+        rsiPriceLinesRef.current.oversold = rsiRef.current.createPriceLine({
+          price: indicatorSettings.rsi.oversold,
+          color: indicatorSettings.rsi.oversoldColor,
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: '',
+        });
       } else {
-        // Seviyeler kullanıcı tarafından değiştirilmiş olabilir; seriyi yeniden
-        // oluşturmadan sadece fiyat çizgilerinin konumunu güncelle.
-        rsiPriceLinesRef.current.overbought?.applyOptions({ price: rsiSettings.overbought });
-        rsiPriceLinesRef.current.oversold?.applyOptions({ price: rsiSettings.oversold });
+        rsiRef.current.applyOptions({
+          color: indicatorSettings.rsi.color,
+          lineWidth: indicatorSettings.rsi.lineWidth as any,
+        });
+        rsiPriceLinesRef.current.overbought?.applyOptions({
+          price: indicatorSettings.rsi.overbought,
+          color: indicatorSettings.rsi.overboughtColor,
+        });
+        rsiPriceLinesRef.current.middle?.applyOptions({
+          color: indicatorSettings.rsi.middleColor,
+        });
+        rsiPriceLinesRef.current.oversold?.applyOptions({
+          price: indicatorSettings.rsi.oversold,
+          color: indicatorSettings.rsi.oversoldColor,
+        });
       }
-      const rsi = calculateRSI(visibleData, rsiSettings.period);
+      const rsi = calculateRSI(visibleData, indicatorSettings.rsi.period);
       rsiRef.current.setData(rsi.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (rsiRef.current) {
       chart.removeSeries(rsiRef.current);
@@ -1542,17 +1593,32 @@ export default function CandleChart({
     if (indicators.macd) {
       if (!macdHistRef.current || !macdLineRef.current || !macdSignalRef.current) {
         macdHistRef.current = chart.addSeries(HistogramSeries, { title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
-        macdLineRef.current = chart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
-        macdSignalRef.current = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
+        macdLineRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.macdColor, lineWidth: indicatorSettings.macd.macdWidth as any, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
+        macdSignalRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.signalColor, lineWidth: indicatorSettings.macd.signalWidth as any, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
       } else {
-        // RSI açılıp kapandığında MACD'nin pane sırası kayar; serileri yeniden
-        // oluşturmadan doğru pane'e taşı.
         for (const s of [macdHistRef.current, macdLineRef.current, macdSignalRef.current]) {
           if (s.getPane().paneIndex() !== macdPaneIndex) s.moveToPane(macdPaneIndex);
         }
+        macdLineRef.current.applyOptions({
+          color: indicatorSettings.macd.macdColor,
+          lineWidth: indicatorSettings.macd.macdWidth as any,
+        });
+        macdSignalRef.current.applyOptions({
+          color: indicatorSettings.macd.signalColor,
+          lineWidth: indicatorSettings.macd.signalWidth as any,
+        });
       }
-      const macd = calculateMACD(visibleData, 12, 26, 9);
-      macdHistRef.current.setData(macd.histogram.map(d => ({ time: d.time as Time, value: d.value, color: d.color })));
+      const macd = calculateMACD(
+        visibleData,
+        indicatorSettings.macd.fastPeriod,
+        indicatorSettings.macd.slowPeriod,
+        indicatorSettings.macd.signalPeriod
+      );
+      macdHistRef.current.setData(macd.histogram.map(d => ({
+        time: d.time as Time,
+        value: d.value,
+        color: d.value >= 0 ? indicatorSettings.macd.histUpColor : indicatorSettings.macd.histDownColor,
+      })));
       macdLineRef.current.setData(macd.macd.map(d => ({ time: d.time as Time, value: d.value })));
       macdSignalRef.current.setData(macd.signal.map(d => ({ time: d.time as Time, value: d.value })));
     } else {
@@ -1561,32 +1627,45 @@ export default function CandleChart({
       if (macdSignalRef.current) { chart.removeSeries(macdSignalRef.current); macdSignalRef.current = null; }
     }
 
-    // Bollinger Bands (BB) - Sarı Üst/Alt Bant, Gri Orta Bant (20, 2)
+    // Bollinger Bands (BB)
     if (indicators.bb) {
       if (!bbUpperRef.current || !bbMiddleRef.current || !bbLowerRef.current) {
         bbUpperRef.current = chart.addSeries(LineSeries, {
-          color: '#eab308', // Canlı Sarı (Üst Bant)
-          lineWidth: 2,
+          color: indicatorSettings.bb.upperColor,
+          lineWidth: indicatorSettings.bb.upperWidth as any,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
         bbMiddleRef.current = chart.addSeries(LineSeries, {
-          color: '#94a3b8', // Gri / Slate (Orta Bant - SMA 20)
-          lineWidth: 1,
+          color: indicatorSettings.bb.middleColor,
+          lineWidth: indicatorSettings.bb.middleWidth as any,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
         bbLowerRef.current = chart.addSeries(LineSeries, {
-          color: '#eab308', // Canlı Sarı (Alt Bant)
-          lineWidth: 2,
+          color: indicatorSettings.bb.lowerColor,
+          lineWidth: indicatorSettings.bb.lowerWidth as any,
           lastValueVisible: false,
           priceLineVisible: false,
           title: '',
         });
+      } else {
+        bbUpperRef.current.applyOptions({
+          color: indicatorSettings.bb.upperColor,
+          lineWidth: indicatorSettings.bb.upperWidth as any,
+        });
+        bbMiddleRef.current.applyOptions({
+          color: indicatorSettings.bb.middleColor,
+          lineWidth: indicatorSettings.bb.middleWidth as any,
+        });
+        bbLowerRef.current.applyOptions({
+          color: indicatorSettings.bb.lowerColor,
+          lineWidth: indicatorSettings.bb.lowerWidth as any,
+        });
       }
-      const bb = calculateBollingerBands(visibleData, 20, 2);
+      const bb = calculateBollingerBands(visibleData, indicatorSettings.bb.period, indicatorSettings.bb.stdDev);
       bbUpperRef.current.setData(bb.upper.map(d => ({ time: d.time as Time, value: d.value })));
       bbMiddleRef.current.setData(bb.middle.map(d => ({ time: d.time as Time, value: d.value })));
       bbLowerRef.current.setData(bb.lower.map(d => ({ time: d.time as Time, value: d.value })));
@@ -1595,7 +1674,79 @@ export default function CandleChart({
       if (bbMiddleRef.current) { chart.removeSeries(bbMiddleRef.current); bbMiddleRef.current = null; }
       if (bbLowerRef.current) { chart.removeSeries(bbLowerRef.current); bbLowerRef.current = null; }
     }
-  }, [visibleData, indicators, rsiSettings]);
+  }, [visibleData, indicators, indicatorSettings]);
+
+  // Grafikteki gösterge çizgilerine tıklanıldığında ilgili ayar penceresini açar
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const handleChartClick = (param: any) => {
+      if (!param || !param.seriesData) return;
+      for (const [series] of param.seriesData.entries()) {
+        if (series === ema20Ref.current) { setEditingIndicator('ema20'); return; }
+        if (series === ema50Ref.current) { setEditingIndicator('ema50'); return; }
+        if (series === ema100Ref.current) { setEditingIndicator('ema100'); return; }
+        if (series === ema200Ref.current) { setEditingIndicator('ema200'); return; }
+        if (series === rsiRef.current) { setEditingIndicator('rsi'); return; }
+        if (series === macdLineRef.current || series === macdSignalRef.current || series === macdHistRef.current) { setEditingIndicator('macd'); return; }
+        if (series === bbUpperRef.current || series === bbMiddleRef.current || series === bbLowerRef.current) { setEditingIndicator('bb'); return; }
+      }
+    };
+
+    chart.subscribeClick(handleChartClick);
+    return () => {
+      chart.unsubscribeClick(handleChartClick);
+    };
+  }, []);
+
+  const latestIndicatorValues = useMemo(() => {
+    if (!visibleData || visibleData.length === 0) return {};
+    const res: Record<string, any> = {};
+
+    if (indicators.ema20) {
+      const ema = calculateEMA(visibleData, indicatorSettings.ema20.period);
+      res.ema20 = ema.length > 0 ? ema[ema.length - 1].value : null;
+    }
+    if (indicators.ema50) {
+      const ema = calculateEMA(visibleData, indicatorSettings.ema50.period);
+      res.ema50 = ema.length > 0 ? ema[ema.length - 1].value : null;
+    }
+    if (indicators.ema100) {
+      const ema = calculateEMA(visibleData, indicatorSettings.ema100.period);
+      res.ema100 = ema.length > 0 ? ema[ema.length - 1].value : null;
+    }
+    if (indicators.ema200) {
+      const ema = calculateEMA(visibleData, indicatorSettings.ema200.period);
+      res.ema200 = ema.length > 0 ? ema[ema.length - 1].value : null;
+    }
+    if (indicators.bb) {
+      const bb = calculateBollingerBands(visibleData, indicatorSettings.bb.period, indicatorSettings.bb.stdDev);
+      if (bb.upper.length > 0) {
+        res.bb = {
+          upper: bb.upper[bb.upper.length - 1].value,
+          middle: bb.middle[bb.middle.length - 1].value,
+          lower: bb.lower[bb.lower.length - 1].value,
+        };
+      }
+    }
+    if (indicators.rsi) {
+      const rsi = calculateRSI(visibleData, indicatorSettings.rsi.period);
+      res.rsi = rsi.length > 0 ? rsi[rsi.length - 1].value : null;
+    }
+    if (indicators.macd) {
+      const macd = calculateMACD(visibleData, indicatorSettings.macd.fastPeriod, indicatorSettings.macd.slowPeriod, indicatorSettings.macd.signalPeriod);
+      if (macd.macd.length > 0) {
+        res.macd = {
+          macd: macd.macd[macd.macd.length - 1].value,
+          signal: macd.signal[macd.signal.length - 1].value,
+          hist: macd.histogram[macd.histogram.length - 1].value,
+        };
+      }
+    }
+    return res;
+  }, [visibleData, indicators, indicatorSettings]);
+
 
   // --- PANE YERLEŞİMİ ---
   // v5'te RSI/MACD ayrı pane'lerde durur; her pane kendi fiyat cetvelini yönetir.
@@ -1860,21 +2011,21 @@ export default function CandleChart({
                 {Object.keys(indicators).map((key) => {
                   const indKey = key as keyof IndicatorsState;
                   const labels: Record<string, string> = {
-                    ema20: 'EMA 20',
-                    ema50: 'EMA 50',
-                    ema100: 'EMA 100',
-                    ema200: 'EMA 200',
-                    rsi: `RSI (${rsiSettings.period})`,
-                    macd: 'MACD (12, 26, 9)',
-                    bb: 'Bollinger Bands (20, 2)',
+                    ema20: `EMA ${indicatorSettings.ema20.period}`,
+                    ema50: `EMA ${indicatorSettings.ema50.period}`,
+                    ema100: `EMA ${indicatorSettings.ema100.period}`,
+                    ema200: `EMA ${indicatorSettings.ema200.period}`,
+                    rsi: `RSI (${indicatorSettings.rsi.period})`,
+                    macd: `MACD (${indicatorSettings.macd.fastPeriod}, ${indicatorSettings.macd.slowPeriod}, ${indicatorSettings.macd.signalPeriod})`,
+                    bb: `Bollinger (${indicatorSettings.bb.period}, ${indicatorSettings.bb.stdDev})`,
                   };
                   const colors: Record<string, string> = {
                     ema20: 'bg-amber-500',
                     ema50: 'bg-cyan-500',
                     ema100: 'bg-purple-500',
                     ema200: 'bg-pink-500',
-                    rsi: 'bg-slate-300',
-                    macd: 'bg-emerald-500',
+                    rsi: 'bg-sky-400',
+                    macd: 'bg-blue-500',
                     bb: 'bg-yellow-400',
                   };
                   return (
@@ -1887,12 +2038,12 @@ export default function CandleChart({
                           <span className="text-xs text-slate-200">{labels[indKey]}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          {indKey === 'rsi' && (
+                          {indicators[indKey] && (
                             <button
                               type="button"
-                              title="RSI ayarları"
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsRsiSettingsOpen(v => !v); }}
-                              className={`p-0.5 rounded transition-colors ${isRsiSettingsOpen ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`}
+                              title={`${labels[indKey]} ayarları`}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingIndicator(indKey as keyof IndicatorSettingsMap); }}
+                              className="p-0.5 rounded transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
                             >
                               <Settings2 className="w-3.5 h-3.5" />
                             </button>
@@ -1905,32 +2056,6 @@ export default function CandleChart({
                           />
                         </div>
                       </label>
-
-                      {indKey === 'rsi' && isRsiSettingsOpen && (
-                        <div className="mx-2 mb-1.5 mt-0.5 p-2 rounded-lg bg-[#070b13]/80 border border-slate-800 space-y-1.5">
-                          {([
-                            ['period', 'Periyot'],
-                            ['overbought', 'Aşırı Alım'],
-                            ['oversold', 'Aşırı Satım'],
-                          ] as const).map(([field, label]) => (
-                            <label key={field} className="flex items-center justify-between gap-2 text-[11px] text-slate-300">
-                              <span>{label}</span>
-                              <input
-                                type="number"
-                                value={rsiSettings[field]}
-                                min={field === 'period' ? 2 : 1}
-                                max={field === 'period' ? 100 : 99}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value);
-                                  if (!isNaN(val)) chartSettingsApi.setRsiSettings({ [field]: val });
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-16 bg-[#0d1321] border border-slate-700 rounded px-1.5 py-0.5 text-right text-slate-100 focus:outline-none focus:border-indigo-500"
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -2210,6 +2335,121 @@ export default function CandleChart({
 
       <div ref={chartContainerRef} className="w-full h-full" />
 
+      {/* Göstergeler İçin Canlı Lejant ve Hızlı Ayarlar (TradingView Tarzı) */}
+      <div className="absolute top-[62px] left-14 z-20 flex flex-wrap gap-1.5 pointer-events-auto">
+        {(['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).map((key) => {
+          if (!indicators[key]) return null;
+          const conf = indicatorSettings[key] as any;
+          const val = latestIndicatorValues[key];
+          const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
+          const color = key === 'bb' ? conf.upperColor : conf.color;
+
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0d1321]/80 border border-slate-800 text-[11px] shadow-sm backdrop-blur-xs select-none"
+            >
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+              <span className="font-semibold text-slate-200">{label}</span>
+              {val !== undefined && val !== null && (
+                <span className="font-mono text-slate-400 text-[10px]">
+                  {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
+                </span>
+              )}
+              <button
+                type="button"
+                title={`${label} Ayarları`}
+                onClick={() => setEditingIndicator(key)}
+                className="p-0.5 text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                <Settings2 className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                title="Kapat"
+                onClick={() => onToggleIndicator(key)}
+                className="p-0.5 text-slate-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Alt Panel Gösterge Ayarları ve Lejantları (RSI & MACD) */}
+      {(indicators.rsi || indicators.macd) && (
+        <div className="absolute bottom-3 left-3 z-20 flex flex-wrap gap-2 pointer-events-auto">
+          {indicators.rsi && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0d1321]/90 border border-slate-800 text-xs shadow-md backdrop-blur-md select-none">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: indicatorSettings.rsi.color }} />
+              <span className="font-semibold text-slate-200">
+                RSI ({indicatorSettings.rsi.period}, {indicatorSettings.rsi.overbought}, {indicatorSettings.rsi.oversold})
+              </span>
+              {latestIndicatorValues.rsi !== undefined && latestIndicatorValues.rsi !== null && (
+                <span className="font-mono font-bold text-sky-400 ml-1">
+                  {latestIndicatorValues.rsi.toFixed(2)}
+                </span>
+              )}
+              <button
+                type="button"
+                title="RSI Ayarlarını Aç"
+                onClick={() => setEditingIndicator('rsi')}
+                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-indigo-300 transition-colors ml-1 cursor-pointer"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                title="RSI Kapat"
+                onClick={() => onToggleIndicator('rsi')}
+                className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {indicators.macd && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0d1321]/90 border border-slate-800 text-xs shadow-md backdrop-blur-md select-none">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: indicatorSettings.macd.macdColor }} />
+              <span className="font-semibold text-slate-200">
+                MACD ({indicatorSettings.macd.fastPeriod}, {indicatorSettings.macd.slowPeriod}, {indicatorSettings.macd.signalPeriod})
+              </span>
+              {latestIndicatorValues.macd && (
+                <span className="font-mono text-[11px] text-slate-300 ml-1 flex items-center gap-1">
+                  <span className="text-blue-400">{latestIndicatorValues.macd.macd.toFixed(2)}</span>
+                  <span className="text-amber-400">{latestIndicatorValues.macd.signal.toFixed(2)}</span>
+                </span>
+              )}
+              <button
+                type="button"
+                title="MACD Ayarlarını Aç"
+                onClick={() => setEditingIndicator('macd')}
+                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-indigo-300 transition-colors ml-1 cursor-pointer"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                title="MACD Kapat"
+                onClick={() => onToggleIndicator('macd')}
+                className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Gösterge Ayarları Modal Penceresi */}
+      <IndicatorSettingsModal
+        isOpen={!!editingIndicator}
+        indicatorKey={editingIndicator}
+        onClose={() => setEditingIndicator(null)}
+      />
+
       {/* Sembol Arama Modal Penceresi */}
       <SymbolSearchModal
         isOpen={isSearchModalOpen}
@@ -2223,4 +2463,5 @@ export default function CandleChart({
     </div>
   );
 }
+
 

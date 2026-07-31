@@ -1,11 +1,11 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.abspath("."))
 
 from fastapi.testclient import TestClient
 from main import app
 
-from app.database.postgres import Base, engine, get_db
-from app.database.models import User
 import jwt
 
 client = TestClient(app)

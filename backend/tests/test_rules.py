@@ -10,7 +10,6 @@ from app.rules.conditions import (
     gt, lt, gte, lte, eq, neq, cross_above, cross_below, between
 )
 from app.indicators.registry import IndicatorRegistry
-from app.rules.evaluator import RuleEvaluator
 from app.rules.engine import RuleEngine, SignalType
 
 

@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional, List, Dict
+
+from fastapi import APIRouter, HTTPException, Query
+
 from app.data.loader import DataLoader
 from app.data.symbols import get_symbols, search_symbols
 
@@ -22,8 +25,6 @@ def search_market_symbols(
     """Search for symbols across BIST, NASDAQ, and Binance."""
     return search_symbols(q, provider)
 
-
-from concurrent.futures import ThreadPoolExecutor
 
 @router.get("/quotes")
 def get_market_quotes(

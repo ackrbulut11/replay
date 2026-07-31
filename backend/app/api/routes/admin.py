@@ -354,7 +354,6 @@ def _extract_rules_text(group: Any) -> List[str]:
     """Bir condition grubunun koşullarını metin listesi olarak döndürür."""
     if not isinstance(group, dict):
         return []
-    logic = group.get("logic", "AND")
     conditions = group.get("conditions") or []
     texts = [_describe_condition(c) for c in conditions if isinstance(c, dict)]
     return texts

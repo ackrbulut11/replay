@@ -48,9 +48,30 @@ export interface PixelDrawing {
  * sıfır uzunluklu bir segmenti `lineCap: 'round'` ile birleştirerek elde edilir.
  */
 function dashPatternFor(lineStyle: DrawingLineStyle | undefined, lineWidth: number): number[] {
-  if (lineStyle === 'dashed') return [Math.max(8, lineWidth * 4), Math.max(6, lineWidth * 3)];
-  if (lineStyle === 'dotted') return [0.001, Math.max(7, lineWidth * 3.5)];
+  if (lineStyle === 'dashed') return [Math.max(12, lineWidth * 6), Math.max(8, lineWidth * 4)];
+  if (lineStyle === 'dotted') return [0.01, Math.max(6, lineWidth * 3)];
   return [];
+}
+
+/**
+ * Çizginin arkasına koyu bir "hale" (halo) çizerek gerçek çizim rengini
+ * arka plandaki gridler/mumlarla karışıp bulanıklaşmaktan korur. Kenar
+ * yumuşatma (anti-aliasing) ince çizgilerde arka planla renk karışımına
+ * (color bleeding) yol açıyor, bu yüzden asıl renk her zaman koyu bir
+ * kontur üzerine çizilir.
+ */
+function strokeWithHalo(ctx: CanvasRenderingContext2D, color: string, lineWidth: number, dash: number[]) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.lineWidth = lineWidth + 2;
+  ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash(dash);
+  ctx.stroke();
 }
 
 const HANDLE_RADIUS = 5;
@@ -295,7 +316,8 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         ctx.beginPath();
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[1].x, d.points[1].y);
-        ctx.stroke();
+        if (isPreview) ctx.stroke();
+        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
         break;
       }
 
@@ -303,7 +325,8 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         ctx.beginPath();
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[0].x + 99999, d.points[0].y);
-        ctx.stroke();
+        if (isPreview) ctx.stroke();
+        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
         break;
       }
 
@@ -328,7 +351,20 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         }
 
         // Kenar çizgisi
-        ctx.strokeRect(x, y, w, h);
+        if (isPreview) {
+          ctx.strokeRect(x, y, w, h);
+        } else {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.lineWidth = lw + 2;
+          ctx.setLineDash(dash ?? []);
+          ctx.strokeRect(x, y, w, h);
+          ctx.restore();
+          ctx.strokeStyle = d.color;
+          ctx.lineWidth = lw;
+          ctx.setLineDash(dash ?? []);
+          ctx.strokeRect(x, y, w, h);
+        }
         break;
       }
 
@@ -344,13 +380,15 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         ctx.beginPath();
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[1].x, d.points[1].y);
-        ctx.stroke();
+        if (isPreview) ctx.stroke();
+        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
 
         // Alt sınır çizgisi (3. tıklamayla ofsetlenmiş paralel)
         ctx.beginPath();
         ctx.moveTo(d.points[2].x, d.points[2].y);
         ctx.lineTo(p2x, p2y);
-        ctx.stroke();
+        if (isPreview) ctx.stroke();
+        else strokeWithHalo(ctx, d.color, lw, dash ?? []);
 
         // Ortadaki kesikli orta çizgi
         const midStartX = (d.points[0].x + d.points[2].x) / 2;

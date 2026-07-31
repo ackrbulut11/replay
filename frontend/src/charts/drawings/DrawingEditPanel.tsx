@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react';
-import type { DrawingEditOptions } from './types';
+import { LINE_STYLES, LINE_STYLE_CAPABLE_TOOLS } from './types';
+import type { DrawingEditOptions, DrawingTool } from './types';
 
 interface DrawingEditPanelProps {
   options: DrawingEditOptions;
@@ -12,6 +13,7 @@ interface DrawingEditPanelProps {
 
 export default function DrawingEditPanel({ options, onChange, onDelete, title = 'Edit:', isRuler = false, tool }: DrawingEditPanelProps) {
   const isRectangle = tool === 'rectangle';
+  const supportsLineStyle = tool != null && LINE_STYLE_CAPABLE_TOOLS.has(tool as DrawingTool);
 
   return (
     <div className="flex items-center gap-3 bg-[#0d1321]/95 border border-slate-700 rounded-lg px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
@@ -73,6 +75,21 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
             />
             <span className="text-slate-400 w-6 font-mono">{Math.round(options.opacity * 100)}%</span>
           </label>
+
+          {supportsLineStyle && (
+            <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+              <span>Çizgi</span>
+              <select
+                value={options.lineStyle ?? 'solid'}
+                onChange={(e) => onChange({ ...options, lineStyle: e.target.value as DrawingEditOptions['lineStyle'] })}
+                className="bg-[#070b13] border border-slate-700 rounded px-1.5 py-1 text-slate-100 cursor-pointer"
+              >
+                {LINE_STYLES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {isRectangle && (
             <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">

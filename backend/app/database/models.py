@@ -49,6 +49,9 @@ class User(Base):
     drawing_usage_events = relationship(
         "DrawingUsageEvent", back_populates="user", cascade="all, delete-orphan"
     )
+    chart_settings = relationship(
+        "ChartSettings", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class Strategy(Base):
@@ -207,6 +210,33 @@ class Watchlist(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="watchlist")
+
+
+class ChartSettings(Base):
+    """
+    Kullanıcının grafik tercihleri (kullanıcı başına tek satır).
+
+    RSI period/aşırı alım-satım seviyeleri ve çizim araçlarının varsayılan
+    stilleri (renk, kalınlık, opaklık, çizgi tipi) burada tutulur. Şema
+    bilinçli olarak gevşek (JSON) tutulmuştur; arayüze yeni bir gösterge veya
+    çizim aracı eklemek migration gerektirmesin diye (bkz. Watchlist).
+    """
+
+    __tablename__ = "chart_settings"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        unique=True,
+        nullable=False,
+    )
+    rsi = Column(JSON, nullable=False, default=dict)
+    drawing_defaults = Column(JSON, nullable=False, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="chart_settings")
 
 
 class ReplaySession(Base):

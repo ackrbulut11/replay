@@ -10,7 +10,7 @@ import type {
   Time,
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
-import type { Drawing, DrawingPoint } from './types';
+import type { Drawing, DrawingLineStyle, DrawingPoint } from './types';
 import { HIT_THRESHOLD } from './types';
 
 export interface CandleData {
@@ -34,8 +34,16 @@ export interface PixelDrawing {
   color: string;
   lineWidth: number;
   opacity: number;
+  lineStyle?: DrawingLineStyle;
   fillOpacity?: number;
   logicalPoints?: DrawingPoint[];
+}
+
+/** `lineStyle`'ı canvas'ın `setLineDash` deseline çevirir; kalınlığa göre ölçeklenir. */
+function dashPatternFor(lineStyle: DrawingLineStyle | undefined, lineWidth: number): number[] {
+  if (lineStyle === 'dashed') return [lineWidth * 3, lineWidth * 2];
+  if (lineStyle === 'dotted') return [lineWidth, lineWidth * 1.6];
+  return [];
 }
 
 const HANDLE_RADIUS = 5;
@@ -269,6 +277,10 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
     const lw = isPreview ? 1.5 : d.lineWidth;
     ctx.strokeStyle = d.color;
     ctx.lineWidth = lw;
+    // Önizlemede kesikli çizim zaten dışarıdan (draw()) uygulanıyor; kullanıcının
+    // seçtiği çizgi tipi yalnızca kalıcı çizimlerde uygulanır.
+    const dash = isPreview ? null : dashPatternFor(d.lineStyle, lw);
+    if (dash) ctx.setLineDash(dash);
 
     switch (d.tool) {
       case 'trendLine': {
@@ -296,13 +308,16 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         const h = Math.abs(d.points[1].y - d.points[0].y);
         if (!isFinite(w) || !isFinite(h)) return;
 
-        // İç dolgu
+        // İç dolgu (dolgu her zaman düz renk; çizgi tipi yalnızca kenarlığa uygulanır)
         if (d.fillOpacity != null && d.fillOpacity > 0) {
           const savedAlpha = ctx.globalAlpha;
+          const savedDash = ctx.getLineDash();
+          ctx.setLineDash([]);
           ctx.globalAlpha = savedAlpha * d.fillOpacity;
           ctx.fillStyle = d.color;
           ctx.fillRect(x, y, w, h);
           ctx.globalAlpha = savedAlpha;
+          ctx.setLineDash(savedDash);
         }
 
         // Kenar çizgisi
@@ -603,6 +618,10 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
       }
     }
 
+    // Tutamaçlar (handles) her zaman düz çizilir; kesikli/noktalı çizgi
+    // deseni sonraki çizimlere sızmasın diye burada sıfırlanır.
+    ctx.setLineDash([]);
+
     if (showHandles) {
       this._drawHandles(ctx, d);
     }
@@ -854,6 +873,7 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
       color: d.color,
       lineWidth: d.lineWidth,
       opacity: d.opacity,
+      lineStyle: d.lineStyle,
       fillOpacity: d.fillOpacity,
       logicalPoints: d.points,
     };

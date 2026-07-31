@@ -48,4 +48,4 @@ jobs:
       - name: Unit tests
         run: |
           cd backend
-          python -m unittest tests.test_rules tests.test_strategy_api tests.test_alerts tests.test_auth_api tests.test_waitlist_api tests.test_admin_api
+          python -m unittest tests.test_rules tests.test_strategy_api tests.test_alerts tests.test_auth_api tests.test_waitlist_api tests.test_admin_api tests.test_chart_settings_api

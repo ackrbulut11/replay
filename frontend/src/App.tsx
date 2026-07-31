@@ -6,6 +6,7 @@ import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import { watchlistStore } from './store/watchlistStore';
+import { chartSettingsStore } from './store/chartSettingsStore';
 import { strategyStore } from './store/strategyStore';
 import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';
@@ -79,6 +80,8 @@ function App() {
       watchlistStore.syncFromServer();
       // Tekli test geçmişi de kullanıcıya bağlı olarak sunucuda tutuluyor.
       strategyStore.fetchEvalHistory();
+      // RSI ayarları ve çizim araçlarının varsayılan stilleri de kullanıcıya bağlı.
+      chartSettingsStore.syncFromServer();
     }
   }, [isAuthenticated, user?.id]);
 

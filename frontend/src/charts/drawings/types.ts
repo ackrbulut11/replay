@@ -1,5 +1,7 @@
 export type DrawingTool = 'pointer' | 'ruler' | 'trendLine' | 'horizontalRay' | 'rectangle' | 'parallelChannel' | 'longPosition' | 'shortPosition';
 
+export type DrawingLineStyle = 'solid' | 'dashed' | 'dotted';
+
 export interface DrawingPoint {
   time: number;
   price: number;
@@ -12,6 +14,7 @@ export interface Drawing {
   color: string;
   lineWidth: number;
   opacity: number;
+  lineStyle?: DrawingLineStyle;
   fillOpacity?: number;
 }
 
@@ -19,6 +22,7 @@ export interface DrawingEditOptions {
   color: string;
   lineWidth: number;
   opacity: number;
+  lineStyle?: DrawingLineStyle;
   fillOpacity?: number;
 }
 
@@ -31,6 +35,18 @@ export const DRAWING_COLORS = [
 export const DEFAULT_DRAWING_COLOR = DRAWING_COLORS[0];
 export const DEFAULT_LINE_WIDTH = 2;
 export const DEFAULT_OPACITY = 1;
+export const DEFAULT_LINE_STYLE: DrawingLineStyle = 'solid';
+
+export const LINE_STYLES: { value: DrawingLineStyle; label: string }[] = [
+  { value: 'solid', label: 'Düz' },
+  { value: 'dashed', label: 'Kesikli' },
+  { value: 'dotted', label: 'Noktalı' },
+];
+
+/** Yalnızca çizgi tabanlı araçlarda çizgi tipi seçilebilir (dikdörtgen dolgusu, cetvel vb. hariç). */
+export const LINE_STYLE_CAPABLE_TOOLS: ReadonlySet<DrawingTool> = new Set([
+  'trendLine', 'horizontalRay', 'rectangle', 'parallelChannel',
+]);
 
 export const HIT_THRESHOLD = 8;
 

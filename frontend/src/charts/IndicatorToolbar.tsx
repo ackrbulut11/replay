@@ -31,7 +31,7 @@ export default function IndicatorToolbar({ state, onToggle }: IndicatorToolbarPr
     { key: 'ema50', label: 'EMA 50', badgeColor: 'border-cyan-500/60 text-cyan-400 bg-cyan-500/10' },
     { key: 'ema100', label: 'EMA 100', badgeColor: 'border-purple-500/60 text-purple-400 bg-purple-500/10' },
     { key: 'ema200', label: 'EMA 200', badgeColor: 'border-pink-500/60 text-pink-400 bg-pink-500/10' },
-    { key: 'rsi', label: 'RSI (14)', badgeColor: 'border-slate-300/60 text-slate-200 bg-slate-500/10' },
+    { key: 'rsi', label: 'RSI', badgeColor: 'border-slate-300/60 text-slate-200 bg-slate-500/10' },
     { key: 'macd', label: 'MACD (12,26,9)', badgeColor: 'border-emerald-500/60 text-emerald-400 bg-emerald-500/10' },
     { key: 'bb', label: 'Bollinger (20,2)', badgeColor: 'border-yellow-500/60 text-yellow-400 bg-yellow-500/10' },
   ];

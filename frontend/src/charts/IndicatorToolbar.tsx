@@ -39,10 +39,10 @@ export default function IndicatorToolbar({ state, onToggle, onOpenSettings }: In
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 bg-[#0d1321]/90 border border-slate-800/80 rounded-xl p-2 backdrop-blur-md shadow-lg">
-      <div className="flex items-center gap-1.5 px-2 text-slate-400 border-r border-slate-800 pr-3">
-        <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">Göstergeler:</span>
+    <div className="flex flex-wrap items-center gap-2 bg-[#0a0b0e] border border-white/[0.08] rounded-xl p-2 backdrop-blur-md shadow-2xl">
+      <div className="flex items-center gap-1.5 px-2 text-zinc-400 border-r border-white/[0.06] pr-3">
+        <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+        <span className="font-mono text-[10px] tracking-[0.18em] text-zinc-400 uppercase font-semibold">Göstergeler</span>
       </div>
 
       <div className="flex flex-wrap gap-1.5 items-center">
@@ -53,8 +53,8 @@ export default function IndicatorToolbar({ state, onToggle, onOpenSettings }: In
               key={key}
               className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all duration-150 flex items-center gap-1.5 select-none ${
                 isActive
-                  ? `${badgeColor} shadow-sm font-semibold`
-                  : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? `${badgeColor} shadow-xs font-semibold`
+                  : 'bg-white/[0.02] border-white/[0.06] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04]'
               }`}
             >
               <button
@@ -62,7 +62,7 @@ export default function IndicatorToolbar({ state, onToggle, onOpenSettings }: In
                 onClick={() => onToggle(key)}
                 className="flex items-center gap-1.5 cursor-pointer"
               >
-                <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-current animate-pulse' : 'bg-slate-600'}`} />
+                <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-current animate-pulse' : 'bg-zinc-600'}`} />
                 <span>{label}</span>
               </button>
 
@@ -74,7 +74,7 @@ export default function IndicatorToolbar({ state, onToggle, onOpenSettings }: In
                     e.stopPropagation();
                     onOpenSettings(key as keyof IndicatorSettingsMap);
                   }}
-                  className="p-0.5 rounded hover:bg-slate-800/80 text-slate-400 hover:text-white transition-colors cursor-pointer ml-0.5"
+                  className="p-0.5 rounded hover:bg-white/[0.1] text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer ml-0.5"
                 >
                   <Settings2 className="w-3.5 h-3.5" />
                 </button>

@@ -249,26 +249,26 @@ export default function WatchlistPanel({
   return (
     <div
       style={{ width: state.panelWidth }}
-      className="h-full bg-[#0d1321] border-l border-slate-800/80 flex flex-col z-20 shadow-2xl overflow-hidden animate-slideInRight relative shrink-0"
+      className="h-full bg-[#0a0b0e] border-l border-white/[0.06] flex flex-col z-20 shadow-2xl overflow-hidden animate-slideInRight relative shrink-0"
     >
       {/* Resize handle (left edge) */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-indigo-500/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-emerald-500/30 transition-colors"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <GripVertical className="w-3 h-3 text-indigo-400" />
+          <GripVertical className="w-3 h-3 text-emerald-400" />
         </div>
       </div>
 
       {/* Panel Top Header */}
-      <div className="pl-2 pr-3 py-3 border-b border-slate-800 flex items-center justify-between bg-[#070b13]">
+      <div className="pl-2 pr-3 py-3 border-b border-white/[0.06] flex items-center justify-between bg-[#0a0b0e]">
         {/* Watchlist Name Dropdown Selector */}
         <div className="relative">
           <button
             onClick={() => setIsListDropdownOpen(!isListDropdownOpen)}
-            className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/40 text-xs font-bold text-slate-100 transition-all select-none"
+            className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:border-emerald-500/40 text-xs font-medium text-zinc-100 transition-all select-none"
           >
             <span 
               style={{ color: getListHeaderColor() }} 

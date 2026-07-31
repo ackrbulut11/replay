@@ -120,38 +120,38 @@ export default function IndicatorSettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-xs animate-fadeIn"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-[#0d1321] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-scaleUp"
+        className="w-full max-w-md bg-[#0a0b0e] border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-scaleUp text-zinc-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-[#070b13]">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06] bg-[#0a0b0e]">
           <div className="flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-indigo-400" />
-            <h3 className="text-sm font-bold text-slate-100 truncate">
+            <Sliders className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-bold text-zinc-100 truncate">
               {INDICATOR_NAMES[indicatorKey]}
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Selector */}
-        <div className="flex border-b border-slate-800 bg-[#090d16] px-5 pt-2 gap-4 text-xs font-semibold">
+        <div className="flex border-b border-white/[0.06] bg-[#0a0b0e] px-5 pt-2 gap-4 text-xs font-medium">
           <button
             type="button"
             onClick={() => setActiveTab('inputs')}
             className={`flex items-center gap-1.5 pb-2.5 border-b-2 transition-all ${
               activeTab === 'inputs'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-emerald-400 text-emerald-400 font-semibold'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
             <Sliders className="w-3.5 h-3.5" />
@@ -162,8 +162,8 @@ export default function IndicatorSettingsModal({
             onClick={() => setActiveTab('style')}
             className={`flex items-center gap-1.5 pb-2.5 border-b-2 transition-all ${
               activeTab === 'style'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-emerald-400 text-emerald-400 font-semibold'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
             <Palette className="w-3.5 h-3.5" />
@@ -171,47 +171,47 @@ export default function IndicatorSettingsModal({
           </button>
         </div>
 
-        {/* Modal Content */}
+        {/* Content Body */}
         <div className="p-5 overflow-y-auto space-y-4 text-xs">
-          {activeTab === 'inputs' && (
-            <div className="space-y-3">
-              {indicatorKey.startsWith('ema') && (
-                <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                  <span className="font-medium text-slate-200">EMA Periyodu</span>
+          {activeTab === 'inputs' ? (
+            <div className="space-y-4">
+              {(indicatorKey === 'ema20' || indicatorKey === 'ema50' || indicatorKey === 'ema100' || indicatorKey === 'ema200') && (
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-300 font-medium">Periyot (Period)</span>
                   <input
                     type="number"
                     min={1}
                     max={500}
                     value={(currentSettings as any).period}
-                    onChange={(e) => updateSetting('period', Math.max(1, Number(e.target.value)))}
-                    className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                    onChange={(e) => updateSetting('period', parseInt(e.target.value) || 20)}
+                    className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                   />
                 </div>
               )}
 
               {indicatorKey === 'bb' && (
                 <>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">Uzunluk (Periyot)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">Periyot (Period)</span>
                     <input
                       type="number"
                       min={1}
                       max={200}
                       value={(currentSettings as any).period}
-                      onChange={(e) => updateSetting('period', Math.max(1, Number(e.target.value)))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('period', parseInt(e.target.value) || 20)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">Standart Sapma (StdDev)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">Standart Sapma (StdDev)</span>
                     <input
                       type="number"
                       step={0.1}
                       min={0.1}
                       max={10}
                       value={(currentSettings as any).stdDev}
-                      onChange={(e) => updateSetting('stdDev', Math.max(0.1, Number(e.target.value)))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('stdDev', parseFloat(e.target.value) || 2)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
                 </>
@@ -219,37 +219,37 @@ export default function IndicatorSettingsModal({
 
               {indicatorKey === 'rsi' && (
                 <>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">RSI Uzunluğu (Periyot)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">RSI Periyodu</span>
                     <input
                       type="number"
-                      min={2}
+                      min={1}
                       max={100}
                       value={(currentSettings as any).period}
-                      onChange={(e) => updateSetting('period', Math.max(2, Number(e.target.value)))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('period', parseInt(e.target.value) || 14)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">Aşırı Alım Sınırı (Overbought)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">Aşırı Alım Seviyesi (Overbought)</span>
                     <input
                       type="number"
                       min={50}
                       max={95}
                       value={(currentSettings as any).overbought}
-                      onChange={(e) => updateSetting('overbought', Number(e.target.value))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('overbought', parseInt(e.target.value) || 75)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">Aşırı Satım Sınırı (Oversold)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">Aşırı Satım Seviyesi (Oversold)</span>
                     <input
                       type="number"
                       min={5}
                       max={50}
                       value={(currentSettings as any).oversold}
-                      onChange={(e) => updateSetting('oversold', Number(e.target.value))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('oversold', parseInt(e.target.value) || 25)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
                 </>
@@ -257,103 +257,79 @@ export default function IndicatorSettingsModal({
 
               {indicatorKey === 'macd' && (
                 <>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">Hızlı Periyot (Fast EMA)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">Hızlı Periyot (Fast Period)</span>
                     <input
                       type="number"
                       min={1}
                       max={100}
                       value={(currentSettings as any).fastPeriod}
-                      onChange={(e) => updateSetting('fastPeriod', Math.max(1, Number(e.target.value)))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('fastPeriod', parseInt(e.target.value) || 12)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">Yavaş Periyot (Slow EMA)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">Yavaş Periyot (Slow Period)</span>
                     <input
                       type="number"
                       min={1}
                       max={200}
                       value={(currentSettings as any).slowPeriod}
-                      onChange={(e) => updateSetting('slowPeriod', Math.max(1, Number(e.target.value)))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('slowPeriod', parseInt(e.target.value) || 26)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
-                  <div className="flex items-center justify-between bg-[#070b13] p-3 rounded-xl border border-slate-800">
-                    <span className="font-medium text-slate-200">Sinyal Periyodu (Signal)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-300 font-medium">Sinyal Periyodu (Signal Period)</span>
                     <input
                       type="number"
                       min={1}
                       max={50}
                       value={(currentSettings as any).signalPeriod}
-                      onChange={(e) => updateSetting('signalPeriod', Math.max(1, Number(e.target.value)))}
-                      className="w-20 bg-[#0d1321] border border-slate-700 rounded-lg px-2.5 py-1 text-right text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                      onChange={(e) => updateSetting('signalPeriod', parseInt(e.target.value) || 9)}
+                      className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1 text-right text-zinc-100 focus:outline-none focus:border-emerald-500/50"
                     />
                   </div>
                 </>
               )}
             </div>
-          )}
-
-          {activeTab === 'style' && (
+          ) : (
             <div className="space-y-4">
-              {indicatorKey.startsWith('ema') && (
-                <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
+              {(indicatorKey === 'ema20' || indicatorKey === 'ema50' || indicatorKey === 'ema100' || indicatorKey === 'ema200') && (
+                <div className="space-y-3">
                   {renderColorPicker('Çizgi Rengi', 'color', (currentSettings as any).color)}
-                  <div className="w-full h-px bg-slate-800/80 my-2" />
                   {renderWidthSelector('Çizgi Kalınlığı', 'lineWidth', (currentSettings as any).lineWidth)}
                 </div>
               )}
 
               {indicatorKey === 'bb' && (
                 <div className="space-y-3">
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
-                    <h4 className="text-xs font-bold text-amber-400">Üst Bant</h4>
-                    {renderColorPicker('Üst Bant Rengi', 'upperColor', (currentSettings as any).upperColor)}
-                    {renderWidthSelector('Üst Bant Kalınlığı', 'upperWidth', (currentSettings as any).upperWidth)}
-                  </div>
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
-                    <h4 className="text-xs font-bold text-slate-400">Orta Bant (SMA 20)</h4>
-                    {renderColorPicker('Orta Bant Rengi', 'middleColor', (currentSettings as any).middleColor)}
-                    {renderWidthSelector('Orta Bant Kalınlığı', 'middleWidth', (currentSettings as any).middleWidth)}
-                  </div>
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
-                    <h4 className="text-xs font-bold text-amber-400">Alt Bant</h4>
-                    {renderColorPicker('Alt Bant Rengi', 'lowerColor', (currentSettings as any).lowerColor)}
-                    {renderWidthSelector('Alt Bant Kalınlığı', 'lowerWidth', (currentSettings as any).lowerWidth)}
-                  </div>
+                  {renderColorPicker('Üst Bant Rengi', 'upperColor', (currentSettings as any).upperColor)}
+                  {renderColorPicker('Orta Bant Rengi', 'middleColor', (currentSettings as any).middleColor)}
+                  {renderColorPicker('Alt Bant Rengi', 'lowerColor', (currentSettings as any).lowerColor)}
                 </div>
               )}
 
               {indicatorKey === 'rsi' && (
                 <div className="space-y-3">
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
-                    <h4 className="text-xs font-bold text-sky-400">RSI Çizgisi</h4>
-                    {renderColorPicker('RSI Rengi', 'color', (currentSettings as any).color)}
-                    {renderWidthSelector('RSI Kalınlığı', 'lineWidth', (currentSettings as any).lineWidth)}
-                  </div>
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
-                    <h4 className="text-xs font-bold text-slate-300">Sınır ve Seviye Çizgileri</h4>
-                    {renderColorPicker('Üst Çizgi (Aşırı Alım)', 'overboughtColor', (currentSettings as any).overboughtColor)}
-                    {renderColorPicker('Orta Çizgi (50)', 'middleColor', (currentSettings as any).middleColor)}
-                    {renderColorPicker('Alt Çizgi (Aşırı Satım)', 'oversoldColor', (currentSettings as any).oversoldColor)}
-                  </div>
+                  {renderColorPicker('RSI Çizgi Rengi', 'color', (currentSettings as any).color)}
+                  {renderWidthSelector('RSI Çizgi Kalınlığı', 'lineWidth', (currentSettings as any).lineWidth)}
                 </div>
               )}
 
               {indicatorKey === 'macd' && (
                 <div className="space-y-3">
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
-                    <h4 className="text-xs font-bold text-blue-400">MACD Çizgisi</h4>
+                  <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.06] space-y-2">
+                    <h4 className="text-xs font-bold text-emerald-400">MACD Çizgisi</h4>
                     {renderColorPicker('MACD Rengi', 'macdColor', (currentSettings as any).macdColor)}
                     {renderWidthSelector('MACD Kalınlığı', 'macdWidth', (currentSettings as any).macdWidth)}
                   </div>
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.06] space-y-2">
                     <h4 className="text-xs font-bold text-amber-400">Sinyal Çizgisi</h4>
                     {renderColorPicker('Sinyal Rengi', 'signalColor', (currentSettings as any).signalColor)}
                     {renderWidthSelector('Sinyal Kalınlığı', 'signalWidth', (currentSettings as any).signalWidth)}
                   </div>
-                  <div className="bg-[#070b13] p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.06] space-y-2">
                     <h4 className="text-xs font-bold text-emerald-400">Histogram Çubukları</h4>
                     {renderColorPicker('Yükseliş Rengi', 'histUpColor', (currentSettings as any).histUpColor)}
                     {renderColorPicker('Düşüş Rengi', 'histDownColor', (currentSettings as any).histDownColor)}
@@ -365,11 +341,11 @@ export default function IndicatorSettingsModal({
         </div>
 
         {/* Footer Controls */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800 bg-[#070b13]">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.06] bg-[#0a0b0e]">
           <button
             type="button"
             onClick={handleReset}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-400 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-amber-400 transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Varsayılana Sıfırla
@@ -377,7 +353,7 @@ export default function IndicatorSettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-md"
+            className="px-4 py-1.5 text-xs font-medium text-zinc-900 bg-zinc-100 hover:bg-emerald-400 rounded-lg transition-colors shadow-xs"
           >
             Tamam
           </button>

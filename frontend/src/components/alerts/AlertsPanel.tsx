@@ -93,45 +93,42 @@ export default function AlertsPanel({
   return (
     <div
       style={{ width: watchlistState.panelWidth }}
-      className="h-full bg-[#0d1321]/95 border-l border-slate-800 flex flex-col z-20 select-none shrink-0 shadow-2xl backdrop-blur-md animate-fadeIn relative overflow-hidden"
+      className="h-full bg-[#0a0b0e] border-l border-white/[0.06] flex flex-col z-20 select-none shrink-0 shadow-2xl backdrop-blur-md animate-fadeIn relative overflow-hidden text-zinc-100"
     >
       {/* Resize handle (left edge) */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-amber-500/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-emerald-500/30 transition-colors"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <GripVertical className="w-3 h-3 text-amber-400" />
+          <GripVertical className="w-3 h-3 text-emerald-400" />
         </div>
       </div>
       {/* Panel Header */}
-      <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-[#070b13]/80">
+      <div className="p-3 border-b border-white/[0.06] flex items-center justify-between bg-[#0a0b0e]">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
+          <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
             <Bell className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+            <h3 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
               <span>Alarmlar</span>
-              <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 font-mono px-1.5 rounded-full font-semibold">
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono px-1.5 rounded-full font-semibold">
                 {alertState.alerts.length}
               </span>
             </h3>
-            <p className="text-[10px] text-slate-500">Fiyat ve İndikatör Uyarıları</p>
+            <span className="text-[9px] text-zinc-500 font-medium">Canlı Fiyat & Koşul Uyarıları</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onOpenCreateModal}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-lg shadow-md transition cursor-pointer"
-            title="Yeni Alarm Ekle"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Ekle</span>
-          </button>
-        </div>
+        <button
+          onClick={onOpenCreateModal}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-100 text-zinc-900 text-xs font-medium hover:bg-emerald-400 transition-colors shadow-xs"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Alarm Ekle</span>
+        </button>
       </div>
 
       {/* Alerts Content */}

@@ -21,41 +21,40 @@ export default function RightActionBar(_props: RightActionBarProps) {
   const isAlertsActive = state.isOpen && state.activeRightTool === 'alerts';
 
   return (
-    <div className="w-11 h-full bg-[#0d1321] border-l border-slate-800 flex flex-col items-center justify-between py-2.5 z-20 select-none shrink-0">
+    <div className="w-11 h-full bg-[#0a0b0e] border-l border-white/[0.06] flex flex-col items-center justify-between py-3 z-20 select-none shrink-0">
       {/* Top Action Tools */}
-      <div className="flex flex-col items-center gap-2 w-full">
-
+      <div className="flex flex-col items-center gap-2.5 w-full">
         {/* Toggle Collapse/Expand Button */}
         <button
           onClick={() => watchlistStore.togglePanel()}
-          className="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 rounded-xl transition-all"
+          className="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] rounded-lg transition-all"
           title={state.isOpen ? 'Yan Paneli Kapat' : 'Yan Paneli Aç'}
         >
           {state.isOpen ? (
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className="w-4 h-4 text-zinc-400" />
           ) : (
-            <ChevronLeft className="w-4 h-4 text-indigo-400" />
+            <ChevronLeft className="w-4 h-4 text-emerald-400" />
           )}
         </button>
 
-        <div className="w-6 h-px bg-slate-800/80" />
+        <div className="w-5 h-px bg-white/[0.06]" />
 
         {/* Watchlist (Favoriler) Icon Button */}
         <div className="relative">
           <button
             onClick={() => watchlistStore.setActiveRightTool('watchlist')}
-            className={`p-2 rounded-xl transition-all relative group ${
+            className={`p-2 rounded-lg transition-all relative group ${
               isWatchlistActive
-                ? 'bg-indigo-600/30 text-indigo-400 border border-indigo-500/40 shadow-lg shadow-indigo-500/10'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-xs'
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04]'
             }`}
             title="Favoriler & İzleme Listesi"
           >
-            <Bookmark className={`w-4 h-4 ${isWatchlistActive ? 'fill-indigo-400' : ''}`} />
+            <Bookmark className={`w-4 h-4 ${isWatchlistActive ? 'fill-emerald-400' : ''}`} />
 
             {/* Item Count Badge */}
             {totalCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-indigo-500 text-white text-[9px] font-bold px-1 rounded-full min-w-[14px] text-center leading-[14px]">
+              <span className="absolute -top-1 -right-1 bg-emerald-400 text-zinc-950 text-[9px] font-bold px-1 rounded-full min-w-[14px] text-center leading-[14px]">
                 {totalCount > 99 ? '99+' : totalCount}
               </span>
             )}
@@ -66,31 +65,29 @@ export default function RightActionBar(_props: RightActionBarProps) {
         <div className="relative">
           <button
             onClick={() => watchlistStore.setActiveRightTool('alerts')}
-            className={`p-2 rounded-xl transition-all relative group ${
+            className={`p-2 rounded-lg transition-all relative group ${
               isAlertsActive
-                ? 'bg-amber-600/30 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/10'
-                : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800/50'
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-xs'
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04]'
             }`}
             title="Fiyat & İndikatör Alarmları"
           >
-            <Bell className={`w-4 h-4 ${isAlertsActive ? 'fill-amber-400' : ''}`} />
+            <Bell className={`w-4 h-4 ${isAlertsActive ? 'fill-emerald-400' : ''}`} />
 
             {/* Alert Count Badge */}
             {alertCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 text-[9px] font-extrabold px-1 rounded-full min-w-[14px] text-center leading-[14px]">
+              <span className="absolute -top-1 -right-1 bg-amber-400 text-zinc-950 text-[9px] font-bold px-1 rounded-full min-w-[14px] text-center leading-[14px]">
                 {alertCount > 99 ? '99+' : alertCount}
               </span>
             )}
           </button>
         </div>
-
-
       </div>
 
       {/* Bottom status dot */}
       <div className="flex flex-col items-center gap-2">
         <div
-          className={`w-2 h-2 rounded-full transition-colors ${state.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}
+          className={`w-2 h-2 rounded-full transition-colors ${state.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-700'}`}
           title={state.isOpen ? 'Panel Açık' : 'Panel Kapalı'}
         />
       </div>

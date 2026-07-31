@@ -9,7 +9,7 @@ interface LayoutProps {
 
 export default function DashboardLayout({ children, activeTab, onSelectTab }: LayoutProps) {
   return (
-    <div className="h-screen w-screen bg-[#070b13] text-slate-100 overflow-hidden flex flex-row">
+    <div className="h-screen w-screen bg-[#0a0b0e] [background-image:radial-gradient(120%_100%_at_100%_0%,rgba(16,185,129,0.12),transparent_65%)] text-zinc-100 antialiased overflow-hidden flex flex-row">
       {/* Sol Navigasyon Menüsü */}
       <Sidebar activeTab={activeTab} onSelectTab={onSelectTab} />
 
@@ -20,3 +20,4 @@ export default function DashboardLayout({ children, activeTab, onSelectTab }: La
     </div>
   );
 }
+

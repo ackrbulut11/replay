@@ -86,47 +86,47 @@ export default function SymbolSearchModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/70 backdrop-blur-xs animate-fadeIn">
       {/* Modal Card */}
       <div 
-        className="w-full max-w-2xl bg-[#0d1321] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+        className="w-full max-w-2xl bg-[#0a0b0e] border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] text-zinc-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header Input */}
-        <div className="p-4 border-b border-slate-800 flex items-center gap-3 bg-[#070b13]">
-          <Search className="w-5 h-5 text-indigo-400 shrink-0" />
+        <div className="p-4 border-b border-white/[0.06] flex items-center gap-3 bg-[#0a0b0e]">
+          <Search className="w-5 h-5 text-emerald-400 shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Hisse kodu, parite veya şirket adı girin (ör: EUR/USD, THYAO, AAPL)..."
-            className="w-full bg-transparent text-sm text-slate-100 placeholder-slate-500 outline-none font-medium"
+            className="w-full bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none font-medium"
           />
           {query && (
             <button 
               onClick={() => setQuery('')}
-              className="p-1 text-slate-500 hover:text-slate-300 rounded-lg"
+              className="p-1 text-zinc-500 hover:text-zinc-300 rounded-lg"
             >
               <X className="w-4 h-4" />
             </button>
           )}
           <button
             onClick={onClose}
-            className="px-2.5 py-1 text-xs font-semibold text-slate-400 hover:text-slate-200 bg-slate-800/60 rounded-lg border border-slate-700/50"
+            className="px-2.5 py-1 text-xs font-semibold text-zinc-400 hover:text-zinc-200 bg-white/[0.04] rounded-lg border border-white/[0.08]"
           >
             ESC
           </button>
         </div>
 
         {/* Category Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 bg-[#090d16] border-b border-slate-800/80 select-none">
+        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 bg-[#0a0b0e] border-b border-white/[0.06] select-none">
           <button
             onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
               activeTab === 'all'
-                ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/50 shadow-md shadow-indigo-500/10'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-xs font-semibold'
+                : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -135,10 +135,10 @@ export default function SymbolSearchModal({
 
           <button
             onClick={() => setActiveTab('nasdaq')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
               activeTab === 'nasdaq'
-                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-md shadow-blue-500/10'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30 shadow-xs font-semibold'
+                : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
             }`}
           >
             <Globe2 className="w-3.5 h-3.5 text-blue-400" />
@@ -147,10 +147,10 @@ export default function SymbolSearchModal({
 
           <button
             onClick={() => setActiveTab('forex')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
               activeTab === 'forex'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-md shadow-emerald-500/10'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-xs font-semibold'
+                : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
             }`}
           >
             <Banknote className="w-3.5 h-3.5 text-emerald-400" />
@@ -159,10 +159,10 @@ export default function SymbolSearchModal({
 
           <button
             onClick={() => setActiveTab('binance')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
               activeTab === 'binance'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-md shadow-amber-500/10'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs font-semibold'
+                : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
             }`}
           >
             <Coins className="w-3.5 h-3.5 text-amber-400" />

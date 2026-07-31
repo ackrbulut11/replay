@@ -45,14 +45,14 @@ export default function ReplayControls({
   ];
 
   return (
-    <div className="flex items-center gap-2 bg-[#0d1321]/95 border border-indigo-500/30 rounded-xl px-3 py-1.5 shadow-2xl backdrop-blur-md text-slate-200 animate-fadeIn">
+    <div className="flex items-center gap-2 bg-[#0a0b0e] border border-white/[0.1] rounded-xl px-3 py-1.5 shadow-2xl backdrop-blur-md text-zinc-100 animate-fadeIn select-none">
       {/* Replay Indicator Tag */}
-      <div className="flex items-center gap-1.5 border-r border-slate-800 pr-2.5">
+      <div className="flex items-center gap-1.5 border-r border-white/[0.06] pr-2.5">
         <span className="relative flex h-2 w-2">
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isPlaying ? 'bg-emerald-400' : 'bg-amber-400'} opacity-75`}></span>
-          <span className={`relative inline-flex rounded-full h-2 w-2 ${isPlaying ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${isPlaying ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
         </span>
-        <span className="text-xs font-bold text-indigo-300 font-sans tracking-wide uppercase select-none">
+        <span className="font-mono text-[10px] tracking-[0.18em] text-emerald-400 font-semibold uppercase">
           REPLAY ENGINE
         </span>
       </div>
@@ -61,28 +61,28 @@ export default function ReplayControls({
       <button
         onClick={onStartSelection}
         title="Grafikte son görünecek mumu seçmek için muma tıklayın (Kısayol: C)"
-        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all select-none ${
+        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border transition-all select-none ${
           isSelectingCutoff
-            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm animate-pulse'
-            : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-slate-100'
+            ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-xs animate-pulse'
+            : 'bg-white/[0.03] border-white/[0.08] text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-100'
         }`}
       >
         <Scissors className="w-3.5 h-3.5 text-amber-400" />
         <span>{isSelectingCutoff ? 'Muma Tıklayın...' : 'Mum Kes'}</span>
-        <kbd className="text-[9px] bg-slate-800/90 px-1 py-0.2 rounded font-mono text-amber-300/80 border border-slate-700">C</kbd>
+        <kbd className="text-[9px] bg-white/[0.06] px-1 py-0.2 rounded font-mono text-amber-300/90 border border-white/[0.08]">C</kbd>
       </button>
 
-      <div className="w-px h-4 bg-slate-800" />
+      <div className="w-px h-4 bg-white/[0.06]" />
 
       {/* Oynat / Durdur (Play / Pause) */}
       <button
         onClick={onTogglePlay}
         disabled={isAtEnd}
         title={isPlaying ? 'Durdur (Kısayol: P)' : 'Oynat / Başlat (Kısayol: P)'}
-        className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border transition-all select-none ${
+        className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none ${
           isPlaying
             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30'
-            : 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed'
+            : 'bg-zinc-100 text-zinc-900 border-zinc-100 hover:bg-emerald-400 hover:border-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed'
         }`}
       >
         {isPlaying ? (
@@ -95,7 +95,7 @@ export default function ReplayControls({
           <>
             <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
             <span>Oynat</span>
-            <kbd className="text-[9px] bg-indigo-950/80 px-1 py-0.2 rounded font-mono text-indigo-200 opacity-90 border border-indigo-400/40">P</kbd>
+            <kbd className="text-[9px] bg-zinc-800 px-1 py-0.2 rounded font-mono text-zinc-300 opacity-90 border border-zinc-700">P</kbd>
           </>
         )}
       </button>
@@ -105,37 +105,37 @@ export default function ReplayControls({
         onClick={onStepForward}
         disabled={isPlaying || isAtEnd}
         title="Tek tek 1 mum ilerlet (Kısayol: Space)"
-        className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-[#070b13]/80 border border-slate-800 text-slate-200 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all select-none"
+        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-white/[0.03] border border-white/[0.08] text-zinc-200 hover:bg-white/[0.06] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all select-none"
       >
-        <SkipForward className="w-3.5 h-3.5 text-indigo-400" />
+        <SkipForward className="w-3.5 h-3.5 text-emerald-400" />
         <span>Tek İlerle</span>
-        <kbd className="text-[9px] bg-slate-800/90 px-1 py-0.2 rounded font-mono text-indigo-300 border border-slate-700">Space</kbd>
+        <kbd className="text-[9px] bg-white/[0.06] px-1 py-0.2 rounded font-mono text-zinc-400 border border-white/[0.08]">Space</kbd>
       </button>
 
       {/* Reset to Cutoff / Initial */}
       <button
         onClick={onResetToCutoff}
         title="Kesim noktasına sıfırla (Kısayol: R)"
-        className="flex items-center gap-1 p-1.5 rounded-lg bg-[#070b13]/80 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all"
+        className="flex items-center gap-1 p-1.5 rounded-lg bg-white/[0.03] border border-white/[0.08] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] transition-all"
       >
         <RotateCcw className="w-3.5 h-3.5" />
-        <kbd className="text-[9px] bg-slate-800/90 px-1 py-0.2 rounded font-mono text-slate-400 border border-slate-700">R</kbd>
+        <kbd className="text-[9px] bg-white/[0.06] px-1 py-0.2 rounded font-mono text-zinc-400 border border-white/[0.08]">R</kbd>
       </button>
 
-      <div className="w-px h-4 bg-slate-800" />
+      <div className="w-px h-4 bg-white/[0.06]" />
 
       {/* Hız Seçici */}
-      <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg p-0.5">
-        <FastForward className="w-3 h-3 text-slate-400 ml-1" />
+      <div className="flex items-center gap-1 bg-white/[0.02] border border-white/[0.06] rounded-lg p-0.5">
+        <FastForward className="w-3 h-3 text-zinc-500 ml-1" />
         {SPEED_OPTIONS.map((opt) => (
           <button
             key={opt.value}
             onClick={() => handleSpeedChange(opt.value)}
             title={`Oynatma Hızı: ${opt.label} (Kısayol: ${opt.key})`}
-            className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
+            className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
               speedMs === opt.value
-                ? 'bg-indigo-500/30 text-indigo-300 border border-indigo-500/40'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             {opt.label}
@@ -144,20 +144,20 @@ export default function ReplayControls({
       </div>
 
       {/* Mum İlerleme Bilgisi */}
-      <div className="flex items-center gap-1 text-[11px] font-mono text-slate-400 bg-[#070b13]/60 border border-slate-800/80 rounded-lg px-2 py-1 select-none">
-        <Layers className="w-3 h-3 text-indigo-400" />
+      <div className="flex items-center gap-1 text-[11px] font-mono text-zinc-400 bg-white/[0.02] border border-white/[0.06] rounded-lg px-2 py-1 select-none">
+        <Layers className="w-3 h-3 text-emerald-400" />
         <span>
           {currentBar} / {totalBars}
         </span>
       </div>
 
-      <div className="w-px h-4 bg-slate-800" />
+      <div className="w-px h-4 bg-white/[0.06]" />
 
       {/* Replay Modundan Çıkış */}
       <button
         onClick={onExitReplay}
         title="Replay Modundan Çık (Kısayol: X)"
-        className="flex items-center gap-1 p-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all"
+        className="flex items-center gap-1 p-1.5 rounded-lg bg-red-500/[0.06] border border-red-500/20 text-red-400 hover:bg-red-500/15 hover:text-red-300 transition-all"
       >
         <X className="w-3.5 h-3.5" />
         <kbd className="text-[9px] bg-red-950/60 px-1 py-0.2 rounded font-mono text-red-300 border border-red-800/50">X</kbd>

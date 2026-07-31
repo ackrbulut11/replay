@@ -1857,14 +1857,14 @@ export default function CandleChart({
 
 
   return (
-    <div className="relative w-full h-full border border-slate-800 rounded-xl overflow-hidden bg-[#090d16]">
+    <div className="relative w-full h-full border border-white/[0.06] rounded-xl overflow-hidden bg-[#090d16]">
       {/* Yüzen Kontrol Paneli Araç Çubuğu */}
-      <div className="absolute top-2 left-2 right-2 h-12 z-30 flex items-center justify-between bg-[#0d1321]/95 border border-slate-800/80 rounded-xl px-3.5 shadow-xl backdrop-blur-md">
+      <div className="absolute top-2 left-2 right-2 h-12 z-30 flex items-center justify-between bg-[#0a0b0e]/95 border border-white/[0.08] rounded-xl px-3.5 shadow-2xl backdrop-blur-md text-zinc-100">
         {/* Sol Taraf: Logo & Sembol & Sağlayıcı & Zaman Dilimi */}
         <div className="flex items-center gap-3">
           {/* Logo / Başlık */}
-          <div className="flex items-center gap-1.5 border-r border-slate-800/80 pr-3 h-5">
-            <span className="text-xs font-bold bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent tracking-wider font-sans select-none">
+          <div className="flex items-center gap-1.5 border-r border-white/[0.06] pr-3 h-5">
+            <span className="text-xs font-semibold tracking-[0.14em] text-zinc-100 font-sans select-none">
               REPLAY
             </span>
           </div>
@@ -1873,26 +1873,25 @@ export default function CandleChart({
           <div className="flex items-center gap-1">
             <button
               onClick={onOpenSearchModal || (() => setIsSearchModalOpen(true))}
-              className="flex items-center gap-2 bg-[#070b13]/80 border border-slate-800 hover:border-indigo-500/50 rounded-lg px-2.5 py-1 transition-all group"
+              className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.08] hover:border-emerald-500/40 rounded-lg px-2.5 py-1 transition-all group"
               title="Sembol Ara (BIST 100, NASDAQ, Crypto)"
             >
-              <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+              <Search className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
               <div className="flex items-center gap-1">
-                <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Symbol:</span>
-                <span className="text-xs font-bold text-slate-100 font-mono tracking-tight group-hover:text-indigo-300">
+                <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Symbol:</span>
+                <span className="text-xs font-semibold text-zinc-100 font-mono tracking-tight group-hover:text-emerald-400">
                   {symbol || 'ARA'}
                 </span>
               </div>
             </button>
-
 
             {/* Quick Watchlist Bookmark Button — reactive via useWatchlistStore */}
             <button
               onClick={() => watchlistStore.toggleSymbol(symbol, provider)}
               className={`p-1.5 rounded-lg border transition-all ${
                 isBookmarked
-                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
-                  : 'bg-[#070b13]/80 border-slate-800 text-slate-500 hover:text-amber-400 hover:bg-slate-800'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30 shadow-xs'
+                  : 'bg-white/[0.03] border-white/[0.08] text-zinc-500 hover:text-amber-400 hover:bg-white/[0.06]'
               }`}
               title={isBookmarked ? 'İzleme Listesinden Çıkar' : 'İzleme Listesine Ekle'}
             >
@@ -1900,62 +1899,60 @@ export default function CandleChart({
             </button>
           </div>
 
-
           {/* Zaman Dilimi Seçimi */}
-
-          <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
-            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Interval</span>
+          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1">
+            <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Interval</span>
             <select
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value)}
-              className="bg-transparent border-none outline-none text-xs font-medium text-slate-300 cursor-pointer focus:ring-0"
+              className="bg-transparent border-none outline-none text-xs font-medium text-zinc-200 cursor-pointer focus:ring-0"
             >
-              <option value="1m" className="bg-[#070b13] text-slate-100">1m</option>
-              <option value="5m" className="bg-[#070b13] text-slate-100">5m</option>
-              <option value="15m" className="bg-[#070b13] text-slate-100">15m</option>
-              <option value="1h" className="bg-[#070b13] text-slate-100">1h</option>
-              <option value="4h" className="bg-[#070b13] text-slate-100">4h</option>
-              <option value="1d" className="bg-[#070b13] text-slate-100">1d</option>
-              <option value="1w" className="bg-[#070b13] text-slate-100">1w</option>
-              <option value="1mo" className="bg-[#070b13] text-slate-100">1mo</option>
+              <option value="1m" className="bg-[#0a0b0e] text-zinc-100">1m</option>
+              <option value="5m" className="bg-[#0a0b0e] text-zinc-100">5m</option>
+              <option value="15m" className="bg-[#0a0b0e] text-zinc-100">15m</option>
+              <option value="1h" className="bg-[#0a0b0e] text-zinc-100">1h</option>
+              <option value="4h" className="bg-[#0a0b0e] text-zinc-100">4h</option>
+              <option value="1d" className="bg-[#0a0b0e] text-zinc-100">1d</option>
+              <option value="1w" className="bg-[#0a0b0e] text-zinc-100">1w</option>
+              <option value="1mo" className="bg-[#0a0b0e] text-zinc-100">1mo</option>
             </select>
           </div>
 
           {/* Grafik Tipi Seçimi (Mum / Çizgi) */}
-          <div className="flex items-center gap-1 bg-[#070b13]/60 border border-slate-800 rounded-lg px-2.5 py-1">
-            <span className="text-[9px] text-slate-500 font-bold uppercase select-none">Grafik</span>
+          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1">
+            <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Grafik</span>
             <select
               value={chartType}
               onChange={(e) => setChartType(e.target.value as 'candlestick' | 'line')}
-              className="bg-transparent border-none outline-none text-xs font-medium text-slate-300 cursor-pointer focus:ring-0"
+              className="bg-transparent border-none outline-none text-xs font-medium text-zinc-200 cursor-pointer focus:ring-0"
             >
-              <option value="candlestick" className="bg-[#070b13] text-slate-100">Mum Grafiği</option>
-              <option value="line" className="bg-[#070b13] text-slate-100">Çizgi Grafiği</option>
+              <option value="candlestick" className="bg-[#0a0b0e] text-zinc-100">Mum Grafiği</option>
+              <option value="line" className="bg-[#0a0b0e] text-zinc-100">Çizgi Grafiği</option>
             </select>
           </div>
 
           {/* Replay Modu Butonu */}
           <button
             onClick={handleToggleReplayMode}
-            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg border transition-all select-none ${
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none ${
               replayState.isReplayActive
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md shadow-amber-500/10'
-                : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-slate-100'
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-xs'
+                : 'bg-white/[0.03] border-white/[0.08] text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-100'
             }`}
             title="Replay Motorunu Aç/Kapat (Kısayol: X)"
           >
-            <RotateCcw className={`w-3.5 h-3.5 ${replayState.isReplayActive ? 'text-amber-400' : 'text-indigo-400'}`} />
+            <RotateCcw className={`w-3.5 h-3.5 ${replayState.isReplayActive ? 'text-amber-400' : 'text-emerald-400'}`} />
             <span>Replay</span>
           </button>
 
           {/* Strateji Sinyalleri Temizleme Rozeti */}
           {evaluateResult && Array.isArray(evaluateResult.signals) && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 shadow-sm">
-              <Zap className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-xs">
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
               <span>Strateji ({evaluateResult.signals.length} Sinyal)</span>
               <button
                 onClick={() => strategyStore.clearEvaluateResult()}
-                className="ml-1 p-0.5 hover:bg-indigo-500/30 text-indigo-300 hover:text-white rounded transition-colors"
+                className="ml-1 p-0.5 hover:bg-emerald-500/30 text-emerald-300 hover:text-white rounded transition-colors"
                 title="Strateji sinyallerini grafikten kaldır ve grafiği eski temiz haline getir"
               >
                 <X className="w-3.5 h-3.5" />
@@ -1972,20 +1969,20 @@ export default function CandleChart({
               onClick={() => setIsIndicatorsOpen(!isIndicatorsOpen)}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all ${
                 isIndicatorsOpen
-                  ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-semibold'
-                  : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold'
+                  : 'bg-white/[0.03] border-white/[0.08] text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-100'
               }`}
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
               Indicators
             </button>
 
             {isIndicatorsOpen && (
-              <div className="absolute right-0 top-9 mt-1 w-52 bg-[#0d1321]/95 border border-slate-850 rounded-xl p-2 shadow-2xl z-50 backdrop-blur-md space-y-0.5">
-                <div className="text-[9px] text-slate-500 font-bold uppercase px-2 py-1 select-none">
+              <div className="absolute right-0 top-9 mt-1 w-56 bg-[#0a0b0e] border border-white/[0.1] rounded-xl p-2.5 shadow-2xl z-50 backdrop-blur-md space-y-0.5 text-zinc-100">
+                <div className="font-mono text-[9px] text-zinc-500 font-semibold uppercase px-2 py-1 select-none">
                   Technical Indicators
                 </div>
-                <div className="w-full h-px bg-slate-800/60 my-1" />
+                <div className="w-full h-px bg-white/[0.06] my-1" />
                 {Object.keys(indicators).map((key) => {
                   const indKey = key as keyof IndicatorsState;
                   const labels: Record<string, string> = {
@@ -2003,17 +2000,17 @@ export default function CandleChart({
                     ema100: 'bg-purple-500',
                     ema200: 'bg-pink-500',
                     rsi: 'bg-sky-400',
-                    macd: 'bg-blue-500',
+                    macd: 'bg-emerald-400',
                     bb: 'bg-yellow-400',
                   };
                   return (
                     <div key={indKey}>
                       <label
-                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-slate-800/50 cursor-pointer select-none"
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-white/[0.04] cursor-pointer select-none"
                       >
                         <div className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full ${colors[indKey]} ${indicators[indKey] ? 'animate-pulse' : ''}`} />
-                          <span className="text-xs text-slate-200">{labels[indKey]}</span>
+                          <span className="text-xs text-zinc-200 font-medium">{labels[indKey]}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           {indicators[indKey] && (
@@ -2021,7 +2018,7 @@ export default function CandleChart({
                               type="button"
                               title={`${labels[indKey]} ayarları`}
                               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingIndicator(indKey as keyof IndicatorSettingsMap); }}
-                              className="p-0.5 rounded transition-colors text-slate-400 hover:text-white hover:bg-slate-800"
+                              className="p-0.5 rounded transition-colors text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08]"
                             >
                               <Settings2 className="w-3.5 h-3.5" />
                             </button>
@@ -2030,7 +2027,7 @@ export default function CandleChart({
                             type="checkbox"
                             checked={indicators[indKey]}
                             onChange={() => onToggleIndicator(indKey)}
-                            className="w-3.5 h-3.5 accent-indigo-500 rounded border-slate-800 cursor-pointer bg-[#070b13]"
+                            className="w-3.5 h-3.5 accent-emerald-400 rounded border-white/[0.1] cursor-pointer bg-white/[0.03]"
                           />
                         </div>
                       </label>
@@ -2047,36 +2044,36 @@ export default function CandleChart({
               onClick={() => setIsDatesOpen(!isDatesOpen)}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all ${
                 isDatesOpen || start || end
-                  ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-semibold'
-                  : 'bg-[#070b13]/80 border-slate-800 text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold'
+                  : 'bg-white/[0.03] border-white/[0.08] text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-100'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
               {start || end ? `${start || '...'} to ${end || '...'}` : 'Dates'}
             </button>
 
             {isDatesOpen && (
-              <div className="absolute right-0 top-9 mt-1 w-60 bg-[#0d1321]/95 border border-slate-850 rounded-xl p-3 shadow-2xl z-50 backdrop-blur-md space-y-3">
-                <div className="text-[9px] text-slate-500 font-bold uppercase pb-1.5 border-b border-slate-800/60 select-none">
+              <div className="absolute right-0 top-9 mt-1 w-64 bg-[#0a0b0e] border border-white/[0.1] rounded-xl p-3 shadow-2xl z-50 backdrop-blur-md space-y-3 text-zinc-100">
+                <div className="font-mono text-[9px] text-zinc-500 font-semibold uppercase pb-1.5 border-b border-white/[0.06] select-none">
                   Select Date Range
                 </div>
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-col gap-1">
-                    <span className="text-[9px] text-slate-400 font-semibold uppercase select-none">Start Date</span>
+                    <span className="font-mono text-[9px] text-zinc-400 font-semibold uppercase select-none">Start Date</span>
                     <input
                       type="date"
                       value={start}
                       onChange={(e) => setStart(e.target.value)}
-                      className="bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                      className="bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/50 transition"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <span className="text-[9px] text-slate-400 font-semibold uppercase select-none">End Date</span>
+                    <span className="font-mono text-[9px] text-zinc-400 font-semibold uppercase select-none">End Date</span>
                     <input
                       type="date"
                       value={end}
                       onChange={(e) => setEnd(e.target.value)}
-                      className="bg-[#070b13] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition"
+                      className="bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/50 transition"
                     />
                   </div>
                 </div>
@@ -2148,12 +2145,12 @@ export default function CandleChart({
             return (
               <div
                 key={key}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0d1321]/80 border border-slate-800 text-[11px] shadow-sm backdrop-blur-xs select-none"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100"
               >
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                <span className="font-semibold text-slate-200">{label}</span>
+                <span className="font-medium text-zinc-200">{label}</span>
                 {val !== undefined && val !== null && (
-                  <span className="font-mono text-slate-400 text-[10px]">
+                  <span className="font-mono text-zinc-400 text-[10px]">
                     {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
                   </span>
                 )}
@@ -2161,7 +2158,7 @@ export default function CandleChart({
                   type="button"
                   title={`${label} Ayarları`}
                   onClick={() => setEditingIndicator(key)}
-                  className="p-0.5 text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
+                  className="p-0.5 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   <Settings2 className="w-3 h-3" />
                 </button>
@@ -2169,7 +2166,7 @@ export default function CandleChart({
                   type="button"
                   title="Kapat"
                   onClick={() => onToggleIndicator(key)}
-                  className="p-0.5 text-slate-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+                  className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -2361,13 +2358,13 @@ export default function CandleChart({
       {(indicators.rsi || indicators.macd) && (
         <div className="absolute bottom-3 left-3 z-20 flex flex-wrap gap-2 pointer-events-auto">
           {indicators.rsi && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0d1321]/90 border border-slate-800 text-xs shadow-md backdrop-blur-md select-none">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-xs shadow-md backdrop-blur-md select-none text-zinc-100">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: indicatorSettings.rsi.color }} />
-              <span className="font-semibold text-slate-200">
+              <span className="font-medium text-zinc-200">
                 RSI ({indicatorSettings.rsi.period}, {indicatorSettings.rsi.overbought}, {indicatorSettings.rsi.oversold})
               </span>
               {latestIndicatorValues.rsi !== undefined && latestIndicatorValues.rsi !== null && (
-                <span className="font-mono font-bold text-sky-400 ml-1">
+                <span className="font-mono font-bold text-emerald-400 ml-1">
                   {latestIndicatorValues.rsi.toFixed(2)}
                 </span>
               )}
@@ -2375,7 +2372,7 @@ export default function CandleChart({
                 type="button"
                 title="RSI Ayarlarını Aç"
                 onClick={() => setEditingIndicator('rsi')}
-                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-indigo-300 transition-colors ml-1 cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-zinc-400 hover:text-emerald-400 transition-colors ml-1 cursor-pointer"
               >
                 <Settings2 className="w-3.5 h-3.5" />
               </button>
@@ -2383,7 +2380,7 @@ export default function CandleChart({
                 type="button"
                 title="RSI Kapat"
                 onClick={() => onToggleIndicator('rsi')}
-                className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -2391,14 +2388,14 @@ export default function CandleChart({
           )}
 
           {indicators.macd && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0d1321]/90 border border-slate-800 text-xs shadow-md backdrop-blur-md select-none">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-xs shadow-md backdrop-blur-md select-none text-zinc-100">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: indicatorSettings.macd.macdColor }} />
-              <span className="font-semibold text-slate-200">
+              <span className="font-medium text-zinc-200">
                 MACD ({indicatorSettings.macd.fastPeriod}, {indicatorSettings.macd.slowPeriod}, {indicatorSettings.macd.signalPeriod})
               </span>
               {latestIndicatorValues.macd && (
-                <span className="font-mono text-[11px] text-slate-300 ml-1 flex items-center gap-1">
-                  <span className="text-blue-400">{latestIndicatorValues.macd.macd.toFixed(2)}</span>
+                <span className="font-mono text-[11px] text-zinc-300 ml-1 flex items-center gap-1">
+                  <span className="text-emerald-400">{latestIndicatorValues.macd.macd.toFixed(2)}</span>
                   <span className="text-amber-400">{latestIndicatorValues.macd.signal.toFixed(2)}</span>
                 </span>
               )}
@@ -2406,7 +2403,7 @@ export default function CandleChart({
                 type="button"
                 title="MACD Ayarlarını Aç"
                 onClick={() => setEditingIndicator('macd')}
-                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-indigo-300 transition-colors ml-1 cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-zinc-400 hover:text-emerald-400 transition-colors ml-1 cursor-pointer"
               >
                 <Settings2 className="w-3.5 h-3.5" />
               </button>
@@ -2414,7 +2411,7 @@ export default function CandleChart({
                 type="button"
                 title="MACD Kapat"
                 onClick={() => onToggleIndicator('macd')}
-                className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

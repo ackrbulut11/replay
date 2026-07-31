@@ -14,8 +14,8 @@ export interface RsiSettings {
 
 export const DEFAULT_RSI_SETTINGS: RsiSettings = {
   period: 14,
-  overbought: 70,
-  oversold: 30,
+  overbought: 75,
+  oversold: 25,
 };
 
 export interface EmaSettings {
@@ -85,8 +85,8 @@ export const DEFAULT_INDICATOR_SETTINGS: IndicatorSettingsMap = {
   },
   rsi: {
     period: 14,
-    overbought: 70,
-    oversold: 30,
+    overbought: 75,
+    oversold: 25,
     color: '#38bdf8',
     lineWidth: 2,
     overboughtColor: 'rgba(239, 68, 68, 0.75)',

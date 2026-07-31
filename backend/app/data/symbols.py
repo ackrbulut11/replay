@@ -780,6 +780,8 @@ SP500_EXTRA_SYMBOLS: List[Dict[str, str]] = [
 # yaygın kullanılıyor; veri gelmezse teyit edilmesi gerekebilir. "FTSE 300" diye
 # resmi bir endeks olmadığından burada FTSE 350 kullanıldı.
 GLOBAL_INDEX_SYMBOLS: List[Dict[str, str]] = [
+    {"symbol": "XU100", "name": "BIST 100 Endeksi", "sector": "BIST Endeks", "exchange": "INDEX", "ticker": "XU100.IS"},
+    {"symbol": "XU030", "name": "BIST 30 Endeksi", "sector": "BIST Endeks", "exchange": "INDEX", "ticker": "XU030.IS"},
     {"symbol": "SPX", "name": "S&P 500 Endeksi", "sector": "ABD Endeks", "exchange": "INDEX", "ticker": "^GSPC"},
     {"symbol": "DJI", "name": "Dow Jones Endüstri Ortalaması (30)", "sector": "ABD Endeks", "exchange": "INDEX", "ticker": "^DJI"},
     {"symbol": "NDX", "name": "Nasdaq 100 Endeksi", "sector": "ABD Endeks", "exchange": "INDEX", "ticker": "^NDX"},
@@ -887,6 +889,7 @@ def search_symbols(query: str, provider: Optional[str] = None) -> List[Dict[str,
     if not query_clean:
         return pool
 
+    query_nospace = query_clean.replace(" ", "")
         
     results = []
     for item in pool:
@@ -894,14 +897,17 @@ def search_symbols(query: str, provider: Optional[str] = None) -> List[Dict[str,
         n_upper = item["name"].upper()
         sec_upper = item.get("sector", "").upper()
         
+        s_nospace = s_upper.replace(" ", "")
+        n_nospace = n_upper.replace(" ", "")
+
         # Match priority: Exact symbol > Symbol starts with > Name contains > Sector contains
-        if s_upper == query_clean:
+        if s_upper == query_clean or s_nospace == query_nospace:
             score = 100
-        elif s_upper.startswith(query_clean):
+        elif s_upper.startswith(query_clean) or s_nospace.startswith(query_nospace):
             score = 80
-        elif query_clean in s_upper:
+        elif query_clean in s_upper or query_nospace in s_nospace:
             score = 60
-        elif query_clean in n_upper:
+        elif query_clean in n_upper or query_nospace in n_nospace:
             score = 40
         elif query_clean in sec_upper:
             score = 20

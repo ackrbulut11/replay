@@ -15,7 +15,12 @@ SYMBOL_ALIASES = {
     "NETFLIX": "NFLX",
     "INTEL": "INTC",
 
-    # Endeksler (Yahoo Finance ^ önekli endeks sembolleri kısa kodlarla eşlenir)
+    # Endeksler (Yahoo Finance önekli/son ekli endeks sembolleri kısa kodlarla eşlenir)
+    "XU100": "XU100.IS",
+    "BIST100": "XU100.IS",
+    "XU030": "XU030.IS",
+    "XU30": "XU030.IS",
+    "BIST30": "XU030.IS",
     "SPX": "^GSPC",
     "SP500": "^GSPC",
     "DJI": "^DJI",

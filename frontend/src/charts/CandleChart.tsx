@@ -2193,36 +2193,36 @@ export default function CandleChart({
 
       {/* Durum Gösterge Katmanları */}
       {loading && (
-        <div className="absolute inset-0 bg-[#070b13]/85 backdrop-blur-xs z-25 flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-10 h-10 text-indigo-400 animate-spin" />
-          <span className="text-slate-350 text-sm font-medium">Loading market data...</span>
+        <div className="absolute inset-0 bg-[#0a0b0e]/85 backdrop-blur-xs z-20 flex flex-col items-center justify-center gap-3 text-zinc-100">
+          <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+          <span className="text-zinc-300 text-sm font-medium">Piyasa verileri yükleniyor...</span>
         </div>
       )}
 
       {error && !loading && (
-        <div className="absolute inset-0 bg-[#070b13]/95 z-25 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-[#0a0b0e]/95 z-20 flex items-center justify-center p-4 text-zinc-100">
           <div className="flex flex-col items-center text-center max-w-md p-6 space-y-3">
-            <div className="p-3 bg-red-950/40 border border-red-900/60 rounded-full text-red-400">
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-full text-red-400">
               <AlertCircle className="w-8 h-8" />
             </div>
-            <h3 className="text-lg font-bold text-red-200">Veri Yüklenemedi</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">{error}</p>
-            <p className="text-slate-500 text-xs">
-              İpucu: Komut satırından `python scripts/download_data.py` çalıştırarak bu veriyi indirmiş olduğunuzdan emin olun.
+            <h3 className="text-lg font-bold text-red-300">Veri Yüklenemedi</h3>
+            <p className="text-zinc-300 text-sm leading-relaxed">{error}</p>
+            <p className="text-zinc-500 text-xs">
+              Lütfen İnternet bağlantınızı kontrol edin veya yukarıdaki sembol aramasından başka bir parite seçin.
             </p>
           </div>
         </div>
       )}
 
       {!error && data.length === 0 && !loading && (
-        <div className="absolute inset-0 bg-[#090d16] z-25 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-[#0a0b0e] z-20 flex items-center justify-center p-4 text-zinc-100">
           <div className="flex flex-col items-center text-center max-w-sm p-6 space-y-3">
-            <div className="p-3 bg-[#0d1321]/80 border border-slate-800 rounded-full text-slate-400">
-              <BarChart3 className="w-8 h-8 text-indigo-400" />
+            <div className="p-3 bg-white/[0.03] border border-white/[0.08] rounded-full text-zinc-400">
+              <BarChart3 className="w-8 h-8 text-emerald-400" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-200">Chart Ready to Load</h3>
-            <p className="text-slate-450 text-sm leading-relaxed">
-              Select data provider, symbol, and timeframe from the floating control panel above.
+            <h3 className="text-lg font-semibold text-zinc-100">Grafik Yüklenmeye Hazır</h3>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Yukarıdaki kontrol panelinden sembol (örn: BTCUSDT, THYAO, AAPL) veya zaman dilimi seçin.
             </p>
           </div>
         </div>
@@ -2367,7 +2367,7 @@ export default function CandleChart({
         </div>
       )}
 
-      <div ref={chartContainerRef} className="w-full h-full" />
+      <div ref={chartContainerRef} className="absolute inset-0 w-full h-full z-10" />
 
       {/* Alt Panel Gösterge Ayarları ve Lejantları (RSI & MACD) */}
       {(indicators.rsi || indicators.macd) && (

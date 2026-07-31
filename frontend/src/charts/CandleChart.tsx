@@ -1676,29 +1676,7 @@ export default function CandleChart({
     }
   }, [visibleData, indicators, indicatorSettings]);
 
-  // Grafikteki gösterge çizgilerine tıklanıldığında ilgili ayar penceresini açar
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
 
-    const handleChartClick = (param: any) => {
-      if (!param || !param.seriesData) return;
-      for (const [series] of param.seriesData.entries()) {
-        if (series === ema20Ref.current) { setEditingIndicator('ema20'); return; }
-        if (series === ema50Ref.current) { setEditingIndicator('ema50'); return; }
-        if (series === ema100Ref.current) { setEditingIndicator('ema100'); return; }
-        if (series === ema200Ref.current) { setEditingIndicator('ema200'); return; }
-        if (series === rsiRef.current) { setEditingIndicator('rsi'); return; }
-        if (series === macdLineRef.current || series === macdSignalRef.current || series === macdHistRef.current) { setEditingIndicator('macd'); return; }
-        if (series === bbUpperRef.current || series === bbMiddleRef.current || series === bbLowerRef.current) { setEditingIndicator('bb'); return; }
-      }
-    };
-
-    chart.subscribeClick(handleChartClick);
-    return () => {
-      chart.unsubscribeClick(handleChartClick);
-    };
-  }, []);
 
   const latestIndicatorValues = useMemo(() => {
     if (!visibleData || visibleData.length === 0) return {};

@@ -1,5 +1,5 @@
 import { Trash2 } from 'lucide-react';
-import { LINE_STYLES, LINE_STYLE_CAPABLE_TOOLS } from './types';
+import { LINE_STYLES, LINE_STYLE_CAPABLE_TOOLS, MIN_DOTTED_LINE_WIDTH } from './types';
 import type { DrawingEditOptions, DrawingTool } from './types';
 
 interface DrawingEditPanelProps {
@@ -14,6 +14,19 @@ interface DrawingEditPanelProps {
 export default function DrawingEditPanel({ options, onChange, onDelete, title = 'Edit:', isRuler = false, tool }: DrawingEditPanelProps) {
   const isRectangle = tool === 'rectangle';
   const supportsLineStyle = tool != null && LINE_STYLE_CAPABLE_TOOLS.has(tool as DrawingTool);
+
+  // Noktalı stilde 1px noktalar gözle görülmeyecek kadar küçük kalıyor;
+  // bu yüzden noktalı seçiliyken kalınlık en az 2px olur.
+  const isDotted = options.lineStyle === 'dotted';
+  const widthOptions = isDotted ? [2, 3, 4, 5] : [1, 2, 3, 4, 5];
+
+  /** Çizgi tipi değişince kalınlığı o tipin izin verdiği aralığa çeker. */
+  const handleLineStyleChange = (nextStyle: DrawingEditOptions['lineStyle']) => {
+    const nextWidth = nextStyle === 'dotted'
+      ? Math.max(MIN_DOTTED_LINE_WIDTH, options.lineWidth)
+      : options.lineWidth;
+    onChange({ ...options, lineStyle: nextStyle, lineWidth: nextWidth });
+  };
 
   return (
     <div className="flex items-center gap-3 bg-[#0d1321]/95 border border-slate-700 rounded-lg px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
@@ -56,7 +69,7 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
               onChange={(e) => onChange({ ...options, lineWidth: Number(e.target.value) })}
               className="bg-[#070b13] border border-slate-700 rounded px-1.5 py-1 text-slate-100 cursor-pointer"
             >
-              {[1, 2, 3, 4, 5].map((w) => (
+              {widthOptions.map((w) => (
                 <option key={w} value={w}>{w}px</option>
               ))}
             </select>
@@ -81,7 +94,7 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
               <span>Çizgi</span>
               <select
                 value={options.lineStyle ?? 'solid'}
-                onChange={(e) => onChange({ ...options, lineStyle: e.target.value as DrawingEditOptions['lineStyle'] })}
+                onChange={(e) => handleLineStyleChange(e.target.value as DrawingEditOptions['lineStyle'])}
                 className="bg-[#070b13] border border-slate-700 rounded px-1.5 py-1 text-slate-100 cursor-pointer"
               >
                 {LINE_STYLES.map((s) => (

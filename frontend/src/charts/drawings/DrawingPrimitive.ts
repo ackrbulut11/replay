@@ -11,7 +11,7 @@ import type {
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 import type { Drawing, DrawingLineStyle, DrawingPoint } from './types';
-import { HIT_THRESHOLD, LINE_STYLE_CAPABLE_TOOLS } from './types';
+import { HIT_THRESHOLD, LINE_STYLE_CAPABLE_TOOLS, MIN_DOTTED_LINE_WIDTH } from './types';
 
 export interface CandleData {
   time: number;
@@ -71,10 +71,13 @@ function applyLineStyle(
   lineWidth: number,
   lineStyle: DrawingLineStyle | undefined,
 ) {
+  // Noktalı stilde 1px noktalar görünmüyor; daha önce 1px kaydedilmiş
+  // çizimler de dahil olmak üzere en az MIN_DOTTED_LINE_WIDTH uygulanır.
+  const w = lineStyle === 'dotted' ? Math.max(MIN_DOTTED_LINE_WIDTH, lineWidth) : lineWidth;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.setLineDash(dashPatternFor(lineStyle, lineWidth));
+  ctx.lineWidth = w;
+  ctx.setLineDash(dashPatternFor(lineStyle, w));
   ctx.lineDashOffset = 0;
   ctx.lineCap = lineStyle === 'dotted' ? 'round' : 'butt';
   ctx.lineJoin = 'round';
@@ -82,7 +85,16 @@ function applyLineStyle(
 
 const HANDLE_RADIUS = 5;
 const HIT_RADIUS = HIT_THRESHOLD;
-const BODY_HIT_THRESHOLD = 6;
+/**
+ * Çizginin gövdesine tıklama toleransı (px). Kalın çizgilerde tolerans
+ * çizginin yarı kalınlığı kadar büyür, böylece görsel olarak çizginin
+ * üstündeyken tıklama her zaman algılanır.
+ */
+const BODY_HIT_THRESHOLD = 10;
+
+function bodyHitThresholdFor(lineWidth: number): number {
+  return Math.max(BODY_HIT_THRESHOLD, lineWidth / 2 + 5);
+}
 
 function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;
@@ -800,10 +812,11 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
         }
       }
 
+      const threshold = bodyHitThresholdFor(pixels.lineWidth);
       const segs = getDrawingSegments(pixels);
       for (const [a, b] of segs) {
         const d = distToSegment(x, y, a.x, a.y, b.x, b.y);
-        if (d < BODY_HIT_THRESHOLD && (!bestBody || d < bestBody.dist)) {
+        if (d < threshold && (!bestBody || d < bestBody.dist)) {
           bestBody = { id: drawing.id, dist: d };
         }
       }

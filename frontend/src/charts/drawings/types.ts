@@ -37,6 +37,9 @@ export const DEFAULT_LINE_WIDTH = 2;
 export const DEFAULT_OPACITY = 1;
 export const DEFAULT_LINE_STYLE: DrawingLineStyle = 'solid';
 
+/** Noktalı stilde 1px noktalar görünmediği için izin verilen en küçük kalınlık. */
+export const MIN_DOTTED_LINE_WIDTH = 2;
+
 export const LINE_STYLES: { value: DrawingLineStyle; label: string }[] = [
   { value: 'solid', label: 'Düz' },
   { value: 'dashed', label: 'Kesikli' },

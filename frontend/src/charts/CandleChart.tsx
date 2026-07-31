@@ -1041,10 +1041,12 @@ export default function CandleChart({
           fillOpacity: settings.fillOpacity ?? 0.18,
         };
 
-        if (tool === 'ruler') {
-          // Cetveli drawingsRef'e ekle (sonraki tıklamada silinecek)
-          primitive.setPreview(null);
-        } else {
+        // Çizim tamamlandı: yarı saydam önizleme ("hayalet") her araçta
+        // hemen temizlenmeli, yoksa kalıcı çizimin üzerinde durmaya devam
+        // edip ancak bir sonraki çizimde siliniyor.
+        primitive.setPreview(null);
+
+        if (tool !== 'ruler') {
           // Cetvel geçici bir ölçüm aracı olduğu için istatistiklere dahil edilmez.
           const [drawingProvider, drawingSymbol] = currentDrawingKeyRef.current.split(':');
           logDrawingUsage(tool, drawingSymbol, drawingProvider.toLowerCase());

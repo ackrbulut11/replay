@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
 from app.auth.router import router as auth_router
-from app.api.routes import alerts, market, strategy, admin, watchlist, analytics, waitlist
+from app.api.routes import alerts, market, strategy, admin, watchlist, analytics, waitlist, chart_settings
 
 
 def init_error_monitoring() -> None:
@@ -124,6 +124,7 @@ app.include_router(market.router, prefix="/api")
 app.include_router(strategy.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
+app.include_router(chart_settings.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 # Landing page'deki erken erişim formu — tek herkese açık yazma ucu.

@@ -24,19 +24,19 @@ Tamamlanan maddeleri `[x]` yaparak işaretleyin.
   için `DEV_LOGIN_TOKEN`'ı yalnızca kendi ortamınızda (yerelde veya kendi Render env'inizde),
   rastgele üretilmiş uzun bir gizli değerle doldurun ve kimseyle paylaşmayın.
 
-- [ ] **Kalıcı veritabanı doğrulanmalı.** Render'da `DATABASE_URL` gerçek bir Postgres'e
+- [x] **Kalıcı veritabanı doğrulanmalı.** Render'da `DATABASE_URL` gerçek bir Postgres'e
   ayarlanmazsa uygulama SQLite dosyasına düşer; Render'ın diski kalıcı olmadığından her
   yeniden deploy/uykudan uyanışta **tüm kullanıcılar, stratejiler ve alarmlar silinir**
   ([backend/.env.example](backend/.env.example) içindeki uyarıya bakın). Gerçek kullanıcı verisi
   girmeden önce Render dashboard'dan bu değişkenin kalıcı bir Postgres'e işaret ettiğini teyit edin.
 
-- [ ] **JWT_SECRET_KEY / GOOGLE_CLIENT_SECRET gerçek değerlerle ezilmeli.**
+- [x] **JWT_SECRET_KEY / GOOGLE_CLIENT_SECRET gerçek değerlerle ezilmeli.**
   [backend/app/core/config.py:12-14](backend/app/core/config.py#L12) içinde bir Google client ID ve
   dev JWT secret'ı pydantic-settings varsayılanı olarak hardcode edilmiş. Render ortam
   değişkenlerinde bunların üretime özel, gerçek değerlerle geçersiz kılındığından emin olun —
   aksi halde token'lar herkesin bildiği bir secret ile imzalanmış olur.
 
-- [ ] **ADMIN_EMAILS Render'da doğru ayarlı mı kontrol edin.** Boşsa hiç kimse admin sayılmaz
+- [x] **ADMIN_EMAILS Render'da doğru ayarlı mı kontrol edin.** Boşsa hiç kimse admin sayılmaz
   (güvenli varsayılan, ama admin paneli kullanılamaz); yanlış e-posta girilirse yanlış hesap
   admin yetkisi kazanır. `.env.example` içindeki formatı takip edin (virgülle ayrılmış liste).
 
@@ -48,26 +48,32 @@ Tamamlanan maddeleri `[x]` yaparak işaretleyin.
   strateji/alarm/admin uçları için smoke test'ler ve CI'da `python -m unittest` + `ruff check`
   adımı ekleyin.
 
-- [ ] **Piyasa verisi retention/pruning uygulanmalı.** [RULES.md §24-27](RULES.md) her sembol +
-  zaman dilimi için sabit bir saklama limiti (`RETENTION_1M/1H/1D`, zaten
-  [config.py:27-29](backend/app/core/config.py#L27) içinde tanımlı) ve periyodik otomatik
-  temizlik şart koşuyor (`scripts/update_market.py`). Şu an bu limitler **hiçbir yerde
-  kullanılmıyor** ve böyle bir script hiç yazılmamış — parquet cache dosyaları sınırsız büyüyor.
-  Gerçek trafik altında disk kullanımı kontrolsüz artar.
+- [x] **Piyasa verisi retention/pruning uygulanmalı.** `DataLoader._prune_to_retention`
+  (`RETENTION_1M/1H/1D`, [config.py:43-45](backend/app/core/config.py#L43)) artık her yüklemede
+  eski barları kırpıyor, ve [scripts/update_market.py](scripts/update_market.py) gece yarısı tüm
+  sembol/zaman dilimlerini toplu çekiyor (bkz. commit "piyasa verisini gece yarısı toplu işle
+  önceden çek"). Not: bu betiğin Render'da bir cron job / scheduled task olarak
+  bağlandığını ayrıca teyit edin — repo'da script var ama zamanlayıcı ayarı bu dosyanın
+  kapsamı dışında.
 
 ---
 
 ## 🟡 Önemli — kısa vadede yapılmalı
 
-- [ ] **Boş (stub) sekmeler kullanıcıya görünüyor.** Sidebar'da "Scanner", "Backtest", "Trade
-  Journal" sekmeleri var ama CLAUDE.md'ye göre bunların arkasındaki
-  `engines/backtest_engine.py`, `journal/`, `reports/`, ilgili sayfa bileşenleri hâlâ birer stub.
-  Yeni bir kullanıcı bu sekmelere tıklayıp boş ekran görür. Ya bu sekmeleri geçici olarak gizleyin
-  ya da (roadmap Faz 4'e göre öncelik sırasıyla) tamamlayın.
+- [ ] **Boş (stub) sekmeler kullanıcıya görünüyor.** Sidebar'da ("Scanner", "Backtest", "Trade
+  Journal") hâlâ listeleniyor ([Sidebar.tsx:27-29](frontend/src/components/Sidebar.tsx#L27)) ve
+  arkalarındaki `engines/backtest_engine.py`, `journal/`, `reports/` hâlâ stub. Kısmen iyileşme
+  var: tıklanınca artık boş beyaz ekran değil, "Bu özellik Yol Haritası üzerindeki gelecek
+  fazlarda aktive edilecektir" mesajlı bir placeholder kart gösteriliyor
+  ([App.tsx:546-558](frontend/src/App.tsx#L546)). Yine de karar verilmeli: launch'a kadar bu
+  sekmeleri sidebar'dan tamamen gizlemek mi, yoksa placeholder'ı yeterli görmek mi.
 
-- [ ] **Hata izleme (error monitoring) ekleyin.** Production'daki 500 hatasını ancak manuel
-  karşılaşınca fark ettik — hiçbir log/alarm sistemi yoktu. Sentry (veya benzeri) eklemek bir
-  sonraki regresyonu aynı gün yakalamayı sağlar.
+- [x] **Hata izleme (error monitoring) ekleyin.** Kod tarafı artık tam bağlı: backend
+  `init_error_monitoring()` ([main.py](backend/main.py)) ve frontend `initSentry()`
+  ([utils/sentry.ts](frontend/src/utils/sentry.ts)) + `ErrorBoundary` hazır, sadece `SENTRY_DSN`
+  boşken no-op. Kalan iş kod değil, konfigürasyon: Sentry'de proje açıp DSN'leri üretmek ve
+  Render (`SENTRY_DSN`, `ENVIRONMENT=production`) ile Vercel (`VITE_SENTRY_DSN`) ortam
+  değişkenlerine girmek — bu adım otomatikleştirilemez, elle yapılmalı.
 
 - [ ] **Veri sağlayıcı isteklerine rate limiting ekleyin.** `market/data` ucu Yahoo Finance ve
   Binance'e doğrudan proxy yapıyor, kullanıcı başına throttling yok. Gerçek trafik altında
@@ -79,11 +85,12 @@ Tamamlanan maddeleri `[x]` yaparak işaretleyin.
   bile hata almadan, sadece daha kısa veri alır. En azından bir UI ipucu/tooltip ile bu sınırı
   belirtin.
 
-- [ ] **Alerts/Scanner motorlarında benzer performans sorunları olup olmadığı gözden geçirilmeli.**
-  Bu oturumda `RuleEngine.evaluate_range`'de indikatör serilerinin her bar için yeniden
-  hesaplandığı bir O(n²) hatası bulunup düzeltildi (bkz. commit "indikatör serilerini
-  evaluate_range boyunca önbelleğe al"). `AlertEngine.check_alerts` gibi benzer bar-by-bar
-  döngüler için de aynı örüntü kontrol edilmeli.
+- [x] **Alerts/Scanner motorlarında benzer performans sorunları olup olmadığı gözden geçirilmeli.**
+  Gözden geçirildi: `AlertEngine.check_alerts` ([backend/app/alerts/engine.py:220](backend/app/alerts/engine.py#L220))
+  bar-by-bar bir döngü değil — kullanıcının aktif alarmlarını tek bir güncel fiyat/indikatör
+  değeriyle karşılaştırıyor, O(n²) riski yok. `ScannerEngine` de kendi başına bar taramıyor;
+  toplu tarama zaten düzeltilmiş `RuleEngine.evaluate_range`'i kullanan
+  `StrategyEngine.evaluate_batch` üzerinden geçiyor. Ek bir aksiyon gerekmiyor.
 
 ---
 

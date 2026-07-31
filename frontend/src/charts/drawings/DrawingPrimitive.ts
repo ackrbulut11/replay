@@ -39,10 +39,17 @@ export interface PixelDrawing {
   logicalPoints?: DrawingPoint[];
 }
 
-/** `lineStyle`'ı canvas'ın `setLineDash` deseline çevirir; kalınlığa göre ölçeklenir. */
+/**
+ * `lineStyle`'ı canvas'ın `setLineDash` deseline çevirir.
+ *
+ * Alt sınırlar sabit tutulur: saf `lineWidth`'e orantılı bir desen (ör. 1-2px
+ * kalınlıkta) segmentleri birkaç piksele düşürüyor ve aralık gözle neredeyse
+ * hiç görünmüyordu. "Noktalı" için gerçek yuvarlak nokta efekti, neredeyse
+ * sıfır uzunluklu bir segmenti `lineCap: 'round'` ile birleştirerek elde edilir.
+ */
 function dashPatternFor(lineStyle: DrawingLineStyle | undefined, lineWidth: number): number[] {
-  if (lineStyle === 'dashed') return [lineWidth * 3, lineWidth * 2];
-  if (lineStyle === 'dotted') return [lineWidth, lineWidth * 1.6];
+  if (lineStyle === 'dashed') return [Math.max(8, lineWidth * 4), Math.max(6, lineWidth * 3)];
+  if (lineStyle === 'dotted') return [0.001, Math.max(7, lineWidth * 3.5)];
   return [];
 }
 

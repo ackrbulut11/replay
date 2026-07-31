@@ -1535,11 +1535,17 @@ export default function CandleChart({
           title: '',
           lastValueVisible: false,
           priceLineVisible: false,
+          // Ana fiyat ekseninden ayrı bir fiyat ölçeği: RSI 0-100 arası sabit bir
+          // bant olduğu için "Logaritmik" görünüm açıldığında ana eksenle
+          // (rightPriceScale) aynı ölçeği paylaşırsa bu bant anlamsızca daralır.
+          priceScaleId: 'rsi_scale',
           autoscaleInfoProvider: () => ({
             priceRange: { minValue: 0, maxValue: 100 },
             margins: { above: 2, below: 2 },
           }),
         }, rsiPaneIndex);
+        // rightPriceScale'e uygulanan logaritmik/normal mod bu ölçeği etkilemesin.
+        chart.priceScale('rsi_scale').applyOptions({ mode: PriceScaleMode.Normal });
 
         rsiPriceLinesRef.current.overbought = rsiRef.current.createPriceLine({
           price: indicatorSettings.rsi.overbought,
@@ -1592,9 +1598,13 @@ export default function CandleChart({
 
     if (indicators.macd) {
       if (!macdHistRef.current || !macdLineRef.current || !macdSignalRef.current) {
-        macdHistRef.current = chart.addSeries(HistogramSeries, { title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
-        macdLineRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.macdColor, lineWidth: indicatorSettings.macd.macdWidth as any, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
-        macdSignalRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.signalColor, lineWidth: indicatorSettings.macd.signalWidth as any, title: '', lastValueVisible: false, priceLineVisible: false }, macdPaneIndex);
+        // MACD sıfır etrafında salınan bir momentum göstergesidir; ana fiyat
+        // ekseniyle (rightPriceScale) aynı ölçeği paylaşırsa "Logaritmik" görünüm
+        // bu ekseni de anlamsızca bozar — kendi ayrı ölçeğinde kalmalı.
+        macdHistRef.current = chart.addSeries(HistogramSeries, { title: '', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
+        macdLineRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.macdColor, lineWidth: indicatorSettings.macd.macdWidth as any, title: '', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
+        macdSignalRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.signalColor, lineWidth: indicatorSettings.macd.signalWidth as any, title: '', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
+        chart.priceScale('macd_scale').applyOptions({ mode: PriceScaleMode.Normal });
       } else {
         for (const s of [macdHistRef.current, macdLineRef.current, macdSignalRef.current]) {
           if (s.getPane().paneIndex() !== macdPaneIndex) s.moveToPane(macdPaneIndex);
@@ -1864,7 +1874,12 @@ export default function CandleChart({
         <div className="flex items-center gap-3">
           {/* Logo / Başlık */}
           <div className="flex items-center gap-1.5 border-r border-white/[0.06] pr-3 h-5">
-            <span className="text-xs font-semibold tracking-[0.14em] text-zinc-100 font-sans select-none">
+            <span
+              className="text-xs font-extrabold tracking-[0.14em] font-sans select-none bg-clip-text text-transparent"
+              style={{
+                backgroundImage: 'linear-gradient(0deg, rgba(58, 195, 34, 1) 0%, rgba(100, 45, 253, 0.65) 100%)',
+              }}
+            >
               REPLAY
             </span>
           </div>

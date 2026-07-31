@@ -185,7 +185,12 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               alt=""
               className="h-7 w-7 rounded-md object-cover opacity-90"
             />
-            <span className="text-[13px] font-semibold tracking-[0.14em] text-zinc-100">
+            <span
+              className="text-[13px] font-extrabold tracking-[0.14em] bg-clip-text text-transparent"
+              style={{
+                backgroundImage: 'linear-gradient(0deg, rgba(58, 195, 34, 1) 0%, rgba(100, 45, 253, 0.65) 100%)',
+              }}
+            >
               REPLAY
             </span>
           </div>

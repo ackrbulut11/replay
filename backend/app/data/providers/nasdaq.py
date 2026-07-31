@@ -14,6 +14,32 @@ SYMBOL_ALIASES = {
     "TESLA": "TSLA",
     "NETFLIX": "NFLX",
     "INTEL": "INTC",
+
+    # Endeksler (Yahoo Finance ^ önekli endeks sembolleri kısa kodlarla eşlenir)
+    "SPX": "^GSPC",
+    "SP500": "^GSPC",
+    "DJI": "^DJI",
+    "DOW30": "^DJI",
+    "NDX": "^NDX",
+    "NASDAQ100": "^NDX",
+    "DAX40": "^GDAXI",
+    "DAX": "^GDAXI",
+    "FTSE100": "^FTSE",
+    "FTSE350": "^FTLC",
+
+    # Emtialar (Yahoo Finance vadeli işlem (futures) sembolleri)
+    "XAUUSD": "GC=F",
+    "GOLD": "GC=F",
+    "XAGUSD": "SI=F",
+    "SILVER": "SI=F",
+    "XPTUSD": "PL=F",
+    "PLATINUM": "PL=F",
+    "XPDUSD": "PA=F",
+    "PALLADIUM": "PA=F",
+    "BRENT": "BZ=F",
+    "WTI": "CL=F",
+    "NATGAS": "NG=F",
+    "COPPER": "HG=F",
 }
 
 class NasdaqProvider(IDataProvider):

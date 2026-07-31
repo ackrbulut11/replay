@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark, Banknote } from 'lucide-react';
+import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark, Banknote, LineChart, Gem } from 'lucide-react';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 
 export interface SymbolItem {
@@ -72,6 +72,8 @@ export default function SymbolSearchModal({
     if (ex === 'NASDAQ' || ex === 'NYSE') return 'nasdaq';
     if (ex === 'BINANCE') return 'binance';
     if (ex === 'FOREX' || ex === 'FX') return 'forex';
+    // Endeksler ve emtialar Yahoo Finance üzerinden nasdaq sağlayıcısıyla çekilir.
+    if (ex === 'INDEX' || ex === 'COMMODITY') return 'nasdaq';
     return currentProvider;
   };
 
@@ -178,6 +180,30 @@ export default function SymbolSearchModal({
             <Banknote className="w-3.5 h-3.5 text-emerald-400" />
             Forex (FX)
           </button>
+
+          <button
+            onClick={() => setActiveTab('index')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === 'index'
+                ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40 shadow-md shadow-violet-500/10'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+            }`}
+          >
+            <LineChart className="w-3.5 h-3.5 text-violet-400" />
+            Endeksler
+          </button>
+
+          <button
+            onClick={() => setActiveTab('commodity')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === 'commodity'
+                ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 shadow-md shadow-yellow-500/10'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+            }`}
+          >
+            <Gem className="w-3.5 h-3.5 text-yellow-400" />
+            Emtia
+          </button>
         </div>
 
         {/* Results List */}
@@ -192,10 +218,12 @@ export default function SymbolSearchModal({
             </div>
           ) : (
             results.map((item) => {
-              const exchangeColor = 
+              const exchangeColor =
                 item.exchange === 'BIST' ? 'bg-red-950/60 text-red-400 border-red-900/60' :
                 item.exchange === 'BINANCE' ? 'bg-amber-950/60 text-amber-400 border-amber-900/60' :
                 item.exchange === 'FOREX' ? 'bg-emerald-950/60 text-emerald-400 border-emerald-900/60' :
+                item.exchange === 'INDEX' ? 'bg-violet-950/60 text-violet-400 border-violet-900/60' :
+                item.exchange === 'COMMODITY' ? 'bg-yellow-950/60 text-yellow-400 border-yellow-900/60' :
                 'bg-blue-950/60 text-blue-400 border-blue-900/60';
 
 

@@ -106,6 +106,26 @@ export const DEFAULT_INDICATOR_SETTINGS: IndicatorSettingsMap = {
   },
 };
 
+export interface ActiveIndicatorsState {
+  ema20: boolean;
+  ema50: boolean;
+  ema100: boolean;
+  ema200: boolean;
+  rsi: boolean;
+  macd: boolean;
+  bb: boolean;
+}
+
+export const DEFAULT_ACTIVE_INDICATORS: ActiveIndicatorsState = {
+  ema20: false,
+  ema50: false,
+  ema100: false,
+  ema200: false,
+  rsi: false,
+  macd: false,
+  bb: false,
+};
+
 export const DEFAULT_DRAWING_DEFAULTS: Record<DrawingTool, DrawingEditOptions> = {
   pointer: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE },
   ruler: { color: '#2962ff', lineWidth: 2, opacity: 0.9, lineStyle: DEFAULT_LINE_STYLE },
@@ -120,6 +140,7 @@ export const DEFAULT_DRAWING_DEFAULTS: Record<DrawingTool, DrawingEditOptions> =
 export interface ChartSettingsState {
   rsi: RsiSettings;
   indicators: IndicatorSettingsMap;
+  activeIndicators: ActiveIndicatorsState;
   drawingDefaults: Record<DrawingTool, DrawingEditOptions>;
 }
 
@@ -139,12 +160,21 @@ function mergeIndicatorDefaults(saved?: any): IndicatorSettingsMap {
   };
 }
 
+function mergeActiveIndicators(saved?: any): ActiveIndicatorsState {
+  return {
+    ...DEFAULT_ACTIVE_INDICATORS,
+    ...(saved || {}),
+  };
+}
+
 function loadInitialState(): ChartSettingsState {
   try {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       const indicators = mergeIndicatorDefaults(parsed.indicators || (parsed.rsi?.indicators ? parsed.rsi.indicators : undefined));
+      const activeIndicators = mergeActiveIndicators(parsed.activeIndicators || parsed.rsi?.active_indicators);
+
       if (parsed.rsi) {
         if (parsed.rsi.period) indicators.rsi.period = parsed.rsi.period;
         if (parsed.rsi.overbought) indicators.rsi.overbought = parsed.rsi.overbought;
@@ -153,6 +183,7 @@ function loadInitialState(): ChartSettingsState {
       return {
         rsi: { period: indicators.rsi.period, overbought: indicators.rsi.overbought, oversold: indicators.rsi.oversold },
         indicators,
+        activeIndicators,
         drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS, ...(parsed.drawingDefaults || {}) },
       };
     }
@@ -162,6 +193,7 @@ function loadInitialState(): ChartSettingsState {
   return {
     rsi: { ...DEFAULT_RSI_SETTINGS },
     indicators: JSON.parse(JSON.stringify(DEFAULT_INDICATOR_SETTINGS)),
+    activeIndicators: { ...DEFAULT_ACTIVE_INDICATORS },
     drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS },
   };
 }
@@ -192,6 +224,7 @@ function persistablePayload(state: ChartSettingsState) {
       overbought: state.indicators.rsi.overbought,
       oversold: state.indicators.rsi.oversold,
       indicators: state.indicators,
+      active_indicators: state.activeIndicators,
     },
     drawing_defaults: state.drawingDefaults,
   };
@@ -229,6 +262,22 @@ export const chartSettingsStore = {
     return () => {
       listeners.delete(listener);
     };
+  },
+
+  toggleActiveIndicator: (key: keyof ActiveIndicatorsState) => {
+    const updated = {
+      ...currentState.activeIndicators,
+      [key]: !currentState.activeIndicators[key],
+    };
+    applyState({ activeIndicators: updated });
+  },
+
+  setActiveIndicators: (active: Partial<ActiveIndicatorsState>) => {
+    const updated = {
+      ...currentState.activeIndicators,
+      ...active,
+    };
+    applyState({ activeIndicators: updated });
   },
 
   setRsiSettings: (rsi: Partial<RsiSettings>) => {
@@ -288,11 +337,12 @@ export const chartSettingsStore = {
     syncInFlight = true;
 
     try {
-      const data = await apiRequest<{ rsi: Partial<RsiSettings> & { indicators?: any }; drawing_defaults: Partial<Record<DrawingTool, DrawingEditOptions>> }>('/api/chart-settings');
+      const data = await apiRequest<{ rsi: Partial<RsiSettings> & { indicators?: any; active_indicators?: any }; drawing_defaults: Partial<Record<DrawingTool, DrawingEditOptions>> }>('/api/chart-settings');
       const hasServerData = data && (Object.keys(data.rsi || {}).length > 0 || Object.keys(data.drawing_defaults || {}).length > 0);
 
       if (hasServerData) {
         const indicators = mergeIndicatorDefaults(data.rsi?.indicators);
+        const activeIndicators = mergeActiveIndicators(data.rsi?.active_indicators);
         if (data.rsi?.period) indicators.rsi.period = data.rsi.period;
         if (data.rsi?.overbought) indicators.rsi.overbought = data.rsi.overbought;
         if (data.rsi?.oversold) indicators.rsi.oversold = data.rsi.oversold;
@@ -300,6 +350,7 @@ export const chartSettingsStore = {
         const merged: ChartSettingsState = {
           rsi: { period: indicators.rsi.period, overbought: indicators.rsi.overbought, oversold: indicators.rsi.oversold },
           indicators,
+          activeIndicators,
           drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS, ...(data.drawing_defaults || {}) },
         };
         lastPersistedJson = JSON.stringify(persistablePayload(merged));
@@ -332,6 +383,7 @@ export const chartSettingsStore = {
     currentState = {
       rsi: { ...DEFAULT_RSI_SETTINGS },
       indicators: defaultIndicators,
+      activeIndicators: { ...DEFAULT_ACTIVE_INDICATORS },
       drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS },
     };
     try {
@@ -359,4 +411,5 @@ export function useChartSettingsStore(): [ChartSettingsState, typeof chartSettin
 
   return [state, chartSettingsStore];
 }
+
 

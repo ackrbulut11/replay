@@ -2133,6 +2133,50 @@ export default function CandleChart({
             tool={activeTool}
           />
         ) : null}
+
+        {/* Göstergeler İçin Canlı Lejant ve Hızlı Ayarlar (TradingView Tarzı) — çizim
+            araç çubuğunun altında, aynı sütunda; üst üste binmesin diye ayrı bir
+            absolute katman değil, bu sütunun bir parçası. */}
+        <div className="flex flex-wrap gap-1.5 pointer-events-auto">
+          {(['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).map((key) => {
+            if (!indicators[key]) return null;
+            const conf = indicatorSettings[key] as any;
+            const val = latestIndicatorValues[key];
+            const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
+            const color = key === 'bb' ? conf.upperColor : conf.color;
+
+            return (
+              <div
+                key={key}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0d1321]/80 border border-slate-800 text-[11px] shadow-sm backdrop-blur-xs select-none"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="font-semibold text-slate-200">{label}</span>
+                {val !== undefined && val !== null && (
+                  <span className="font-mono text-slate-400 text-[10px]">
+                    {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  title={`${label} Ayarları`}
+                  onClick={() => setEditingIndicator(key)}
+                  className="p-0.5 text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
+                >
+                  <Settings2 className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  title="Kapat"
+                  onClick={() => onToggleIndicator(key)}
+                  className="p-0.5 text-slate-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Durum Gösterge Katmanları */}
@@ -2312,48 +2356,6 @@ export default function CandleChart({
       )}
 
       <div ref={chartContainerRef} className="w-full h-full" />
-
-      {/* Göstergeler İçin Canlı Lejant ve Hızlı Ayarlar (TradingView Tarzı) */}
-      <div className="absolute top-[62px] left-14 z-20 flex flex-wrap gap-1.5 pointer-events-auto">
-        {(['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).map((key) => {
-          if (!indicators[key]) return null;
-          const conf = indicatorSettings[key] as any;
-          const val = latestIndicatorValues[key];
-          const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
-          const color = key === 'bb' ? conf.upperColor : conf.color;
-
-          return (
-            <div
-              key={key}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0d1321]/80 border border-slate-800 text-[11px] shadow-sm backdrop-blur-xs select-none"
-            >
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <span className="font-semibold text-slate-200">{label}</span>
-              {val !== undefined && val !== null && (
-                <span className="font-mono text-slate-400 text-[10px]">
-                  {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
-                </span>
-              )}
-              <button
-                type="button"
-                title={`${label} Ayarları`}
-                onClick={() => setEditingIndicator(key)}
-                className="p-0.5 text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
-              >
-                <Settings2 className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                title="Kapat"
-                onClick={() => onToggleIndicator(key)}
-                className="p-0.5 text-slate-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          );
-        })}
-      </div>
 
       {/* Alt Panel Gösterge Ayarları ve Lejantları (RSI & MACD) */}
       {(indicators.rsi || indicators.macd) && (

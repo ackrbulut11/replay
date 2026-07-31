@@ -61,7 +61,8 @@ function App() {
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   
   const [logScale, setLogScale] = useState(false);
-  const [indicators, setIndicators] = useState<IndicatorsState>(DEFAULT_INDICATORS_STATE);
+  const [chartSettings, chartSettingsApi] = useChartSettingsStore();
+  const indicators = chartSettings.activeIndicators;
 
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,17 +104,15 @@ function App() {
   }, [activeTab]);
 
   const handleEnableIndicators = useCallback((keys: (keyof IndicatorsState)[]) => {
-    setIndicators(() => {
-      const next = { ...DEFAULT_INDICATORS_STATE };
-      keys.forEach((k) => {
-        next[k] = true;
-      });
-      return next;
+    const next = { ...DEFAULT_ACTIVE_INDICATORS };
+    keys.forEach((k) => {
+      next[k] = true;
     });
-  }, []);
+    chartSettingsApi.setActiveIndicators(next);
+  }, [chartSettingsApi]);
 
   const handleToggleIndicator = (key: keyof IndicatorsState) => {
-    setIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
+    chartSettingsApi.toggleActiveIndicator(key);
   };
 
   // Arkaplanda gelen daha eski mumları mevcut chartData'nın başına ekler.

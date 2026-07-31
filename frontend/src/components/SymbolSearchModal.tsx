@@ -89,7 +89,7 @@ export default function SymbolSearchModal({
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
       {/* Modal Card */}
       <div 
-        className="w-full max-w-xl bg-[#0d1321] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+        className="w-full max-w-2xl bg-[#0d1321] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header Input */}
@@ -120,7 +120,7 @@ export default function SymbolSearchModal({
         </div>
 
         {/* Category Tabs */}
-        <div className="flex items-center gap-1.5 px-4 py-2.5 bg-[#090d16] border-b border-slate-800/80 overflow-x-auto select-none">
+        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 bg-[#090d16] border-b border-slate-800/80 select-none">
           <button
             onClick={() => setActiveTab('all')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
@@ -131,18 +131,6 @@ export default function SymbolSearchModal({
           >
             <Sparkles className="w-3.5 h-3.5" />
             Tümü
-          </button>
-
-          <button
-            onClick={() => setActiveTab('bist')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-              activeTab === 'bist'
-                ? 'bg-red-500/20 text-red-300 border border-red-500/40 shadow-md shadow-red-500/10'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5 text-red-400" />
-            BIST
           </button>
 
           <button
@@ -158,6 +146,18 @@ export default function SymbolSearchModal({
           </button>
 
           <button
+            onClick={() => setActiveTab('forex')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === 'forex'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-md shadow-emerald-500/10'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+            }`}
+          >
+            <Banknote className="w-3.5 h-3.5 text-emerald-400" />
+            Forex (FX)
+          </button>
+
+          <button
             onClick={() => setActiveTab('binance')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
               activeTab === 'binance'
@@ -170,15 +170,15 @@ export default function SymbolSearchModal({
           </button>
 
           <button
-            onClick={() => setActiveTab('forex')}
+            onClick={() => setActiveTab('bist')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-              activeTab === 'forex'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-md shadow-emerald-500/10'
+              activeTab === 'bist'
+                ? 'bg-red-500/20 text-red-300 border border-red-500/40 shadow-md shadow-red-500/10'
                 : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
             }`}
           >
-            <Banknote className="w-3.5 h-3.5 text-emerald-400" />
-            Forex (FX)
+            <Building2 className="w-3.5 h-3.5 text-red-400" />
+            BIST
           </button>
 
           <button

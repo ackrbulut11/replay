@@ -104,6 +104,19 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
               />
             </div>
 
+            {/* Yalnızca yerel geliştirme derlemesinde görünür (import.meta.env.DEV).
+                Google akışını atlayıp backend'in DEV_LOGIN_TOKEN bypass'ını kullanır
+                (bkz. backend/.env, .env.example ve auth/dependencies.py). Üretim
+                build'inde bu buton hiç render edilmez. */}
+            {import.meta.env.DEV && import.meta.env.VITE_DEV_LOGIN_TOKEN && (
+              <button
+                onClick={() => handleSuccess({ credential: import.meta.env.VITE_DEV_LOGIN_TOKEN })}
+                className="mt-3 w-full max-w-[280px] rounded-full border border-dashed border-amber-500/40 bg-amber-500/[0.06] px-4 py-2 text-[12px] font-medium text-amber-400/90 hover:bg-amber-500/10"
+              >
+                Dev test girişi
+              </button>
+            )}
+
             {/* Küçük özellik rozetleri — Google butonunun hemen altında,
                 landing page'in tek cümlelik açıklamalarına göre daha "cool"
                 bir görünüm istendiği için düz metin yerine ikon+etiket

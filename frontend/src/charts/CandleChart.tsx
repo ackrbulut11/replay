@@ -10,19 +10,20 @@ import DrawingEditPanel from './drawings/DrawingEditPanel';
 import { DrawingsPrimitive, RECT_HANDLE_LABELS, POSITION_HANDLE_LABELS } from './drawings/DrawingPrimitive';
 import {
   TOOL_CONFIG, generateDrawingId,
-  DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY,
+  DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY, DEFAULT_LINE_STYLE,
 } from './drawings/types';
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2 } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
+import { useChartSettingsStore } from '../store/chartSettingsStore';
 
 
 
@@ -119,6 +120,7 @@ export default function CandleChart({
   const ema200Ref = useRef<ISeriesApi<'Line'> | null>(null);
 
   const rsiRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const rsiPriceLinesRef = useRef<{ overbought?: any; middle?: any; oversold?: any }>({});
 
   const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSignalRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -138,16 +140,11 @@ export default function CandleChart({
   const [snapEnabled, setSnapEnabled] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<Drawing | null>(null);
 
-  const [toolSettings, setToolSettings] = useState<Record<DrawingTool, DrawingEditOptions>>({
-    pointer: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
-    ruler: { color: '#2962ff', lineWidth: 2, opacity: 0.9 },
-    longPosition: { color: '#10b981', lineWidth: 2, opacity: DEFAULT_OPACITY },
-    shortPosition: { color: '#ef4444', lineWidth: 2, opacity: DEFAULT_OPACITY },
-    trendLine: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
-    horizontalRay: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
-    rectangle: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, fillOpacity: 0.16 },
-    parallelChannel: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY },
-  });
+  // Çizim araçlarının varsayılan stilleri (renk/kalınlık/opaklık/çizgi tipi) ve
+  // RSI ayarları kullanıcıya bağlı olarak sunucuda saklanır (bkz. chartSettingsStore).
+  const [chartSettings, chartSettingsApi] = useChartSettingsStore();
+  const toolSettings = chartSettings.drawingDefaults;
+  const rsiSettings = chartSettings.rsi;
 
   const toolSettingsRef = useRef(toolSettings);
   toolSettingsRef.current = toolSettings;
@@ -156,6 +153,7 @@ export default function CandleChart({
     color: DEFAULT_DRAWING_COLOR,
     lineWidth: DEFAULT_LINE_WIDTH,
     opacity: DEFAULT_OPACITY,
+    lineStyle: DEFAULT_LINE_STYLE,
   });
 
   const activeToolRef = useRef<DrawingTool>('pointer');
@@ -333,6 +331,7 @@ export default function CandleChart({
   }, []);
 
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
+  const [isRsiSettingsOpen, setIsRsiSettingsOpen] = useState(false);
   const [isDatesOpen, setIsDatesOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
@@ -623,7 +622,7 @@ export default function CandleChart({
       cancelDrawing();
     } else {
       setSelectedDrawing(null);
-      const settings = toolSettingsRef.current[tool] || { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY };
+      const settings = toolSettingsRef.current[tool] || { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE };
       setEditOptions(settings);
     }
   }, [cancelDrawing]);
@@ -723,6 +722,7 @@ export default function CandleChart({
         color: drawing.color,
         lineWidth: drawing.lineWidth,
         opacity: drawing.opacity,
+        lineStyle: drawing.lineStyle,
         fillOpacity: drawing.fillOpacity,
       });
     }
@@ -749,21 +749,16 @@ export default function CandleChart({
       sel.color = opts.color;
       sel.lineWidth = opts.lineWidth;
       sel.opacity = opts.opacity;
+      sel.lineStyle = opts.lineStyle;
       sel.fillOpacity = opts.fillOpacity;
       drawingsRef.current = drawingsRef.current.map(d => d.id === sel.id ? sel : d);
       primitiveRef.current?.setDrawings(drawingsRef.current);
 
-      setToolSettings(prev => ({
-        ...prev,
-        [sel.tool]: opts,
-      }));
+      chartSettingsApi.setDrawingDefault(sel.tool, opts);
     } else if (activeToolRef.current !== 'pointer') {
-      setToolSettings(prev => ({
-        ...prev,
-        [activeToolRef.current]: opts,
-      }));
+      chartSettingsApi.setDrawingDefault(activeToolRef.current, opts);
     }
-  }, []);
+  }, [chartSettingsApi]);
 
   const applyDrag = useCallback((drawingId: string, handleIndex: number, newPoint: DrawingPoint): Drawing | null => {
     const drawing = drawingsRef.current.find(d => d.id === drawingId);
@@ -1003,6 +998,7 @@ export default function CandleChart({
           color: DEFAULT_DRAWING_COLOR,
           lineWidth: DEFAULT_LINE_WIDTH,
           opacity: DEFAULT_OPACITY,
+          lineStyle: DEFAULT_LINE_STYLE,
         };
 
         let finalPoints = newPoints;
@@ -1039,6 +1035,7 @@ export default function CandleChart({
           color: settings.color,
           lineWidth: settings.lineWidth,
           opacity: settings.opacity,
+          lineStyle: settings.lineStyle ?? DEFAULT_LINE_STYLE,
           fillOpacity: settings.fillOpacity ?? 0.18,
         };
 
@@ -1525,15 +1522,21 @@ export default function CandleChart({
           }),
         }, rsiPaneIndex);
 
-        rsiRef.current.createPriceLine({ price: 70, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
-        rsiRef.current.createPriceLine({ price: 50, color: 'rgba(148, 163, 184, 0.4)', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '' });
-        rsiRef.current.createPriceLine({ price: 30, color: 'rgba(16, 185, 129, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+        rsiPriceLinesRef.current.overbought = rsiRef.current.createPriceLine({ price: rsiSettings.overbought, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+        rsiPriceLinesRef.current.middle = rsiRef.current.createPriceLine({ price: 50, color: 'rgba(148, 163, 184, 0.4)', lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: '' });
+        rsiPriceLinesRef.current.oversold = rsiRef.current.createPriceLine({ price: rsiSettings.oversold, color: 'rgba(16, 185, 129, 0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+      } else {
+        // Seviyeler kullanıcı tarafından değiştirilmiş olabilir; seriyi yeniden
+        // oluşturmadan sadece fiyat çizgilerinin konumunu güncelle.
+        rsiPriceLinesRef.current.overbought?.applyOptions({ price: rsiSettings.overbought });
+        rsiPriceLinesRef.current.oversold?.applyOptions({ price: rsiSettings.oversold });
       }
-      const rsi = calculateRSI(visibleData, 14);
+      const rsi = calculateRSI(visibleData, rsiSettings.period);
       rsiRef.current.setData(rsi.map(d => ({ time: d.time as Time, value: d.value })));
     } else if (rsiRef.current) {
       chart.removeSeries(rsiRef.current);
       rsiRef.current = null;
+      rsiPriceLinesRef.current = {};
     }
 
     if (indicators.macd) {
@@ -1592,7 +1595,7 @@ export default function CandleChart({
       if (bbMiddleRef.current) { chart.removeSeries(bbMiddleRef.current); bbMiddleRef.current = null; }
       if (bbLowerRef.current) { chart.removeSeries(bbLowerRef.current); bbLowerRef.current = null; }
     }
-  }, [visibleData, indicators]);
+  }, [visibleData, indicators, rsiSettings]);
 
   // --- PANE YERLEŞİMİ ---
   // v5'te RSI/MACD ayrı pane'lerde durur; her pane kendi fiyat cetvelini yönetir.
@@ -1861,7 +1864,7 @@ export default function CandleChart({
                     ema50: 'EMA 50',
                     ema100: 'EMA 100',
                     ema200: 'EMA 200',
-                    rsi: 'RSI (14)',
+                    rsi: `RSI (${rsiSettings.period})`,
                     macd: 'MACD (12, 26, 9)',
                     bb: 'Bollinger Bands (20, 2)',
                   };
@@ -1875,21 +1878,60 @@ export default function CandleChart({
                     bb: 'bg-yellow-400',
                   };
                   return (
-                    <label
-                      key={indKey}
-                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-slate-800/50 cursor-pointer select-none"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${colors[indKey]} ${indicators[indKey] ? 'animate-pulse' : ''}`} />
-                        <span className="text-xs text-slate-200">{labels[indKey]}</span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={indicators[indKey]}
-                        onChange={() => onToggleIndicator(indKey)}
-                        className="w-3.5 h-3.5 accent-indigo-500 rounded border-slate-800 cursor-pointer bg-[#070b13]"
-                      />
-                    </label>
+                    <div key={indKey}>
+                      <label
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-slate-800/50 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${colors[indKey]} ${indicators[indKey] ? 'animate-pulse' : ''}`} />
+                          <span className="text-xs text-slate-200">{labels[indKey]}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {indKey === 'rsi' && (
+                            <button
+                              type="button"
+                              title="RSI ayarları"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsRsiSettingsOpen(v => !v); }}
+                              className={`p-0.5 rounded transition-colors ${isRsiSettingsOpen ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`}
+                            >
+                              <Settings2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <input
+                            type="checkbox"
+                            checked={indicators[indKey]}
+                            onChange={() => onToggleIndicator(indKey)}
+                            className="w-3.5 h-3.5 accent-indigo-500 rounded border-slate-800 cursor-pointer bg-[#070b13]"
+                          />
+                        </div>
+                      </label>
+
+                      {indKey === 'rsi' && isRsiSettingsOpen && (
+                        <div className="mx-2 mb-1.5 mt-0.5 p-2 rounded-lg bg-[#070b13]/80 border border-slate-800 space-y-1.5">
+                          {([
+                            ['period', 'Periyot'],
+                            ['overbought', 'Aşırı Alım'],
+                            ['oversold', 'Aşırı Satım'],
+                          ] as const).map(([field, label]) => (
+                            <label key={field} className="flex items-center justify-between gap-2 text-[11px] text-slate-300">
+                              <span>{label}</span>
+                              <input
+                                type="number"
+                                value={rsiSettings[field]}
+                                min={field === 'period' ? 2 : 1}
+                                max={field === 'period' ? 100 : 99}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  if (!isNaN(val)) chartSettingsApi.setRsiSettings({ [field]: val });
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-16 bg-[#0d1321] border border-slate-700 rounded px-1.5 py-0.5 text-right text-slate-100 focus:outline-none focus:border-indigo-500"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

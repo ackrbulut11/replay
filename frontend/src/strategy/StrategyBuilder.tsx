@@ -20,6 +20,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import ConditionEditor from './ConditionEditor';
+import { logEvent, logError } from '../services/eventLog';
 import type {
   Strategy,
   StrategyCreateRequest,
@@ -229,12 +230,19 @@ export default function StrategyBuilder({
         result = await strategyStore.createStrategy(createData);
       }
 
+      if (result) {
+        logEvent(isEditing ? 'strategy_updated' : 'strategy_created', {
+          context: { strategy_id: result.id, name: result.name },
+        });
+      }
+
       if (result && onSaved) {
         onSaved(result);
       }
 
     } catch (err: any) {
       setSaveError(err.message || 'Kaydetme hatası');
+      logError('strategy_save_failed', err, { is_editing: isEditing, name });
     } finally {
       setIsSaving(false);
     }

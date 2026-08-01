@@ -8,12 +8,14 @@ Admin panelindeki genel istatistikler bu tabloyu okur (bkz. admin.py).
 
 from __future__ import annotations
 
+from typing import Any, Optional
+
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
-from app.database.models import DrawingUsageEvent, User, generate_uuid
+from app.auth.dependencies import get_current_user, get_current_user_optional
+from app.database.models import DrawingUsageEvent, User, UserEvent, generate_uuid
 from app.database.postgres import get_db
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -44,6 +46,40 @@ def log_drawing_usage(
         symbol=payload.symbol.upper(),
         provider=payload.provider,
         tool=payload.tool,
+    )
+    db.add(event)
+    db.commit()
+
+
+class UserEventRequest(BaseModel):
+    event_type: str
+    level: str = "info"
+    message: Optional[str] = None
+    context: Optional[dict[str, Any]] = None
+
+
+@router.post("/events", status_code=204)
+def log_user_event(
+    payload: UserEventRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """
+    Kullanıcının karşılaştığı hataları (frontend/backend) ve manuel etiketlenmiş
+    önemli aksiyonları (strateji kaydetme, alarm oluşturma vb.) kaydeder.
+
+    Oturum açılmamışken de hata oluşabileceği için kimlik doğrulama zorunlu
+    değildir (bkz. get_current_user_optional); user_id bu durumda null olur.
+    Başarısız olması kullanıcının akışını etkilememeli, bu yüzden frontend bu
+    çağrıyı sessizce yutar (bkz. services/eventLog.ts).
+    """
+    event = UserEvent(
+        id=generate_uuid(),
+        user_id=current_user.id if current_user else None,
+        event_type=payload.event_type,
+        level=payload.level,
+        message=payload.message,
+        context=payload.context,
     )
     db.add(event)
     db.commit()

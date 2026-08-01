@@ -10,11 +10,11 @@ import React, { useState } from 'react';
 import {
   Users, SlidersHorizontal, Bell, Star, RefreshCw, ShieldAlert,
   ChevronDown, TrendingUp, TrendingDown, Power, PowerOff, AlertTriangle,
-  PenTool, BarChart2, Copy, Check, Mail,
+  PenTool, BarChart2, Copy, Check, Mail, ScrollText,
 } from 'lucide-react';
 import {
-  getAdminStats, getAdminUsers, getAdminUserDetail, cloneStrategyToMe, getAdminWaitlist,
-  type AdminStats, type AdminUserItem, type AdminUserDetail, type AdminWaitlistEntry,
+  getAdminStats, getAdminUsers, getAdminUserDetail, cloneStrategyToMe, getAdminWaitlist, getAdminEvents,
+  type AdminStats, type AdminUserItem, type AdminUserDetail, type AdminWaitlistEntry, type AdminEventEntry,
 } from '../services/adminApi';
 import { useAuth } from '../context/AuthContext';
 
@@ -354,6 +354,152 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      <EventsPanel />
+    </div>
+  );
+}
+
+/** Karşılaşılan hataları ve etiketlenmiş aksiyonları gösteren bağımsız panel. */
+function EventsPanel() {
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState<AdminEventEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [levelFilter, setLevelFilter] = useState<string>('');
+  const [loadedOnce, setLoadedOnce] = useState(false);
+
+  const load = React.useCallback(async (level: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getAdminEvents({ level: level || undefined });
+      setEvents(data);
+      setLoadedOnce(true);
+    } catch (err: any) {
+      setError(err?.message || 'Olaylar yüklenemedi.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleToggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !loadedOnce) {
+      load(levelFilter);
+    }
+  };
+
+  const handleLevelChange = (level: string) => {
+    setLevelFilter(level);
+    load(level);
+  };
+
+  return (
+    <div className="bg-[#0d1321]/80 border border-slate-800/80 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 cursor-pointer"
+      >
+        <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+          <ScrollText className="w-3.5 h-3.5 text-rose-400" />
+          Olaylar ve Hatalar
+        </h3>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800/80">
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-800/60">
+            <div className="flex items-center gap-2">
+              {['', 'error', 'warning', 'info'].map((lvl) => (
+                <button
+                  key={lvl || 'all'}
+                  type="button"
+                  onClick={() => handleLevelChange(lvl)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                    levelFilter === lvl
+                      ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
+                      : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800/70'
+                  }`}
+                >
+                  {lvl === '' ? 'Tümü' : lvl === 'error' ? 'Hata' : lvl === 'warning' ? 'Uyarı' : 'Bilgi'}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => load(levelFilter)}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 text-[11px] font-semibold text-slate-300 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+              Yenile
+            </button>
+          </div>
+
+          {error && (
+            <div className="px-4 py-3 text-xs text-red-400 flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {loading && events.length === 0 && (
+            <div className="flex items-center gap-2 px-4 py-6 text-xs text-slate-500">
+              <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              Yükleniyor...
+            </div>
+          )}
+
+          {!loading && !error && events.length === 0 && (
+            <div className="px-4 py-6 text-xs text-slate-600 text-center">Kayıt bulunamadı.</div>
+          )}
+
+          {events.length > 0 && (
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-[#0d1321]">
+                  <tr className="text-slate-500 border-b border-slate-800/60">
+                    <th className="text-left font-semibold px-4 py-2">Zaman</th>
+                    <th className="text-left font-semibold px-4 py-2">Kullanıcı</th>
+                    <th className="text-left font-semibold px-4 py-2">Tür</th>
+                    <th className="text-left font-semibold px-4 py-2">Seviye</th>
+                    <th className="text-left font-semibold px-4 py-2">Mesaj</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((e) => (
+                    <tr key={e.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20">
+                      <td className="px-4 py-2 text-slate-400 font-mono whitespace-nowrap">{formatDateTime(e.created_at)}</td>
+                      <td className="px-4 py-2 text-slate-400 font-mono truncate max-w-[160px]">{e.user_email || '—'}</td>
+                      <td className="px-4 py-2 text-slate-300 font-mono">{e.event_type}</td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={
+                            e.level === 'error'
+                              ? 'text-red-400'
+                              : e.level === 'warning'
+                              ? 'text-amber-400'
+                              : 'text-slate-500'
+                          }
+                        >
+                          {e.level}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-slate-400 truncate max-w-[360px]" title={e.message || undefined}>
+                        {e.message || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

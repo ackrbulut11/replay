@@ -117,6 +117,30 @@ export async function getAdminWaitlist(): Promise<AdminWaitlistEntry[]> {
   return apiRequest<AdminWaitlistEntry[]>(`${API_BASE}/waitlist`);
 }
 
+/** Bir kullanıcı olayı: karşılaşılan hata veya etiketlenmiş aksiyon. */
+export interface AdminEventEntry {
+  id: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  event_type: string;
+  level: string;
+  message?: string | null;
+  context?: Record<string, unknown> | null;
+  created_at?: string | null;
+}
+
+export async function getAdminEvents(filters: {
+  event_type?: string;
+  level?: string;
+  limit?: number;
+} = {}): Promise<AdminEventEntry[]> {
+  const params = new URLSearchParams();
+  if (filters.event_type) params.set('event_type', filters.event_type);
+  if (filters.level) params.set('level', filters.level);
+  params.set('limit', String(filters.limit ?? 200));
+  return apiRequest<AdminEventEntry[]>(`${API_BASE}/events?${params.toString()}`);
+}
+
 /** Bir kullanıcının stratejisini, admin panelinden bakan admin'in kendi hesabına kopyalar. */
 export async function cloneStrategyToMe(strategyId: string): Promise<AdminStrategyItem> {
   return apiRequest<AdminStrategyItem>(`${API_BASE}/strategies/${strategyId}/clone-to-me`, {

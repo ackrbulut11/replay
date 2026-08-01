@@ -52,6 +52,9 @@ class User(Base):
     chart_settings = relationship(
         "ChartSettings", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    user_events = relationship(
+        "UserEvent", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Strategy(Base):
@@ -296,6 +299,34 @@ class DrawingUsageEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     user = relationship("User", back_populates="drawing_usage_events")
+
+
+class UserEvent(Base):
+    """
+    Kullanıcı bazlı genel olay kaydı: karşılaşılan hatalar (frontend/backend) ve
+    manuel olarak etiketlenmiş önemli aksiyonlar (strateji kaydetme, alarm
+    oluşturma vb.) için tek satırlık log.
+
+    `event_type` olayın türünü (ör. "frontend_error", "api_error",
+    "strategy_saved", "alert_created"), `level` önemini ("info"/"warning"/
+    "error") belirtir. `context` serbest biçimli JSON'dur (ör. hata stack'i,
+    ilgili sembol) — şema, her yeni olay türü için migration gerektirmesin
+    diye bilinçli olarak gevşek tutulmuştur (bkz. ChartSettings).
+
+    Giriş yapmamış bir kullanıcı da hata üretebileceği için user_id nullable'dır.
+    """
+
+    __tablename__ = "user_events"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    level = Column(String(20), nullable=False, default="info", index=True)
+    message = Column(Text, nullable=True)
+    context = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="user_events")
 
 
 class WaitlistSignup(Base):

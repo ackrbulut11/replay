@@ -1,4 +1,5 @@
 import { TOKEN_STORAGE_KEY, notifyUnauthorized, refreshAccessToken } from '../context/AuthContext';
+import { logEvent } from './eventLog';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://replay-xj3e.onrender.com/api' : '/api');
 
@@ -69,7 +70,15 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     } catch {
       detail = raw.trim();
     }
-    throw new Error(detail || `API hatası: ${response.status}`);
+    const errorMessage = detail || `API hatası: ${response.status}`;
+
+    void logEvent('api_error', {
+      level: response.status >= 500 ? 'error' : 'warning',
+      message: errorMessage,
+      context: { status: response.status, url },
+    });
+
+    throw new Error(errorMessage);
   }
 
   // 204 gibi gövdesiz yanıtlarda json() patlar.

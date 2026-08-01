@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Bell, AlertTriangle, TrendingUp, TrendingDown, Check } from 'lucide-react';
 import { alertStore } from '../../store/alertStore';
+import { logEvent, logError } from '../../services/eventLog';
 
 interface CreateAlarmModalProps {
   isOpen: boolean;
@@ -78,9 +79,11 @@ export default function CreateAlarmModal({
         threshold_value: targetType === 'EMA_CROSS' ? 0 : val,
         note: note.trim() || undefined,
       });
+      logEvent('alert_created', { context: { symbol: currentSymbol, target_type: targetType } });
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Alarm oluşturulurken hata oluştu.');
+      logError('alert_create_failed', err, { symbol: currentSymbol, target_type: targetType });
     } finally {
       setIsSubmitting(false);
     }

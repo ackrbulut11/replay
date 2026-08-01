@@ -14,6 +14,7 @@ from app.database.models import (
     DrawingUsageEvent,
     Strategy,
     User,
+    UserEvent,
     WaitlistSignup,
     Watchlist,
 )
@@ -586,3 +587,50 @@ def get_waitlist(db: Session = Depends(get_db)):
         .limit(500)
         .all()
     )
+
+
+class UserEventEntry(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    event_type: str
+    level: str
+    message: Optional[str] = None
+    context: Optional[dict] = None
+    created_at: Optional[datetime] = None
+
+
+@router.get("/events", response_model=List[UserEventEntry])
+def get_user_events(
+    event_type: Optional[str] = None,
+    level: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+):
+    """
+    Kullanıcıların karşılaştığı hataları ve etiketlenmiş aksiyonları getirir
+    (en yeni önce). `event_type`/`level`/`user_id` ile filtrelenebilir.
+    """
+    query = db.query(UserEvent, User.email).outerjoin(User, UserEvent.user_id == User.id)
+    if event_type:
+        query = query.filter(UserEvent.event_type == event_type)
+    if level:
+        query = query.filter(UserEvent.level == level)
+    if user_id:
+        query = query.filter(UserEvent.user_id == user_id)
+
+    rows = query.order_by(UserEvent.created_at.desc()).limit(min(limit, 1000)).all()
+    return [
+        UserEventEntry(
+            id=event.id,
+            user_id=event.user_id,
+            user_email=email,
+            event_type=event.event_type,
+            level=event.level,
+            message=event.message,
+            context=event.context,
+            created_at=event.created_at,
+        )
+        for event, email in rows
+    ]

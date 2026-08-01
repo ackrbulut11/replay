@@ -261,19 +261,45 @@ class ReplaySession(Base):
 
 
 class JournalTrade(Base):
+    """
+    Manuel backtest (replay) sırasında açılan tek bir işlem.
+
+    Hem açık hem kapalı pozisyonları tutar; `status` OPEN olduğu sürece
+    `exit_price`/`pnl` boştur. Pozisyon yaşam döngüsü ve kâr/zarar hesabı
+    `engines/replay_engine.py` içindedir — bu sınıf yalnızca saklama.
+    """
+
     __tablename__ = "journal_trades"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     session_id = Column(String(36), ForeignKey("replay_sessions.id", ondelete="SET NULL"), index=True, nullable=True)
     symbol = Column(String(50), nullable=False)
-    side = Column(String(10), nullable=False)  # BUY / SELL or LONG / SHORT
+    # Replay oturumu silinse bile işlem tek başına anlamlı kalsın diye kolonlanır.
+    provider = Column(String(50), nullable=True)
+    timeframe = Column(String(20), nullable=True)
+    side = Column(String(10), nullable=False)  # long / short
     entry_price = Column(Float, nullable=False)
     exit_price = Column(Float, nullable=True)
     quantity = Column(Float, default=1.0)
-    pnl = Column(Float, default=0.0)
+    stop_loss = Column(Float, nullable=True)
+    take_profit = Column(Float, nullable=True)
+    # Açık pozisyonda None kalır: 0.0 olsaydı "henüz gerçekleşmedi" ile
+    # "başabaş kapandı" ayırt edilemezdi ve rapora başabaş işlem olarak girerdi.
+    pnl = Column(Float, nullable=True)
+    pnl_percent = Column(Float, nullable=True)
+    status = Column(String(20), nullable=True, default="OPEN", index=True)
+    exit_reason = Column(String(20), nullable=True)  # stop_loss / take_profit / manual
+    # Trade Journal alanları: neden girildiği, serbest not ve ekran görüntüsü.
+    reason = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    screenshot = Column(Text, nullable=True)  # harici URL ya da data URL
+    entry_time = Column(DateTime, nullable=True)
+    exit_time = Column(DateTime, nullable=True)
+    entry_bar_index = Column(Integer, nullable=True)
+    exit_bar_index = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    closed_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="journal_trades")
     session = relationship("ReplaySession", back_populates="trades")

@@ -19,6 +19,7 @@ import type { IndicatorsState } from './IndicatorToolbar';
 import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2 } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
+import ReplayTradePanel from '../replay/ReplayTradePanel';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
@@ -2240,6 +2241,24 @@ export default function CandleChart({
             onStartSelection={handleStartSelection}
             onExitReplay={handleToggleReplayMode}
             onResetToCutoff={handleResetToCutoff}
+          />
+        </div>
+      )}
+
+      {/* Manuel İşlem Paneli (Faz 4) — replay sırasında pozisyon aç/kapat */}
+      {replayState.isReplayActive && !replayState.isSelectingCutoff && data.length > 0 && (
+        <div className="absolute top-16 right-3 z-30">
+          <ReplayTradePanel
+            symbol={symbol}
+            provider={provider}
+            timeframe={timeframe}
+            currentPrice={
+              data[Math.min(replayState.currentIndex ?? data.length - 1, data.length - 1)]?.close
+            }
+            currentBarIndex={replayState.currentIndex}
+            currentBarTime={
+              data[Math.min(replayState.currentIndex ?? data.length - 1, data.length - 1)]?.time as number
+            }
           />
         </div>
       )}

@@ -24,6 +24,83 @@ export const fetchWithAuth = async (url: string, options: RequestInit = {}, toke
   return fetch(fullUrl, updatedOptions);
 };
 
+/** HTTP durum kodunu taşıyan API hatası — çağıran taraf geçici hataları ayırt edebilsin. */
+export class ApiError extends Error {
+  readonly status: number;
+  /** Sunucuya ulaşılamadığı için oluşmuş, yeniden denenebilir bir hata mı? */
+  readonly transient: boolean;
+
+  constructor(message: string, status: number, transient = false) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.transient = transient;
+  }
+}
+
+/**
+ * Geçici (yeniden denenebilir) hata mı?
+ *
+ * Sunucuya ulaşılamaması, çoğunlukla uyku modundan uyanan Render örneğine denk
+ * gelen bir isteğe işaret eder; aynı istek birazdan başarılı olur.
+ */
+export function isTransientError(error: unknown): boolean {
+  if (error instanceof ApiError) return error.transient;
+  // fetch ağ hatasında TypeError fırlatır (bağlantı hiç kurulamadı).
+  return error instanceof TypeError;
+}
+
+const UNREACHABLE_MESSAGE =
+  'Sunucuya ulaşılamadı (uyku modundan uyanıyor olabilir). Lütfen tekrar deneyin.';
+
+/**
+ * Hata gövdesinden okunabilir bir mesaj ve "yeniden denenebilir mi" bilgisi üretir.
+ *
+ * Ağ geçidi hataları (Vercel/Render) JSON değil HTML sayfa döndürür; bu gövdeyi
+ * olduğu gibi göstermek arayüze ham HTML basardı.
+ *
+ * Gövdesi boş bir 5xx de "ulaşılamadı" sayılır: uygulamanın kendi 500'ü her
+ * zaman bir gövde taşır, boş gövde isteği hiç iletemeyen ara katmandan gelir
+ * (Vercel router'ı 502, Vite dev proxy'si 500 döndürür).
+ */
+function describeError(raw: string, status: number): { message: string; transient: boolean } {
+  const body = raw.trim();
+  const unreachable =
+    status === 502 || status === 503 || status === 504 || (status >= 500 && !body);
+
+  let detail = '';
+  try {
+    const parsed = JSON.parse(body)?.detail;
+    if (typeof parsed === 'string') detail = parsed.trim();
+    else if (parsed) detail = JSON.stringify(parsed);
+  } catch {
+    // JSON değil: aşağıdaki sabit mesajlara düşülür.
+  }
+
+  if (unreachable) return { message: detail || UNREACHABLE_MESSAGE, transient: true };
+  if (detail) return { message: detail, transient: false };
+
+  // HTML/uzun gövdeyi arayüze basma; yalnızca kısa ve etiketsiz metne güven.
+  if (body && body.length <= 200 && !body.includes('<')) {
+    return { message: body, transient: false };
+  }
+
+  return { message: `API hatası: ${status}`, transient: false };
+}
+
+/**
+ * `fetch`, bağlantı hiç kurulamadığında ham `TypeError: Failed to fetch`
+ * fırlatır. Bu mesaj kullanıcıya gösterilemez; ulaşılamama durumunun geri
+ * kalanıyla aynı biçime çevrilir.
+ */
+async function fetchOrThrow(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new ApiError(UNREACHABLE_MESSAGE, 0, true);
+  }
+}
+
 /**
  * Kimlik doğrulamalı JSON isteği — backend'e giden tüm çağrıların ortak yolu.
  *
@@ -42,7 +119,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  let response = await fetch(url, { ...options, headers });
+  let response = await fetchOrThrow(url, { ...options, headers });
 
   // Access token 30 dakikada doluyor: doğrudan oturumu düşürmeden önce
   // refresh_token cookie'siyle bir kez yeni token almayı dene.
@@ -50,7 +127,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     const newToken = await refreshAccessToken();
     if (newToken) {
       headers['Authorization'] = `Bearer ${newToken}`;
-      response = await fetch(url, { ...options, headers });
+      response = await fetchOrThrow(url, { ...options, headers });
     }
   }
 
@@ -64,21 +141,15 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     // Yakalanmamış sunucu hataları düz metin döner; doğrudan response.json()
     // çağırmak burada patlar ve gerçek hata mesajı kaybolur.
     const raw = await response.text().catch(() => '');
-    let detail = '';
-    try {
-      detail = JSON.parse(raw)?.detail ?? '';
-    } catch {
-      detail = raw.trim();
-    }
-    const errorMessage = detail || `API hatası: ${response.status}`;
+    const { message: errorMessage, transient } = describeError(raw, response.status);
 
     void logEvent('api_error', {
       level: response.status >= 500 ? 'error' : 'warning',
       message: errorMessage,
-      context: { status: response.status, url },
+      context: { status: response.status, url, transient },
     });
 
-    throw new Error(errorMessage);
+    throw new ApiError(errorMessage, response.status, transient);
   }
 
   // 204 gibi gövdesiz yanıtlarda json() patlar.

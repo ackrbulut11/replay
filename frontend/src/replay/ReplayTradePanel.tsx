@@ -68,31 +68,58 @@ export default function ReplayTradePanel({
   const [quantity, setQuantity] = useState('1');
 
   // ─── Sürükleme ──────────────────────────────────────────────────────────
-  // Panel varsayılan konumundan (sağ üst) fark olarak taşınır.
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  // Konum React state'inde TUTULMAZ: mousemove saniyede yüzlerce kez tetiklenir
+  // ve her birinde state güncellemek paneli baştan render ederek gözle görülür
+  // kasmaya yol açıyordu. Bunun yerine transform doğrudan DOM'a, ekran yenileme
+  // hızına (rAF) sabitlenerek yazılır — render döngüsü hiç çalışmaz.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const offsetRef = useRef({ x: 0, y: 0 });
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const frameRef = useRef<number | null>(null);
 
-  const handleDragStart = (e: React.MouseEvent) => {
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
-      originX: offset.x,
-      originY: offset.y,
+      originX: offsetRef.current.x,
+      originY: offsetRef.current.y,
     };
-  };
+  }, []);
 
   useEffect(() => {
+    const paint = () => {
+      frameRef.current = null;
+      const el = panelRef.current;
+      if (el) {
+        const { x, y } = offsetRef.current;
+        // translate3d: konumlandırmayı GPU katmanına taşır, yeniden yerleşim (layout) tetiklemez.
+        el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      }
+    };
+
     const handleMove = (e: MouseEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      setOffset({
+      offsetRef.current = {
         x: drag.originX + (e.clientX - drag.startX),
         y: drag.originY + (e.clientY - drag.startY),
-      });
+      };
+      // Aynı karede birden fazla mousemove gelirse tek çizim yeter.
+      if (frameRef.current === null) {
+        frameRef.current = requestAnimationFrame(paint);
+      }
     };
+
     const handleUp = () => {
+      if (!dragRef.current) return;
       dragRef.current = null;
+      // Bekleyen bir kare varsa hemen çiz: rAF kısıtlandığında (ör. arka plan
+      // sekmesi) panel son konumuna hiç taşınmadan kalabilirdi.
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+        paint();
+      }
     };
 
     window.addEventListener('mousemove', handleMove);
@@ -100,6 +127,7 @@ export default function ReplayTradePanel({
     return () => {
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     };
   }, []);
 
@@ -195,8 +223,10 @@ export default function ReplayTradePanel({
     'w-full bg-slate-950 border border-slate-700/80 text-zinc-200 text-[10px] rounded px-1.5 py-0.5 focus:border-indigo-500 outline-none font-mono';
 
   return (
+    // transform JSX'te verilmez; sürükleme sırasında doğrudan DOM'a yazılır ve
+    // React'in yeniden render'ı bu değeri sıfırlamasın diye burada tutulmaz.
     <div
-      style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
+      ref={panelRef}
       className="w-44 bg-[#0a0b0e]/95 border border-white/[0.1] rounded-lg shadow-2xl backdrop-blur-md text-zinc-100 select-none"
     >
       {/* Sürükleme tutamacı */}

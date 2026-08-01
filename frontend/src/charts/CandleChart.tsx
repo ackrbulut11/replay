@@ -25,7 +25,7 @@ import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
-import { useJournalStore } from '../store/journalStore';
+import { journalStore, useJournalStore } from '../store/journalStore';
 import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 
@@ -433,6 +433,17 @@ export default function CandleChart({
 
   const isSelectingCutoffRef = useRef(false);
   isSelectingCutoffRef.current = replayState.isSelectingCutoff;
+
+  // Manuel işlem işaretleri yalnızca replay modunda anlamlıdır. Store panel
+  // kapandıktan sonra da veriyi tuttuğu için, replay'den çıkıldığında temizlenmezse
+  // giriş/çıkış okları normal grafik görünümünde asılı kalıyordu. Mum kesme
+  // sırasında panel geçici olarak gizlenir ama replay hâlâ aktiftir; bu yüzden
+  // temizlik panelin unmount'una değil, replay modunun kapanmasına bağlanır.
+  useEffect(() => {
+    if (!replayState.isReplayActive) {
+      journalStore.reset();
+    }
+  }, [replayState.isReplayActive]);
 
   const fullDataRef = useRef<CandleData[]>(data);
   fullDataRef.current = data;

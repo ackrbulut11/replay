@@ -12,6 +12,7 @@ import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';
 import StrategyPage from './pages/StrategyPage';
 import AdminPage from './pages/AdminPage';
+import JournalPage from './pages/JournalPage';
 import AlertsPanel from './components/alerts/AlertsPanel';
 import CreateAlarmModal from './components/alerts/CreateAlarmModal';
 import { useAlertStore, alertStore } from './store/alertStore';
@@ -321,6 +322,10 @@ function App() {
       {activeTab === 'admin' ? (
         <ErrorBoundary fallbackTitle="Admin Paneli Hatası">
           <AdminPage />
+        </ErrorBoundary>
+      ) : activeTab === 'journal' ? (
+        <ErrorBoundary fallbackTitle="İşlem Günlüğü Hatası">
+          <JournalPage />
         </ErrorBoundary>
       ) : activeTab === 'strategy' ? (
         <ErrorBoundary fallbackTitle="Strateji Ekranı Hatası">

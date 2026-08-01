@@ -709,14 +709,19 @@ class DrawingsPaneView implements IPrimitivePaneView {
 }
 
 function getDrawingSegments(d: PixelDrawing): [PixelPoint, PixelPoint][] {
+  // horizontalRay tek noktayla tanımlanır (yalnızca başlangıç); diğer tüm
+  // araçlar en az 2 nokta gerektirir. Bu kontrol yanlış yapılırsa (ör.
+  // "points.length < 2" tüm araçlara uygulanırsa) yatay ışının gövde segmenti
+  // hiç üretilmez ve yalnızca tek tutamağı (en sol nokta) tıklanabilir olur.
+  if (d.tool === 'horizontalRay') {
+    if (d.points.length < 1) return [];
+    return [[d.points[0], { x: d.points[0].x + 99999, y: d.points[0].y }]];
+  }
   if (d.points.length < 2) return [];
   const segs: [PixelPoint, PixelPoint][] = [];
   switch (d.tool) {
     case 'trendLine':
       segs.push([d.points[0], d.points[1]]);
-      break;
-    case 'horizontalRay':
-      segs.push([d.points[0], { x: d.points[0].x + 99999, y: d.points[0].y }]);
       break;
     case 'rectangle':
     case 'ruler': {

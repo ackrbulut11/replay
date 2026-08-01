@@ -151,7 +151,7 @@ export default function AdminPage() {
   }, [details, detailLoadingId]);
 
   return (
-    <div className="h-full w-full overflow-auto bg-[#070b13] p-4 space-y-4">
+    <div className="h-full w-full overflow-auto custom-scrollbar bg-[#070b13] p-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold text-slate-100 uppercase tracking-wider">Admin Paneli</h2>
@@ -461,7 +461,7 @@ function EventsPanel() {
           )}
 
           {events.length > 0 && (
-            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto custom-scrollbar">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-[#0d1321]">
                   <tr className="text-slate-500 border-b border-slate-800/60">

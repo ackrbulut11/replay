@@ -16,3 +16,28 @@ select option {
   color: #f1f5f9;
   padding: 6px 10px;
 }
+
+/* Uygulama genelinde kullanılan koyu tema scroll alanları — varsayılan tarayıcı
+   scrollbar'ı yerine arayüzün indigo/mor vurgu rengiyle uyumlu ince bir çubuk. */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #6366f1 transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #6366f1, #8b5cf6);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #818cf8, #a78bfa);
+}

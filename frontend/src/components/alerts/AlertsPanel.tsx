@@ -98,11 +98,11 @@ export default function AlertsPanel({
       {/* Resize handle (left edge) */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-emerald-500/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-indigo-600/30 transition-colors"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <GripVertical className="w-3 h-3 text-emerald-400" />
+          <GripVertical className="w-3 h-3 text-slate-400 group-hover:text-indigo-300" />
         </div>
       </div>
       {/* Panel Header */}

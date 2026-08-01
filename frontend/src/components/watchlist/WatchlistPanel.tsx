@@ -254,11 +254,11 @@ export default function WatchlistPanel({
       {/* Resize handle (left edge) */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-emerald-500/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-indigo-600/30 transition-colors"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <GripVertical className="w-3 h-3 text-emerald-400" />
+          <GripVertical className="w-3 h-3 text-slate-400 group-hover:text-indigo-300" />
         </div>
       </div>
 
@@ -387,7 +387,7 @@ export default function WatchlistPanel({
       </div>
 
       {/* Watchlist Item Rows */}
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-800/30 p-1 space-y-0.5">
+      <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-800/30 p-1 space-y-0.5">
         {items.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500 font-medium space-y-3">
             <Sparkles className="w-6 h-6 text-indigo-400/50 mx-auto" />

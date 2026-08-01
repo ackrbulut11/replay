@@ -125,7 +125,7 @@ TradingResearchPlatform/
 │   │   │   │   ├── replay.py          # STUB
 │   │   │   │   ├── scanner.py         # STUB
 │   │   │   │   ├── backtest.py        # STUB
-│   │   │   │   └── journal.py         # STUB
+│   │   │   │   └── journal.py
 │   │   │   │
 │   │   │   └── websocket.py          # STUB
 │   │   │
@@ -166,13 +166,14 @@ TradingResearchPlatform/
 │   │   ├── engines/
 │   │   │   ├── strategy_engine.py
 │   │   │   ├── scanner_engine.py
-│   │   │   ├── replay_engine.py       # STUB
+│   │   │   ├── replay_engine.py
 │   │   │   └── backtest_engine.py     # STUB
 │   │   │
-│   │   ├── journal/                   # STUB
+│   │   ├── journal/
+│   │   │   ├── models.py
 │   │   │   └── trade_journal.py
 │   │   │
-│   │   ├── reports/                   # STUB
+│   │   ├── reports/
 │   │   │   └── performance_report.py
 │   │   │
 │   │   ├── optimizer/                 # STUB

@@ -25,6 +25,7 @@ import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
+import { useJournalStore } from '../store/journalStore';
 import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 
@@ -204,16 +205,97 @@ export default function CandleChart({
 
   // Strateji sinyallerini grafik üzerinde oklar (BUY/SELL) olarak çizdir
   const { evaluateResult } = useStrategyStore();
+  const { trades: journalTrades } = useJournalStore();
+
+  /**
+   * Manuel işlemlerin giriş/çıkış işaretleri.
+   *
+   * Bilinçli olarak sade: küçük bir ok ve fiyat. Stop/hedef seviyeleri veya
+   * kâr/zarar burada gösterilmez — grafik kalabalıklaşmasın.
+   */
+  const buildTradeMarkers = useCallback((): any[] => {
+    if (!data || data.length === 0 || journalTrades.length === 0) return [];
+
+    // Mum aralığı: işaretin yüklü veriye gerçekten denk gelip gelmediğini
+    // ölçmek için. Sabit bir tolerans zaman dilimine göre yanlış olurdu.
+    const barSpacing =
+      data.length > 1 ? Math.abs(data[data.length - 1].time - data[data.length - 2].time) : 86400;
+    const maxSnapDistance = barSpacing * 2;
+
+    /**
+     * ISO zamanı en yakın mumun zamanına oturtur.
+     *
+     * Yüklü aralığın dışında kalan işlemler için `null` döner; aksi halde en
+     * yakın mum bulunur ve grafiğin kenarına alakasız bir işaret çizilirdi.
+     */
+    const snapToBar = (iso?: string | null): Time | null => {
+      if (!iso) return null;
+      const seconds = Math.floor(new Date(iso).getTime() / 1000);
+      if (!Number.isFinite(seconds)) return null;
+
+      let closest: CandleData | null = null;
+      let minDiff = Infinity;
+      for (const candle of data) {
+        const diff = Math.abs(candle.time - seconds);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = candle;
+        }
+      }
+      return closest && minDiff <= maxSnapDistance ? (closest.time as Time) : null;
+    };
+
+    const markers: any[] = [];
+
+    journalTrades.forEach((trade) => {
+      if (trade.symbol?.toUpperCase() !== symbol?.toUpperCase()) return;
+
+      const isLong = trade.side === 'long';
+
+      const entryTime = snapToBar(trade.entry_time);
+      if (entryTime !== null) {
+        markers.push({
+          time: entryTime,
+          position: isLong ? ('belowBar' as const) : ('aboveBar' as const),
+          color: isLong ? '#34d399' : '#f87171',
+          shape: isLong ? ('arrowUp' as const) : ('arrowDown' as const),
+          text: formatPriceLabel(trade.entry_price),
+        });
+      }
+
+      // Çıkış yalnızca kapanmış işlemlerde var.
+      const exitTime = snapToBar(trade.exit_time);
+      if (exitTime !== null && trade.exit_price != null) {
+        markers.push({
+          time: exitTime,
+          position: isLong ? ('aboveBar' as const) : ('belowBar' as const),
+          color: '#a1a1aa',
+          shape: isLong ? ('arrowDown' as const) : ('arrowUp' as const),
+          text: formatPriceLabel(trade.exit_price),
+        });
+      }
+    });
+
+    return markers;
+  }, [journalTrades, data, symbol, formatPriceLabel]);
 
   const applyStrategyMarkers = useCallback(() => {
     const targetSeries = candleSeriesRef.current || mainLineSeriesRef.current;
     if (!targetSeries) return;
 
-    const setMarkers = (list: any[]) => {
+    // Manuel işlem işaretleri strateji sinyallerinden bağımsız yaşar; tek bir
+    // eklenti olduğu için ikisi burada birleştirilir, aksi halde biri
+    // diğerinin işaretlerini silerdi.
+    const tradeMarkers = buildTradeMarkers();
+
+    const setMarkers = (strategyMarkers: any[]) => {
+      const merged = [...tradeMarkers, ...strategyMarkers].sort(
+        (a, b) => Number(a.time) - Number(b.time)
+      );
       if (!markersPluginRef.current) {
-        markersPluginRef.current = createSeriesMarkers(targetSeries, list);
+        markersPluginRef.current = createSeriesMarkers(targetSeries, merged);
       } else {
-        markersPluginRef.current.setMarkers(list);
+        markersPluginRef.current.setMarkers(merged);
       }
     };
 
@@ -289,7 +371,7 @@ export default function CandleChart({
     } catch (err) {
       console.warn('Set strategy markers error:', err);
     }
-  }, [evaluateResult, symbol, data]);
+  }, [evaluateResult, symbol, data, buildTradeMarkers]);
 
   useEffect(() => {
     applyStrategyMarkers();

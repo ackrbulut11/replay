@@ -40,11 +40,25 @@ class TradeJournal:
         Stop-loss/take-profit seviyeleri replay engine tarafından doğrulanır;
         ters tarafa konmuş bir seviye `ValueError` fırlatır.
         """
+        stop_loss, take_profit = request.stop_loss, request.take_profit
+
+        # Yüzdeyle verilen seviyeler mutlak fiyata çevrilir. Mutlak değer de
+        # verilmişse o kazanır; yüzde yalnızca boş kalan tarafı doldurur.
+        if request.stop_loss_pct is not None or request.take_profit_pct is not None:
+            pct_stop, pct_take = replay_engine.levels_from_percent(
+                side=request.side.value,
+                entry_price=request.entry_price,
+                stop_loss_pct=request.stop_loss_pct,
+                take_profit_pct=request.take_profit_pct,
+            )
+            stop_loss = stop_loss if stop_loss is not None else pct_stop
+            take_profit = take_profit if take_profit is not None else pct_take
+
         replay_engine.validate_levels(
             side=request.side.value,
             entry_price=request.entry_price,
-            stop_loss=request.stop_loss,
-            take_profit=request.take_profit,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
         )
 
         trade = JournalTrade(
@@ -58,8 +72,8 @@ class TradeJournal:
             status=TradeStatus.OPEN.value,
             entry_price=request.entry_price,
             quantity=request.quantity,
-            stop_loss=request.stop_loss,
-            take_profit=request.take_profit,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
             pnl=None,
             entry_bar_index=request.entry_bar_index,
             entry_time=request.entry_time,

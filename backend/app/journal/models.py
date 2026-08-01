@@ -45,6 +45,11 @@ class TradeOpenRequest(BaseModel):
     quantity: float = Field(default=1.0, gt=0)
     stop_loss: Optional[float] = Field(default=None, gt=0)
     take_profit: Optional[float] = Field(default=None, gt=0)
+    # Seviyeler yüzdeyle de verilebilir; mutlak fiyata çevirme işi backend'de
+    # (`replay_engine.levels_from_percent`) yapılır — finansal hesap arayüze
+    # yazılmaz (RULES.md "Yasaklar"). Her ikisi verilirse mutlak fiyat kazanır.
+    stop_loss_pct: Optional[float] = Field(default=None, gt=0)
+    take_profit_pct: Optional[float] = Field(default=None, gt=0)
     entry_bar_index: Optional[int] = None
     entry_time: Optional[datetime] = None
     session_id: Optional[str] = None

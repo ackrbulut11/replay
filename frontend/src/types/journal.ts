@@ -44,6 +44,12 @@ export interface TradeOpenRequest {
   quantity?: number;
   stop_loss?: number | null;
   take_profit?: number | null;
+  /**
+   * Seviyeler yüzdeyle de verilebilir; mutlak fiyata çevrimi backend yapar
+   * (finansal hesap arayüze yazılmaz). Mutlak fiyat verilirse o kazanır.
+   */
+  stop_loss_pct?: number | null;
+  take_profit_pct?: number | null;
   entry_bar_index?: number | null;
   entry_time?: string | null;
   session_id?: string | null;

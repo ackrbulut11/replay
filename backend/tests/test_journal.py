@@ -78,6 +78,40 @@ class TestOpenTrade(JournalTestCase):
         trade = self.journal.open_trade(self.db, _open_request(symbol="btcusdt"), user_id=self.alice.id)
         self.assertEqual(trade.symbol, "BTCUSDT")
 
+    def test_yuzdeyle_seviye_belirlenebilir(self):
+        # %5 stop / %10 hedef -> 100 girişte 95 ve 110 olmalı (long).
+        trade = self.journal.open_trade(
+            self.db,
+            _open_request(stop_loss=None, take_profit=None, stop_loss_pct=5, take_profit_pct=10),
+            user_id=self.alice.id,
+        )
+        self.assertAlmostEqual(trade.stop_loss, 95.0)
+        self.assertAlmostEqual(trade.take_profit, 110.0)
+
+    def test_short_yuzdesi_ters_yonde_cevrilir(self):
+        trade = self.journal.open_trade(
+            self.db,
+            _open_request(
+                side=TradeSide.SHORT,
+                stop_loss=None,
+                take_profit=None,
+                stop_loss_pct=5,
+                take_profit_pct=10,
+            ),
+            user_id=self.alice.id,
+        )
+        self.assertAlmostEqual(trade.stop_loss, 105.0)
+        self.assertAlmostEqual(trade.take_profit, 90.0)
+
+    def test_mutlak_fiyat_yuzdeye_gore_oncelikli(self):
+        trade = self.journal.open_trade(
+            self.db,
+            _open_request(stop_loss=97.0, take_profit=None, stop_loss_pct=5, take_profit_pct=10),
+            user_id=self.alice.id,
+        )
+        self.assertAlmostEqual(trade.stop_loss, 97.0)   # mutlak kazanır
+        self.assertAlmostEqual(trade.take_profit, 110.0)  # yüzde boşluğu doldurur
+
     def test_ters_stop_reddedilir(self):
         # Long pozisyonda girişin üstünde stop-loss ilk mumda tetiklenirdi.
         with self.assertRaises(ValueError):

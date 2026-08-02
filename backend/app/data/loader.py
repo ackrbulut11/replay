@@ -66,6 +66,39 @@ class DataLoader:
             return settings.RETENTION_1D
         return None
 
+    def get_coverage(self, provider_name: str, symbol: str, timeframe: str) -> dict | None:
+        """
+        Bir zaman dilimi için önbellekte hangi tarih aralığının bulunduğunu döndürür.
+
+        Yalnızca parquet'in `timestamp` sütununu okur; tüm mumları belleğe
+        almadan ilk/son tarihi verir. Amaç, replay sırasında zaman dilimi
+        değiştirilirken hedef tarihin o çözünürlükte mevcut olup olmadığını
+        veri indirmeden anlayabilmektir (RULES.md #24-27 gereği düşük zaman
+        dilimleri çok daha kısa bir geçmişi saklar).
+
+        Önbellek yoksa `None` döner — "veri yok" değil, "bilinmiyor" demektir;
+        çağıran taraf bu durumda engelleme yapmamalıdır.
+        """
+        cache_path = self._get_cache_path(provider_name, symbol, timeframe)
+        if not os.path.exists(cache_path):
+            return None
+
+        try:
+            df = pd.read_parquet(cache_path, columns=["timestamp"])
+        except Exception:
+            return None
+
+        if df.empty:
+            return None
+
+        first = pd.to_datetime(df["timestamp"].iloc[0])
+        last = pd.to_datetime(df["timestamp"].iloc[-1])
+        return {
+            "first": first.isoformat(),
+            "last": last.isoformat(),
+            "bars": int(len(df)),
+        }
+
     def _prune_to_retention(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """RULES.md #24-27: her zaman dilimi için ham veriyi sınırsız biriktirmez."""
         limit = self._retention_limit(timeframe)

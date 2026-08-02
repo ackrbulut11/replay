@@ -16,7 +16,7 @@ import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './d
 import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2 } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, AlertTriangle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2 } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import ReplayTradePanel from '../replay/ReplayTradePanel';
@@ -26,6 +26,7 @@ import { useAlertStore, alertStore } from '../store/alertStore';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
 import { journalStore, useJournalStore } from '../store/journalStore';
+import { getCoverage } from '../services/marketApi';
 import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 
@@ -70,8 +71,15 @@ interface DragState {
   handleIndex: number;
 }
 
+/**
+ * Hedef zamana denk gelen (ondan önceki son) mumun indeksini döndürür.
+ *
+ * Hedef tüm mumlardan ÖNCEYSE -1 döner. Eskiden bu durumda 0 dönüyordu; bu
+ * sessiz kırpma yüzünden replay konumu zaman dilimi değişiminde alakasız bir
+ * mumun üzerine kayıyor ve hedef zaman damgası da o mumun zamanıyla
+ * eziliyordu (yani kullanıcının konumu kalıcı olarak kayboluyordu).
+ */
 function findCandleIndexByTimestamp(candles: CandleData[], targetTimestamp: number): number {
-  if (candles.length === 0) return 0;
   let matchIdx = -1;
   for (let i = 0; i < candles.length; i++) {
     if (candles[i].time <= targetTimestamp) {
@@ -80,8 +88,7 @@ function findCandleIndexByTimestamp(candles: CandleData[], targetTimestamp: numb
       break;
     }
   }
-  if (matchIdx !== -1) return matchIdx;
-  return 0;
+  return matchIdx;
 }
 
 export default function CandleChart({
@@ -445,6 +452,54 @@ export default function CandleChart({
     }
   }, [replayState.isReplayActive]);
 
+  // ─── Replay'de zaman dilimi değişimi ────────────────────────────────────
+  // Replay'de geriye gidildiğinde zaman dilimi değiştirmek konumu korumalıdır.
+  // Ancak düşük çözünürlüklü veriler çok daha kısa bir geçmiş saklar
+  // (RULES.md #24-27): 4h yıllar öncesine giderken 5m yalnızca birkaç ay geriye
+  // gider. Hedef tarih yeni zaman diliminde hiç yoksa geçişe izin verilmez;
+  // aksi halde replay sessizce alakasız bir tarihe sıçrıyordu.
+  const [timeframeWarning, setTimeframeWarning] = useState<string | null>(null);
+
+  const handleTimeframeChange = useCallback(
+    async (nextTimeframe: string) => {
+      const { isReplayActive, targetTimestamp } = replayStore.getState();
+
+      if (!isReplayActive || targetTimestamp === null) {
+        setTimeframeWarning(null);
+        setTimeframe(nextTimeframe);
+        return;
+      }
+
+      try {
+        const coverage = await getCoverage(provider, symbol, nextTimeframe);
+        // `available: false` "bilinmiyor" demektir (önbellek yok) — engelleme.
+        if (coverage.available && coverage.first) {
+          const firstSeconds = Math.floor(new Date(coverage.first).getTime() / 1000);
+          if (Number.isFinite(firstSeconds) && targetTimestamp < firstSeconds) {
+            const hedef = new Date(targetTimestamp * 1000).toLocaleDateString('tr-TR');
+            const enEski = new Date(coverage.first).toLocaleDateString('tr-TR');
+            setTimeframeWarning(
+              `${nextTimeframe} verisi yalnızca ${enEski} tarihine kadar geriye gidiyor; ` +
+                `replay konumunuz (${hedef}) bu aralığın dışında. Zaman dilimi değiştirilmedi.`
+            );
+            return;
+          }
+        }
+      } catch {
+        // Kapsama sorgusu başarısızsa kullanıcıyı engelleme; geçişe izin ver.
+      }
+
+      setTimeframeWarning(null);
+      setTimeframe(nextTimeframe);
+    },
+    [provider, symbol, setTimeframe]
+  );
+
+  // Uyarı yalnızca replay sürerken anlamlı; moddan çıkınca temizlenir.
+  useEffect(() => {
+    if (!replayState.isReplayActive) setTimeframeWarning(null);
+  }, [replayState.isReplayActive]);
+
   const fullDataRef = useRef<CandleData[]>(data);
   fullDataRef.current = data;
 
@@ -561,11 +616,17 @@ export default function CandleChart({
 
     if (replayState.targetTimestamp !== null) {
       const matchedIdx = findCandleIndexByTimestamp(data, replayState.targetTimestamp);
-      const matchedTime = data[matchedIdx]?.time ?? null;
+
+      // Hedef, yüklü verinin başlangıcından daha eski: henüz eşleşecek mum yok.
+      // Konumu ilk muma kırpmak yerine hedefi OLDUĞU GİBİ KORU — arkaplanda
+      // daha eski mumlar yüklendiğinde bu efekt yeniden çalışıp doğru mumu
+      // bulacak. Hedefi ezmek, kullanıcının gittiği yeri kalıcı olarak silerdi.
+      if (matchedIdx === -1) return;
+
       setReplayState({
         cutoffIndex: matchedIdx,
         currentIndex: matchedIdx,
-        targetTimestamp: matchedTime,
+        targetTimestamp: data[matchedIdx]?.time ?? replayState.targetTimestamp,
       });
     } else {
       const lastIdx = data.length - 1;
@@ -2015,7 +2076,7 @@ export default function CandleChart({
             <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Interval</span>
             <select
               value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value)}
+              onChange={(e) => handleTimeframeChange(e.target.value)}
               className="bg-transparent border-none outline-none text-xs font-medium text-zinc-200 cursor-pointer focus:ring-0"
             >
               <option value="1m" className="bg-[#0a0b0e] text-zinc-100">1m</option>
@@ -2361,6 +2422,23 @@ export default function CandleChart({
         <div className="absolute top-28 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-full shadow-lg border border-amber-300/50 backdrop-blur-md animate-bounce flex items-center gap-2 select-none pointer-events-none">
           <Scissors className="w-4 h-4" />
           <span>Grafikte kestirmek istediğiniz muma tıklayın!</span>
+        </div>
+      )}
+
+      {/* Zaman dilimi değişimi engellendiğinde uyarı — hedef tarih yeni
+          çözünürlükte mevcut olmadığında gösterilir. */}
+      {timeframeWarning && (
+        <div className="absolute top-28 left-1/2 -translate-x-1/2 z-40 max-w-md bg-amber-500/95 text-slate-950 text-xs px-4 py-2 rounded-xl shadow-2xl border border-amber-300/60 backdrop-blur-md flex items-start gap-2 select-none">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-px" />
+          <span className="font-semibold leading-snug">{timeframeWarning}</span>
+          <button
+            type="button"
+            onClick={() => setTimeframeWarning(null)}
+            title="Kapat"
+            className="ml-1 flex-shrink-0 hover:bg-slate-950/10 rounded p-0.5 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

@@ -92,6 +92,26 @@ def get_market_quotes(
 
 
 
+@router.get("/coverage")
+def get_market_coverage(
+    provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),
+    symbol: str = Query(..., description="Market symbol (e.g. BTCUSDT, AAPL, THYAO)"),
+    timeframe: str = Query(..., description="Timeframe (1m, 5m, 15m, 1h, 4h, 1d)"),
+):
+    """
+    Bir zaman dilimi için önbellekteki tarih aralığını döndürür.
+
+    Replay sırasında zaman dilimi değiştirilirken, hedef tarihin o
+    çözünürlükte var olup olmadığını veri indirmeden kontrol etmek için
+    kullanılır. Önbellek yoksa `available: false` döner — bu "veri yok"
+    değil "bilinmiyor" demektir, istemci buna dayanarak engelleme yapmaz.
+    """
+    coverage = loader.get_coverage(provider, symbol, timeframe)
+    if coverage is None:
+        return {"available": False, "provider": provider, "symbol": symbol.upper(), "timeframe": timeframe}
+    return {"available": True, "provider": provider, "symbol": symbol.upper(), "timeframe": timeframe, **coverage}
+
+
 @router.get("/data")
 def get_market_data(
     provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),

@@ -140,12 +140,42 @@ export function getPositionHandlePositions(d: PixelDrawing): PixelPoint[] {
   ];
 }
 
+/**
+ * Paralel kanalın tutamaçları: dört köşe + her çizginin ortasında birer tane.
+ *
+ * Kanal üç noktayla saklanır (taban çizginin iki ucu + ofset çizginin
+ * başlangıcı); dördüncü köşe taban çizginin yön vektörü eklenerek türetilir,
+ * böylece iki çizgi tanım gereği paralel kalır.
+ */
+export function getChannelHandlePositions(d: PixelDrawing): PixelPoint[] {
+  if (d.points.length < 3) return [];
+  const dx = d.points[1].x - d.points[0].x;
+  const dy = d.points[1].y - d.points[0].y;
+  const offsetEnd = { x: d.points[2].x + dx, y: d.points[2].y + dy };
+  return [
+    d.points[0],
+    d.points[1],
+    d.points[2],
+    offsetEnd,
+    { x: (d.points[0].x + d.points[1].x) / 2, y: (d.points[0].y + d.points[1].y) / 2 },
+    { x: (d.points[2].x + offsetEnd.x) / 2, y: (d.points[2].y + offsetEnd.y) / 2 },
+  ];
+}
+
 export const RECT_HANDLE_LABELS = ['tl', 't', 'tr', 'r', 'br', 'b', 'bl', 'l'];
 export const POSITION_HANDLE_LABELS = ['target', 'stop', 'entry', 'right'];
+export const CHANNEL_HANDLE_LABELS = ['start', 'end', 'offsetStart', 'offsetEnd', 'baseMid', 'offsetMid'];
+
+/**
+ * Orta tutamaçlar kare çizilir ve köşelerden farklı davranır: ilgili çizgiyi
+ * paralelliği bozmadan yukarı/aşağı kaydırır, yani kanalı genişletir/daraltır.
+ */
+const CHANNEL_MID_HANDLES: ReadonlySet<number> = new Set([4, 5]);
 
 function getHandlePositions(d: PixelDrawing): PixelPoint[] {
   if (d.tool === 'rectangle' || d.tool === 'ruler') return getRectHandlePositions(d);
   if (d.tool === 'longPosition' || d.tool === 'shortPosition') return getPositionHandlePositions(d);
+  if (d.tool === 'parallelChannel') return getChannelHandlePositions(d);
   return d.points;
 }
 
@@ -378,6 +408,17 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
       }
 
       case 'parallelChannel': {
+        // İlk aşamada (2 nokta) yalnızca taban çizgi vardır: ofset henüz
+        // seçilmediği için kanal çizilemez, ama kullanıcı çizerken taban
+        // çizgiyi görmeli — aksi halde ikinci tıklamaya kadar ekranda hiçbir
+        // şey görünmüyor.
+        if (d.points.length === 2) {
+          ctx.beginPath();
+          ctx.moveTo(d.points[0].x, d.points[0].y);
+          ctx.lineTo(d.points[1].x, d.points[1].y);
+          ctx.stroke();
+          break;
+        }
         if (d.points.length < 3) return;
         const dx = d.points[1].x - d.points[0].x;
         const dy = d.points[1].y - d.points[0].y;
@@ -686,9 +727,17 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
     ctx.lineWidth = 2;
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = d.color;
-    for (const p of positions) {
+    for (let i = 0; i < positions.length; i++) {
+      const p = positions[i];
       ctx.beginPath();
-      ctx.arc(p.x, p.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      // Kanalın orta tutamaçları köşelerden ayrılsın diye kare çizilir:
+      // davranışları da farklı (genişlet/daralt).
+      if (d.tool === 'parallelChannel' && CHANNEL_MID_HANDLES.has(i)) {
+        const s = HANDLE_RADIUS - 0.5;
+        ctx.rect(p.x - s, p.y - s, s * 2, s * 2);
+      } else {
+        ctx.arc(p.x, p.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      }
       ctx.fill();
       ctx.stroke();
     }
@@ -804,7 +853,7 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
       .map(d => ({ drawing: d, pixels: this._toPixelDrawingOrNull(d) }))
       .filter((r): r is { drawing: Drawing; pixels: PixelDrawing } => r.pixels !== null);
 
-    let bestHandle: { id: string; index: number; dist: number } | null = null;
+    let bestHandle: { id: string; index: number; dist: number; tool: Drawing['tool'] } | null = null;
     let bestBody: { id: string; dist: number } | null = null;
 
     for (const { drawing, pixels } of allPixels) {
@@ -813,7 +862,7 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
         const pos = handlePositions[i];
         const d = Math.hypot(x - pos.x, y - pos.y);
         if (d < HIT_RADIUS && (!bestHandle || d < bestHandle.dist)) {
-          bestHandle = { id: drawing.id, index: i, dist: d };
+          bestHandle = { id: drawing.id, index: i, dist: d, tool: drawing.tool };
         }
       }
 
@@ -828,7 +877,12 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
     }
 
     if (bestHandle) {
-      return { externalId: 'h:' + bestHandle.id + ':' + bestHandle.index, cursorStyle: 'pointer', zOrder: 'top' };
+      // Kanalın orta tutamağı yalnızca dikey çalıştığı için imleç de dikey
+      // yeniden boyutlandırma okuna dönüşür.
+      const cursorStyle = bestHandle.tool === 'parallelChannel' && CHANNEL_MID_HANDLES.has(bestHandle.index)
+        ? 'ns-resize'
+        : 'pointer';
+      return { externalId: 'h:' + bestHandle.id + ':' + bestHandle.index, cursorStyle, zOrder: 'top' };
     }
     if (bestBody) {
       return { externalId: 'b:' + bestBody.id, cursorStyle: 'pointer', zOrder: 'top' };

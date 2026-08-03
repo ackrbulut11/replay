@@ -7,7 +7,7 @@ import { createSeriesMarkers, createTextWatermark } from 'lightweight-charts';
 import type { Time, ISeriesApi, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import DrawingToolbar from './drawings/DrawingToolbar';
 import DrawingEditPanel from './drawings/DrawingEditPanel';
-import { DrawingsPrimitive, RECT_HANDLE_LABELS, POSITION_HANDLE_LABELS } from './drawings/DrawingPrimitive';
+import { DrawingsPrimitive, RECT_HANDLE_LABELS, POSITION_HANDLE_LABELS, CHANNEL_HANDLE_LABELS } from './drawings/DrawingPrimitive';
 import {
   TOOL_CONFIG, generateDrawingId,
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY, DEFAULT_LINE_STYLE,
@@ -990,6 +990,56 @@ export default function CandleChart({
       };
     }
 
+    if (drawing.tool === 'parallelChannel' && drawing.points.length >= 3) {
+      // Kanal üç noktayla saklanır: taban çizginin iki ucu (p0, p1) ve ofset
+      // çizginin başlangıcı (p2). Ofset çizginin bitişi p2 + (p1 - p0) olarak
+      // türetildiği için iki çizgi her koşulda paralel kalır. Kanal genişliği
+      // fiyat cinsinden sabit farktır: p2.price - p0.price.
+      //
+      // İki çizgi TradingView'daki gibi hep aynı zaman aralığını kapsar, bu
+      // yüzden p2.time daima p0.time'a eşitlenir.
+      let [p0, p1] = [drawing.points[0], drawing.points[1]];
+      let width = drawing.points[2].price - p0.price;
+
+      switch (CHANNEL_HANDLE_LABELS[handleIndex]) {
+        case 'start':
+          p0 = newPoint;
+          break;
+        case 'end':
+          p1 = newPoint;
+          break;
+        // Alt köşeler: zaman ilgili üst köşeyle ortak, fiyat ise kanal
+        // genişliğini belirler.
+        case 'offsetStart':
+          p0 = { time: newPoint.time, price: p0.price };
+          width = newPoint.price - p0.price;
+          break;
+        case 'offsetEnd':
+          p1 = { time: newPoint.time, price: p1.price };
+          width = newPoint.price - p1.price;
+          break;
+        // Orta tutamaçlar: ilgili çizgiyi paralelliği bozmadan dikey kaydırır.
+        case 'baseMid': {
+          const delta = newPoint.price - (p0.price + p1.price) / 2;
+          p0 = { ...p0, price: p0.price + delta };
+          p1 = { ...p1, price: p1.price + delta };
+          // Ofset çizgi yerinde kalmalı, dolayısıyla genişlik delta kadar azalır.
+          width -= delta;
+          break;
+        }
+        case 'offsetMid': {
+          const midPrice = (p0.price + p1.price) / 2 + width;
+          width += newPoint.price - midPrice;
+          break;
+        }
+      }
+
+      return {
+        ...drawing,
+        points: [p0, p1, { time: p0.time, price: p0.price + width }],
+      };
+    }
+
     const modified = { ...drawing, points: [...drawing.points] };
     modified.points[handleIndex] = newPoint;
     return modified;
@@ -1183,6 +1233,14 @@ export default function CandleChart({
             { time: t1, price: pTarget },
             { time: t1, price: pStop },
           ];
+        } else if (tool === 'parallelChannel') {
+          // Üçüncü tıklama yalnızca dikey ofseti belirler; ofset çizgi taban
+          // çizgiyle aynı zaman aralığını kapsasın diye zamanı p0'a sabitlenir.
+          finalPoints = [
+            newPoints[0],
+            newPoints[1],
+            { time: newPoints[0].time, price: newPoints[2].price },
+          ];
         }
 
         const drawing: Drawing = {
@@ -1290,6 +1348,13 @@ export default function CandleChart({
           { time: t0, price: pEntry },
           { time: t1, price: pTarget },
           { time: t1, price: pStop },
+        ];
+      } else if (activeToolRef.current === 'parallelChannel' && currentPointsRef.current.length === 2) {
+        // Ofset aşamasının önizlemesi: fare yalnızca dikey ofseti belirler.
+        previewPoints = [
+          currentPointsRef.current[0],
+          currentPointsRef.current[1],
+          { time: currentPointsRef.current[0].time, price: point.price },
         ];
       }
 

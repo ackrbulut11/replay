@@ -2283,14 +2283,14 @@ export default function CandleChart({
                     macd: `MACD (${indicatorSettings.macd.fastPeriod}, ${indicatorSettings.macd.slowPeriod}, ${indicatorSettings.macd.signalPeriod})`,
                     bb: `Bollinger (${indicatorSettings.bb.period}, ${indicatorSettings.bb.stdDev})`,
                   };
-                  const colors: Record<string, string> = {
-                    ema20: 'bg-amber-500',
-                    ema50: 'bg-cyan-500',
-                    ema100: 'bg-purple-500',
-                    ema200: 'bg-pink-500',
-                    rsi: 'bg-sky-400',
-                    macd: 'bg-emerald-400',
-                    bb: 'bg-yellow-400',
+                  const dotColors: Record<string, string> = {
+                    ema20: indicatorSettings.ema20.color,
+                    ema50: indicatorSettings.ema50.color,
+                    ema100: indicatorSettings.ema100.color,
+                    ema200: indicatorSettings.ema200.color,
+                    rsi: indicatorSettings.rsi.color,
+                    macd: indicatorSettings.macd.macdColor,
+                    bb: indicatorSettings.bb.upperColor,
                   };
                   return (
                     <div key={indKey}>
@@ -2298,7 +2298,10 @@ export default function CandleChart({
                         className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-white/[0.04] cursor-pointer select-none"
                       >
                         <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${colors[indKey]} ${indicators[indKey] ? 'animate-pulse' : ''}`} />
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${indicators[indKey] ? 'animate-pulse' : ''}`}
+                            style={{ backgroundColor: dotColors[indKey] }}
+                          />
                           <span className="text-xs text-zinc-200 font-medium">{labels[indKey]}</span>
                         </div>
                         <div className="flex items-center gap-1.5">

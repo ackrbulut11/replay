@@ -25,8 +25,31 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("log_scale", sa.Boolean(), nullable=True))
         batch_op.add_column(sa.Column("drawings", sa.JSON(), nullable=True))
 
-    op.execute("UPDATE chart_settings SET log_scale = 0 WHERE log_scale IS NULL")
-    op.execute("UPDATE chart_settings SET drawings = '{}' WHERE drawings IS NULL")
+    # Boolean varsayilani ham SQL'de "0" olarak yazilamaz: SQLite gevsek tipli
+    # oldugu icin yerelde sorunsuz calisiyordu, ama Postgres bunu reddediyor
+    # ("column log_scale is of type boolean but expression is of type integer")
+    # ve migration basarisiz olunca uygulama hic acilmiyordu. sa.false() her iki
+    # dialect'te de dogru literali uretir (Postgres'te "false", SQLite'ta "0").
+    #
+    # `drawings` de ayni sebeple ham SQL'den cikarildi: JSON kolona '{}' metin
+    # literali yazmak Postgres'te tur cikarimina bagli kaliyordu. Python sozlugu
+    # vermek her iki dialect'te de dogru serilestirmeyi uretir (Postgres'te
+    # acik ::JSON cast'i ile).
+    chart_settings = sa.table(
+        "chart_settings",
+        sa.column("log_scale", sa.Boolean()),
+        sa.column("drawings", sa.JSON()),
+    )
+    op.execute(
+        chart_settings.update()
+        .where(chart_settings.c.log_scale.is_(None))
+        .values(log_scale=sa.false())
+    )
+    op.execute(
+        chart_settings.update()
+        .where(chart_settings.c.drawings.is_(None))
+        .values(drawings={})
+    )
 
     with op.batch_alter_table("chart_settings") as batch_op:
         batch_op.alter_column("log_scale", nullable=False)

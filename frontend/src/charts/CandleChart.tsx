@@ -1856,7 +1856,10 @@ export default function CandleChart({
         // Fiyat cetveli gibi davransın: sabit 0-100 bandına kilitlenmek yerine
         // görünen veriye göre otomatik ölçeklenir, kullanıcı sürükleyerek
         // yakınlaştırıp kaydırabilir (fiyat ekseniyle aynı davranış).
-        chart.priceScale('rsi_scale').applyOptions({
+        // chart.priceScale(id) paneIndex belirtilmezse 0'ı arar; rsi_scale
+        // kendi pane'inde (rsiPaneIndex) yaşadığı için paneIndex verilmezse
+        // "incorrect ID" hatasıyla çöküyordu.
+        chart.priceScale('rsi_scale', rsiPaneIndex).applyOptions({
           mode: PriceScaleMode.Normal,
           autoScale: true,
           scaleMargins: { top: 0.1, bottom: 0.1 },
@@ -1919,7 +1922,9 @@ export default function CandleChart({
         macdHistRef.current = chart.addSeries(HistogramSeries, { title: '', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
         macdLineRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.macdColor, lineWidth: indicatorSettings.macd.macdWidth as any, title: '', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
         macdSignalRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.signalColor, lineWidth: indicatorSettings.macd.signalWidth as any, title: '', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
-        chart.priceScale('macd_scale').applyOptions({ mode: PriceScaleMode.Normal });
+        // Aynı "incorrect ID" hatası macd_scale için de geçerliydi; paneIndex
+        // belirtilmeden chart.priceScale() varsayılan olarak pane 0'ı arar.
+        chart.priceScale('macd_scale', macdPaneIndex).applyOptions({ mode: PriceScaleMode.Normal });
       } else {
         for (const s of [macdHistRef.current, macdLineRef.current, macdSignalRef.current]) {
           if (s.getPane().paneIndex() !== macdPaneIndex) s.moveToPane(macdPaneIndex);

@@ -20,6 +20,7 @@ import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import ReplayTradePanel from '../replay/ReplayTradePanel';
+import ReplayHistoryPanel from '../replay/ReplayHistoryPanel';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { useAlertStore, alertStore } from '../store/alertStore';
@@ -210,12 +211,12 @@ export default function CandleChart({
   const [alarmOverlays, setAlarmOverlays] = useState<Array<{ id: string; y: number; symbol: string; condSym: string; val: string }>>([]);
   const updateAlarmOverlaysRef = useRef<(() => void) | null>(null);
 
+  // İşaret etiketleri iki basamak: kripto/forex için dört basamak
+  // (ör. "78900.0000") etiketleri gereksiz uzatıyor ve mumları örtüyordu.
   const formatPriceLabel = useCallback((val?: number | null) => {
     if (val === undefined || val === null) return '—';
-    return (provider === 'binance' || provider === 'forex' || provider === 'fx')
-      ? val.toFixed(4)
-      : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }, [provider]);
+    return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, []);
 
 
   // Strateji sinyallerini grafik üzerinde oklar (BUY/SELL) olarak çizdir
@@ -278,15 +279,24 @@ export default function CandleChart({
         });
       }
 
-      // Çıkış yalnızca kapanmış işlemlerde var.
+      // Çıkış yalnızca kapanmış işlemlerde var. Etikette fiyatın yanında
+      // yüzde kâr/zarar da yazılır — işlemin sonucunu grafikten okuyabilmek
+      // için. Yüzde sunucudan gelir, burada HESAPLANMAZ (RULES.md "Yasaklar").
       const exitTime = snapToBar(trade.exit_time);
       if (exitTime !== null && trade.exit_price != null) {
+        const pnlPercent = trade.pnl_percent;
+        const hasPnl = pnlPercent !== null && pnlPercent !== undefined;
+        const pnlLabel = hasPnl
+          ? ` (${pnlPercent > 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)`
+          : '';
+
         markers.push({
           time: exitTime,
           position: isLong ? ('aboveBar' as const) : ('belowBar' as const),
-          color: '#a1a1aa',
+          // Kazançlı/zararlı çıkışı renkten de ayırt edilebilsin.
+          color: hasPnl ? (pnlPercent >= 0 ? '#34d399' : '#f87171') : '#a1a1aa',
           shape: isLong ? ('arrowDown' as const) : ('arrowUp' as const),
-          text: formatPriceLabel(trade.exit_price),
+          text: `${formatPriceLabel(trade.exit_price)}${pnlLabel}`,
         });
       }
     });
@@ -2597,6 +2607,7 @@ export default function CandleChart({
               }
             />
           )}
+          {!replayState.isSelectingCutoff && <ReplayHistoryPanel symbol={symbol} />}
         </div>
       )}
 

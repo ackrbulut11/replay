@@ -33,6 +33,8 @@ export interface JournalTrade {
   exit_time?: string | null;
   created_at?: string | null;
   closed_at?: string | null;
+  /** Kalıcı kaydedildi mi — aynı paritedeki sonraki replaylerde de görünür. */
+  is_saved?: boolean;
 }
 
 export interface TradeOpenRequest {
@@ -86,6 +88,12 @@ export interface PerformanceReport {
   loss_rate: number | null;
   net_profit: number;
   net_profit_pct: number | null;
+  /**
+   * Pozisyon büyüklüğüne göre ağırlıklı toplam getiri: toplam kâr/zarar bölü
+   * işlemlere bağlanan toplam sermaye. Yüzdeleri düz ortalamak yanıltıcı
+   * olurdu — 10 birimlik %10 kâr ile 1 birimlik %10 zarar birbirini götürmez.
+   */
+  weighted_return_pct: number | null;
   gross_profit: number;
   gross_loss: number;
   profit_factor: number | null;

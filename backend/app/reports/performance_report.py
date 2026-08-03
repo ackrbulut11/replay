@@ -200,6 +200,48 @@ def sharpe_ratio(
     return ratio
 
 
+def weighted_return_pct(trades: Sequence[Trade]) -> Optional[float]:
+    """
+    Pozisyon büyüklüğüne göre ağırlıklı toplam getiri yüzdesi.
+
+    İşlemlerin yüzdelerini düz ortalamak YANLIŞ olurdu: 10 birimlik bir işlemde
+    %10 kâr ile 1 birimlik bir işlemde %10 zarar, düz ortalamada birbirini
+    götürüp %0 verirdi. Oysa bağlanan sermaye çok farklı. Bunun yerine toplam
+    kâr/zarar, işlemlere bağlanan toplam sermayeye bölünür:
+
+        toplam_pnl / toplam(giris_fiyati * miktar)
+
+    Yukarıdaki örnekte sonuç ~%8,2 çıkar — yani büyük işlem sonucu domine eder.
+
+    Sermaye toplamı hesaplanamıyorsa (fiyat/miktar eksik) `None` döner; sıfır
+    dönmek "başabaş" ile "bilinmiyor"u karıştırırdı.
+    """
+    total_pnl = 0.0
+    total_capital = 0.0
+
+    for trade in trades:
+        pnl = trade.get("pnl")
+        entry = trade.get("entry_price")
+        quantity = trade.get("quantity")
+
+        if pnl is None or entry is None:
+            continue
+        try:
+            pnl_value = float(pnl)
+            capital = float(entry) * float(quantity if quantity is not None else 1.0)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(pnl_value) or not math.isfinite(capital) or capital <= 0:
+            continue
+
+        total_pnl += pnl_value
+        total_capital += capital
+
+    if total_capital <= 0:
+        return None
+    return total_pnl / total_capital * 100.0
+
+
 def calculate_performance(
     trades: Sequence[Trade],
     starting_balance: float = 10000.0,
@@ -226,6 +268,9 @@ def calculate_performance(
         "loss_rate": loss_rate(pnls),
         "net_profit": profit,
         "net_profit_pct": (profit / starting_balance * 100.0) if starting_balance > 0 else None,
+        # Sabit başlangıç bakiyesine değil, işlemlere fiilen bağlanan sermayeye
+        # göre getiri — replay geçmişindeki "toplam durum" bunu gösterir.
+        "weighted_return_pct": weighted_return_pct(trades),
         "gross_profit": gross_profit(pnls),
         "gross_loss": gross_loss(pnls),
         "profit_factor": profit_factor(pnls),

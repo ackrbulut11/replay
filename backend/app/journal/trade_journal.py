@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database.models import JournalTrade, ReplaySession, generate_uuid
@@ -126,17 +127,57 @@ class TradeJournal:
         symbol: Optional[str] = None,
         status: Optional[str] = None,
         session_id: Optional[str] = None,
+        include_saved: bool = False,
         limit: int = 200,
     ) -> list[JournalTrade]:
-        """Kullanıcının işlemlerini en yeniden eskiye listeler."""
+        """
+        Kullanıcının işlemlerini en yeniden eskiye listeler.
+
+        `include_saved`, `session_id` ile birlikte verildiğinde filtre "VEYA"ya
+        döner: bu oturumun işlemleri **artı** aynı sembolde daha önce kalıcı
+        olarak kaydedilmiş işlemler. Replay geçmişi paneli bunu kullanır —
+        kullanıcı geçmiş denemelerini kaydettiyse yeni oturumda da görmeli,
+        kaydetmediyse grafik temiz açılmalı.
+        """
         query = db.query(JournalTrade).filter(JournalTrade.user_id == user_id)
         if symbol:
             query = query.filter(JournalTrade.symbol == symbol.upper())
         if status:
             query = query.filter(JournalTrade.status == status)
-        if session_id:
+
+        if session_id and include_saved:
+            query = query.filter(
+                or_(
+                    JournalTrade.session_id == session_id,
+                    JournalTrade.is_saved.is_(True),
+                )
+            )
+        elif session_id:
             query = query.filter(JournalTrade.session_id == session_id)
+        elif include_saved:
+            query = query.filter(JournalTrade.is_saved.is_(True))
+
         return query.order_by(JournalTrade.created_at.desc()).limit(min(limit, 1000)).all()
+
+    @staticmethod
+    def save_session(db: Session, session_id: str, user_id: str) -> int:
+        """
+        Bir replay oturumunun işlemlerini kalıcı olarak işaretler.
+
+        Kaç işlemin işaretlendiğini döndürür. Yalnızca çağıranın kendi
+        işlemlerine dokunur (sahiplik sorguda filtrelenir, ayrıca kontrol
+        edilmesine gerek kalmaz).
+        """
+        updated = (
+            db.query(JournalTrade)
+            .filter(
+                JournalTrade.user_id == user_id,
+                JournalTrade.session_id == session_id,
+            )
+            .update({JournalTrade.is_saved: True}, synchronize_session=False)
+        )
+        db.commit()
+        return updated
 
     @staticmethod
     def close_trade(
@@ -227,6 +268,7 @@ class TradeJournal:
         user_id: str,
         symbol: Optional[str] = None,
         session_id: Optional[str] = None,
+        include_saved: bool = False,
         starting_balance: float = 10000.0,
     ) -> dict:
         """
@@ -241,11 +283,16 @@ class TradeJournal:
             symbol=symbol,
             status=TradeStatus.CLOSED.value,
             session_id=session_id,
+            include_saved=include_saved,
             limit=1000,
         )
         # En eskiden yeniye: equity curve ve drawdown kronolojik sırayla anlamlı.
         ordered = sorted(trades, key=lambda t: t.closed_at or t.created_at or datetime.min)
+        # Ağırlıklı getiri için fiyat ve miktar da gerekli (bkz. weighted_return_pct).
         return calculate_performance(
-            [{"pnl": t.pnl} for t in ordered],
+            [
+                {"pnl": t.pnl, "entry_price": t.entry_price, "quantity": t.quantity}
+                for t in ordered
+            ],
             starting_balance=starting_balance,
         )

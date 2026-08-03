@@ -9,12 +9,13 @@
  * olarak gönderilir; mutlak fiyata çevirme işi `replay_engine` içindedir.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, X, Loader2, AlertTriangle, GripHorizontal } from 'lucide-react';
 
 import { closeTrade, openTrade } from '../services/journalApi';
 import { journalStore, useJournalStore } from '../store/journalStore';
 import { replayStore, useReplayStore } from '../store/replayStore';
+import { useDraggablePanel } from '../hooks/useDraggablePanel';
 import { logError, logEvent } from '../services/eventLog';
 import type { TradeSide } from '../types/journal';
 
@@ -61,7 +62,6 @@ export default function ReplayTradePanel({
   // pozisyonlarını görür (bkz. journalStore.reload).
   const [{ sessionId }] = useReplayStore();
   const position = trades.find((t) => t.status === 'OPEN') ?? null;
-  const lastClosed = trades.find((t) => t.status === 'CLOSED') ?? null;
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,69 +71,8 @@ export default function ReplayTradePanel({
   const [takeProfit, setTakeProfit] = useState('');
   const [quantity, setQuantity] = useState('1');
 
-  // ─── Sürükleme ──────────────────────────────────────────────────────────
-  // Konum React state'inde TUTULMAZ: mousemove saniyede yüzlerce kez tetiklenir
-  // ve her birinde state güncellemek paneli baştan render ederek gözle görülür
-  // kasmaya yol açıyordu. Bunun yerine transform doğrudan DOM'a, ekran yenileme
-  // hızına (rAF) sabitlenerek yazılır — render döngüsü hiç çalışmaz.
-  const panelRef = useRef<HTMLDivElement>(null);
-  const offsetRef = useRef({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
-  const frameRef = useRef<number | null>(null);
-
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      originX: offsetRef.current.x,
-      originY: offsetRef.current.y,
-    };
-  }, []);
-
-  useEffect(() => {
-    const paint = () => {
-      frameRef.current = null;
-      const el = panelRef.current;
-      if (el) {
-        const { x, y } = offsetRef.current;
-        // translate3d: konumlandırmayı GPU katmanına taşır, yeniden yerleşim (layout) tetiklemez.
-        el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-      }
-    };
-
-    const handleMove = (e: MouseEvent) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      offsetRef.current = {
-        x: drag.originX + (e.clientX - drag.startX),
-        y: drag.originY + (e.clientY - drag.startY),
-      };
-      // Aynı karede birden fazla mousemove gelirse tek çizim yeter.
-      if (frameRef.current === null) {
-        frameRef.current = requestAnimationFrame(paint);
-      }
-    };
-
-    const handleUp = () => {
-      if (!dragRef.current) return;
-      dragRef.current = null;
-      // Bekleyen bir kare varsa hemen çiz: rAF kısıtlandığında (ör. arka plan
-      // sekmesi) panel son konumuna hiç taşınmadan kalabilirdi.
-      if (frameRef.current !== null) {
-        cancelAnimationFrame(frameRef.current);
-        paint();
-      }
-    };
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-    };
-  }, []);
+  // Sürükleme mantığı geçmiş paneliyle ortak (bkz. useDraggablePanel).
+  const { panelRef, handleDragStart } = useDraggablePanel();
 
   // ─── Veri ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -377,21 +316,9 @@ export default function ReplayTradePanel({
         </>
       )}
 
-      {!position && lastClosed && (
-        // Kâr/zarar sunucudan gelir; burada hesaplanmaz (RULES.md "Yasaklar").
-        <span
-          className="flex items-center gap-1 pl-1.5 border-l border-white/[0.08] text-[9px] font-mono tabular-nums"
-          title="Son kapanan işlemin kâr/zararı"
-        >
-          <span className="text-zinc-500">Son</span>
-          <span className={(lastClosed.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-            {formatPrice(lastClosed.pnl)}
-            {lastClosed.pnl_percent !== null && lastClosed.pnl_percent !== undefined
-              ? ` (${lastClosed.pnl_percent.toFixed(2)}%)`
-              : ''}
-          </span>
-        </span>
-      )}
+      {/* "Son işlem" özeti buradan kaldırıldı: aynı bilgi artık geçmiş
+          panelinde, tüm işlemlerle birlikte ve tarihleriyle duruyor
+          (bkz. ReplayHistoryPanel). */}
 
       {error && (
         <span className="flex items-center gap-1 pl-1.5 border-l border-white/[0.08] text-[9px] text-red-400 max-w-[220px]">

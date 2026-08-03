@@ -75,7 +75,10 @@ export const journalStore = {
     const isSameQuery = prev.symbol === symbol && prev.sessionId === sessionId;
     setState({ loading: true, symbol, sessionId, trades: isSameQuery ? prev.trades : [] });
     try {
-      const trades = await getTrades({ symbol, sessionId, limit: 200 });
+      // `includeSaved`: bu oturumun işlemleri + kullanıcının daha önce
+      // "Kaydet" ile kalıcılaştırdığı işlemler. Kaydedilmemiş eski oturumlar
+      // gelmez, grafik temiz açılır.
+      const trades = await getTrades({ symbol, sessionId, includeSaved: true, limit: 200 });
       // Sembol ya da oturum bu sırada değiştiyse geç gelen yanıtı yazma.
       const state = journalStore.getState();
       if (state.symbol === symbol && state.sessionId === sessionId) {

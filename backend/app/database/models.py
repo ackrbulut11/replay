@@ -11,6 +11,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     UniqueConstraint,
+    false as sa_false,
 )
 from sqlalchemy.orm import relationship
 from app.database.postgres import Base
@@ -305,6 +306,9 @@ class JournalTrade(Base):
     exit_bar_index = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     closed_at = Column(DateTime, nullable=True)
+    # Kullanici bu oturumun gecmisini "Kaydet" ile isaretlediyse True olur ve
+    # islem, ayni paritedeki sonraki replay oturumlarinda da gorunur.
+    is_saved = Column(Boolean, nullable=False, default=False, server_default=sa_false(), index=True)
 
     user = relationship("User", back_populates="journal_trades")
     session = relationship("ReplaySession", back_populates="trades")

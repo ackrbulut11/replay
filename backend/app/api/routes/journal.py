@@ -54,6 +54,10 @@ def get_owned_trade(
 def get_performance(
     symbol: Optional[str] = Query(None, description="Sembol filtresi"),
     session_id: Optional[str] = Query(None, description="Replay oturumu filtresi"),
+    include_saved: bool = Query(
+        False,
+        description="session_id ile birlikte: kalıcı kaydedilmiş işlemleri de dahil et",
+    ),
     starting_balance: float = Query(10000.0, gt=0, description="Başlangıç bakiyesi"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -69,6 +73,7 @@ def get_performance(
         current_user.id,
         symbol=symbol,
         session_id=session_id,
+        include_saved=include_saved,
         starting_balance=starting_balance,
     )
 
@@ -78,6 +83,10 @@ def list_trades(
     symbol: Optional[str] = Query(None, description="Sembol filtresi"),
     status: Optional[str] = Query(None, description="Durum filtresi (OPEN, CLOSED)"),
     session_id: Optional[str] = Query(None, description="Replay oturumu filtresi"),
+    include_saved: bool = Query(
+        False,
+        description="session_id ile birlikte: kalıcı kaydedilmiş işlemleri de getir",
+    ),
     limit: int = Query(200, gt=0, le=1000),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -89,6 +98,7 @@ def list_trades(
         symbol=symbol,
         status=status,
         session_id=session_id,
+        include_saved=include_saved,
         limit=limit,
     )
 
@@ -101,6 +111,23 @@ def start_session(
 ):
     """Yeni bir replay oturumu başlatır; manuel işlemler bu oturuma bağlanır."""
     return _journal.start_session(db, request, user_id=current_user.id)
+
+
+@router.post("/sessions/{session_id}/save")
+def save_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Oturumun işlemlerini kalıcı olarak işaretler.
+
+    Bundan sonra aynı paritede açılan replay oturumlarında da görünürler.
+    Sahiplik sorguda filtrelendiği için başkasının oturumu için `saved: 0`
+    döner — var olup olmadığı sızmaz.
+    """
+    saved = _journal.save_session(db, session_id, user_id=current_user.id)
+    return {"session_id": session_id, "saved": saved}
 
 
 @router.post("/trades", response_model=TradeResponse, status_code=201)

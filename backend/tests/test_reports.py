@@ -17,6 +17,7 @@ from app.reports.performance_report import (
     profit_factor,
     sharpe_ratio,
     trade_returns,
+    weighted_return_pct,
     win_rate,
 )
 
@@ -123,6 +124,44 @@ class TestSharpe(unittest.TestCase):
         base = sharpe_ratio([0.1, 0.2, 0.3])
         annualized = sharpe_ratio([0.1, 0.2, 0.3], periods_per_year=4)
         self.assertAlmostEqual(annualized, base * 2.0)  # sqrt(4) = 2
+
+
+class TestWeightedReturnPct(unittest.TestCase):
+    """Toplam getiri, pozisyon büyüklüğüne göre ağırlıklandırılır."""
+
+    def test_buyuk_pozisyon_sonuca_hakim_olur(self):
+        # 10 birimlik %10 kâr ile 1 birimlik %10 zarar birbirini GÖTÜRMEZ:
+        # düz ortalama %0 verirdi, oysa bağlanan sermaye çok farklı.
+        trades = [
+            {"pnl": 100.0, "entry_price": 100.0, "quantity": 10.0},   # +%10
+            {"pnl": -10.0, "entry_price": 100.0, "quantity": 1.0},    # -%10
+        ]
+        # 90 / 1100 = %8,18
+        self.assertAlmostEqual(weighted_return_pct(trades), 8.181818, places=4)
+
+    def test_esit_buyuklukte_ters_islemler_sifirlanir(self):
+        trades = [
+            {"pnl": 10.0, "entry_price": 100.0, "quantity": 1.0},
+            {"pnl": -10.0, "entry_price": 100.0, "quantity": 1.0},
+        ]
+        self.assertAlmostEqual(weighted_return_pct(trades), 0.0)
+
+    def test_islem_yoksa_none(self):
+        # None, "başabaş" ile "hesaplanamıyor"u ayırır; 0.0 dönmek yanıltırdı.
+        self.assertIsNone(weighted_return_pct([]))
+
+    def test_miktar_yoksa_bir_varsayilir(self):
+        trades = [{"pnl": 10.0, "entry_price": 100.0, "quantity": None}]
+        self.assertAlmostEqual(weighted_return_pct(trades), 10.0)
+
+    def test_bozuk_kayitlar_atlanir(self):
+        trades = [
+            {"pnl": 10.0, "entry_price": 100.0, "quantity": 1.0},
+            {"pnl": None, "entry_price": 100.0, "quantity": 1.0},   # pnl yok
+            {"pnl": 5.0, "entry_price": None, "quantity": 1.0},     # fiyat yok
+            {"pnl": 5.0, "entry_price": 0.0, "quantity": 1.0},      # sermaye sıfır
+        ]
+        self.assertAlmostEqual(weighted_return_pct(trades), 10.0)
 
 
 class TestCalculatePerformance(unittest.TestCase):

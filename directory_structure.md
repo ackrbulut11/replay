@@ -54,6 +54,8 @@ TradingResearchPlatform/
 │   │   │
 │   │   ├── replay/
 │   │   │   ├── ReplayControls.tsx
+│   │   │   ├── ReplayTradePanel.tsx   # replay sırasında pozisyon aç/kapat
+│   │   │   ├── ReplayHistoryPanel.tsx # işlem geçmişi + kalıcı kaydetme
 │   │   │   └── ReplayPanel.tsx
 │   │   │
 │   │   ├── strategy/
@@ -91,6 +93,7 @@ TradingResearchPlatform/
 │   │   │   └── userStore.ts          # STUB
 │   │   │
 │   │   ├── hooks/
+│   │   │   └── useDraggablePanel.ts   # yüzen panelleri sürüklenebilir yapar
 │   │   │
 │   │   ├── types/
 │   │   │

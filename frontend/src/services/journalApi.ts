@@ -33,6 +33,8 @@ export interface TradeListFilters {
   symbol?: string;
   status?: TradeStatus;
   sessionId?: string;
+  /** `sessionId` ile birlikte: kalıcı kaydedilmiş işlemleri de getirir. */
+  includeSaved?: boolean;
   limit?: number;
 }
 
@@ -68,9 +70,21 @@ export async function getTrades(filters: TradeListFilters = {}): Promise<Journal
     symbol: filters.symbol,
     status: filters.status,
     session_id: filters.sessionId,
+    include_saved: filters.includeSaved ? 'true' : undefined,
     limit: filters.limit,
   });
   return request<JournalTrade[]>(`${API_BASE}/trades${query}`);
+}
+
+/**
+ * Oturumun işlemlerini kalıcı olarak işaretler.
+ *
+ * Bundan sonra aynı paritede açılan replay oturumlarında da listelenirler.
+ */
+export async function saveSession(sessionId: string): Promise<{ saved: number }> {
+  return request<{ saved: number }>(`${API_BASE}/sessions/${sessionId}/save`, {
+    method: 'POST',
+  });
 }
 
 export async function getTrade(tradeId: string): Promise<JournalTrade> {
@@ -169,11 +183,17 @@ export async function deleteTrade(tradeId: string): Promise<void> {
 }
 
 export async function getPerformance(
-  options: { symbol?: string; sessionId?: string; startingBalance?: number } = {}
+  options: {
+    symbol?: string;
+    sessionId?: string;
+    includeSaved?: boolean;
+    startingBalance?: number;
+  } = {}
 ): Promise<PerformanceReport> {
   const query = buildQuery({
     symbol: options.symbol,
     session_id: options.sessionId,
+    include_saved: options.includeSaved ? 'true' : undefined,
     starting_balance: options.startingBalance,
   });
   return request<PerformanceReport>(`${API_BASE}/performance${query}`);

@@ -276,9 +276,25 @@ function App() {
   // parite/interval hızlı değiştiğinde geç dönen eski bir yanıt, yeni seçili paritenin/interval'ın
   // üzerine eski (yanlış) mum verisini yazabilir (bkz. "1h seçili ama günlük gösteriyor" hatası).
   //
-  // `isReplayActive` de bir tetikleyicidir: replay'de veri konuma çapalı bir
-  // PENCERE olarak yükleniyor ve o pencere geçmişte bitiyor. Replay kapandığında
-  // yeniden yüklenmezse grafik geçmişte takılı kalırdı.
+  // Replay'den ÇIKIŞ da bir tetikleyicidir: replay'de veri konuma çapalı bir
+  // PENCERE olarak yükleniyor ve o pencere geçmişte bitiyor; yeniden
+  // yüklenmezse grafik geçmişte takılı kalırdı.
+  //
+  // Replay'e GİRİŞTE ise yeniden yüklenmez. Yüklenirse o an ekranda olan tüm
+  // geçmiş (ör. 1g'de 3274 mum) 1500 mumluk pencereye düşüyor ve "grafikte
+  // istediğin yere kes" akışı bozuluyordu — kullanıcı yalnızca birkaç yüz mum
+  // geriye kesebiliyordu. Giriş anında zaten yüklü veri konumu kapsıyor
+  // (çapa son mum), pencereye ihtiyaç yok; pencere asıl olarak replay
+  // sürerken zaman dilimi değişince devreye giriyor.
+  const wasReplayActiveRef = useRef(replayState.isReplayActive);
+  const replayExitCount = useRef(0);
+  if (wasReplayActiveRef.current !== replayState.isReplayActive) {
+    if (wasReplayActiveRef.current && !replayState.isReplayActive) {
+      replayExitCount.current += 1;
+    }
+    wasReplayActiveRef.current = replayState.isReplayActive;
+  }
+
   useEffect(() => {
     if (!isAuthenticated || !symbol || symbol.trim().length < 2) return;
 
@@ -294,7 +310,7 @@ function App() {
       controller.abort();
       bgControllerRef.current?.abort();
     };
-  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, replayState.isReplayActive]);
+  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, replayExitCount.current]);
 
   if (isLoading) {
     return (

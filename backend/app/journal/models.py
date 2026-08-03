@@ -143,6 +143,8 @@ class TradeResponse(BaseModel):
     exit_time: Optional[datetime] = None
     created_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
+    # Kalıcı olarak kaydedildi mi (sonraki replay oturumlarında da görünür).
+    is_saved: bool = False
 
     class Config:
         from_attributes = True
@@ -164,6 +166,8 @@ class PerformanceResponse(BaseModel):
     loss_rate: Optional[float] = None
     net_profit: float
     net_profit_pct: Optional[float] = None
+    # Pozisyon büyüklüğüne göre ağırlıklı toplam getiri (bkz. weighted_return_pct).
+    weighted_return_pct: Optional[float] = None
     gross_profit: float
     gross_loss: float
     profit_factor: Optional[float] = None

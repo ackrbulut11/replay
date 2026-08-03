@@ -61,8 +61,9 @@ function App() {
   const [end, setEnd] = useState('');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   
-  const [logScale, setLogScale] = useState(false);
   const [chartSettings, chartSettingsApi] = useChartSettingsStore();
+  const { logScale } = chartSettings;
+  const setLogScale = chartSettingsApi.setLogScale;
   const indicators = chartSettings.activeIndicators;
 
   const [chartData, setChartData] = useState<CandleData[]>([]);

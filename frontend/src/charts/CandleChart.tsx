@@ -161,6 +161,12 @@ export default function CandleChart({
   const toolSettingsRef = useRef(toolSettings);
   toolSettingsRef.current = toolSettings;
 
+  // Bağımlılık dizisi boş olan (mount'ta bir kez çalışan) efektlerden erişim
+  // için: chartSettingsApi kararlı bir referans olsa da doğrudan kullanmak
+  // exhaustive-deps uyarısı üretir (diğer ref'lerle aynı desen, bkz. yukarı).
+  const chartSettingsApiRef = useRef(chartSettingsApi);
+  chartSettingsApiRef.current = chartSettingsApi;
+
   const [editOptions, setEditOptions] = useState<DrawingEditOptions>({
     color: DEFAULT_DRAWING_COLOR,
     lineWidth: DEFAULT_LINE_WIDTH,
@@ -171,10 +177,11 @@ export default function CandleChart({
   const activeToolRef = useRef<DrawingTool>('pointer');
   const snapEnabledRef = useRef(false);
   const drawingsRef = useRef<Drawing[]>([]);
-  // Çizimler parite bazında saklanır (RULES.md: her sembolün kendi göstergesi);
-  // grafik bileşeni sembol değişse de yeniden mount olmadığı için drawingsRef
-  // burada tutulmazsa bir önceki paritenin çizimleri yeni paritede kalır.
-  const drawingsBySymbolRef = useRef<Map<string, Drawing[]>>(new Map());
+  // Çizimler parite bazında saklanır (RULES.md: her sembolün kendi göstergesi)
+  // ve kullanıcıya bağlı olarak sunucuda kalıcılaştırılır (bkz.
+  // chartSettingsStore.drawings). Grafik bileşeni sembol değişse de yeniden
+  // mount olmadığı için bu adım olmadan bir önceki paritenin çizimleri yeni
+  // paritede kalır.
   const currentDrawingKeyRef = useRef<string>(`${provider}:${symbol}`.toUpperCase());
   const currentPointsRef = useRef<DrawingPoint[]>([]);
   const selectedDrawingRef = useRef<Drawing | null>(null);
@@ -184,6 +191,7 @@ export default function CandleChart({
   // getPointFromPixel ve applyDrag useCallback ref'leri (global useEffect'ten erişim için)
   const getPointFromPixelRef = useRef<((x: number, y: number, snap: boolean) => DrawingPoint | null) | null>(null);
   const applyDragRef = useRef<((drawingId: string, handleIndex: number, point: DrawingPoint) => Drawing | null) | null>(null);
+  const persistDrawingsRef = useRef<((key: string, drawings: Drawing[]) => void) | null>(null);
 
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const ctrlPressedRef = useRef(false);
@@ -743,6 +751,7 @@ export default function CandleChart({
     const handleMouseUp = () => {
       // Çizim handle sürükleme bitişi
       if (dragStateRef.current) {
+        persistDrawingsRef.current?.(currentDrawingKeyRef.current, drawingsRef.current);
         dragStateRef.current = null;
         primitiveRef.current?.setPreview(null);
         isDraggingDrawingRef.current = false;
@@ -768,6 +777,15 @@ export default function CandleChart({
     primitiveRef.current?.setPreview(null);
   }, []);
 
+  // Çizim setini kullanıcıya bağlı olarak sunucuda kalıcılaştırır. Cetvel
+  // (ruler) her tıklamada zaten temizlenen geçici bir ölçüm aracı olduğu
+  // için hiç kaydedilmez — aksi halde bir sonraki girişte anlamsız bir
+  // ölçüm çizgisiyle karşılaşılır.
+  const persistDrawings = useCallback((key: string, drawings: Drawing[]) => {
+    chartSettingsApi.setSymbolDrawings(key, drawings.filter(d => d.tool !== 'ruler'));
+  }, [chartSettingsApi]);
+  persistDrawingsRef.current = persistDrawings;
+
   const changeTool = useCallback((tool: DrawingTool) => {
     activeToolRef.current = tool;
     setActiveTool(tool);
@@ -792,7 +810,8 @@ export default function CandleChart({
     primitiveRef.current?.setPreview(null);
     setSelectedDrawing(null);
     primitiveRef.current?.setSelectedId(null);
-  }, []);
+    persistDrawings(currentDrawingKeyRef.current, []);
+  }, [persistDrawings]);
 
   const toggleSnap = useCallback(() => {
     setSnapEnabled(prev => {
@@ -896,8 +915,9 @@ export default function CandleChart({
     if (!sel) return;
     drawingsRef.current = drawingsRef.current.filter(d => d.id !== sel.id);
     primitiveRef.current?.setDrawings(drawingsRef.current);
+    persistDrawings(currentDrawingKeyRef.current, drawingsRef.current);
     deselectDrawing();
-  }, [deselectDrawing]);
+  }, [deselectDrawing, persistDrawings]);
 
   const updateSelectedOptions = useCallback((opts: DrawingEditOptions) => {
     setEditOptions(opts);
@@ -910,12 +930,13 @@ export default function CandleChart({
       sel.fillOpacity = opts.fillOpacity;
       drawingsRef.current = drawingsRef.current.map(d => d.id === sel.id ? sel : d);
       primitiveRef.current?.setDrawings(drawingsRef.current);
+      persistDrawings(currentDrawingKeyRef.current, drawingsRef.current);
 
       chartSettingsApi.setDrawingDefault(sel.tool, opts);
     } else if (activeToolRef.current !== 'pointer') {
       chartSettingsApi.setDrawingDefault(activeToolRef.current, opts);
     }
-  }, [chartSettingsApi]);
+  }, [chartSettingsApi, persistDrawings]);
 
   const applyDrag = useCallback((drawingId: string, handleIndex: number, newPoint: DrawingPoint): Drawing | null => {
     const drawing = drawingsRef.current.find(d => d.id === drawingId);
@@ -1135,6 +1156,13 @@ export default function CandleChart({
     primitive.setCandles(fullDataRef.current || data);
     primitiveRef.current = primitive;
 
+    // Bu paritenin daha önce kaydedilmiş çizimlerini yükle (localStorage'dan
+    // anlık, sunucudan syncFromServer tamamlandığında aşağıdaki
+    // drawingsVersion efektiyle güncellenir).
+    const initialDrawings = chartSettingsApiRef.current.getState().drawings[currentDrawingKeyRef.current] || [];
+    drawingsRef.current = initialDrawings;
+    primitive.setDrawings(initialDrawings);
+
     chart.subscribeClick((param) => {
       if (!param.point) return;
 
@@ -1266,6 +1294,9 @@ export default function CandleChart({
         }
         drawingsRef.current = [...drawingsRef.current, drawing];
         primitive.setDrawings(drawingsRef.current);
+        if (tool !== 'ruler') {
+          persistDrawingsRef.current?.(currentDrawingKeyRef.current, drawingsRef.current);
+        }
         currentPointsRef.current = [];
         activeToolRef.current = 'pointer';
         setActiveTool('pointer');
@@ -1499,8 +1530,8 @@ export default function CandleChart({
     };
   }, []);
 
-  // Sembol veya sağlayıcı değiştiğinde: aktif paritenin çizimlerini haritada
-  // sakla, devam eden çizimi/seçimi iptal et, yeni paritenin (varsa) kayıtlı
+  // Sembol veya sağlayıcı değiştiğinde: aktif paritenin çizimlerini kaydet,
+  // devam eden çizimi/seçimi iptal et, yeni paritenin (varsa) kayıtlı
   // çizimlerini yükle. Grafik bileşeni sembol değişince yeniden mount olmadığı
   // için bu adım olmadan çizimler tüm paritelerde ortak görünürdü.
   useEffect(() => {
@@ -1508,7 +1539,7 @@ export default function CandleChart({
     const prevKey = currentDrawingKeyRef.current;
     if (newKey === prevKey) return;
 
-    drawingsBySymbolRef.current.set(prevKey, drawingsRef.current);
+    persistDrawings(prevKey, drawingsRef.current);
 
     currentPointsRef.current = [];
     selectedDrawingRef.current = null;
@@ -1516,12 +1547,25 @@ export default function CandleChart({
     primitiveRef.current?.setPreview(null);
     primitiveRef.current?.setSelectedId(null);
 
-    const nextDrawings = drawingsBySymbolRef.current.get(newKey) || [];
+    const nextDrawings = chartSettingsApi.getState().drawings[newKey] || [];
     drawingsRef.current = nextDrawings;
     primitiveRef.current?.setDrawings(nextDrawings);
 
     currentDrawingKeyRef.current = newKey;
-  }, [symbol, provider]);
+  }, [symbol, provider, chartSettingsApi, persistDrawings]);
+
+  // Sunucudan gelen çizimler (bkz. syncFromServer) yalnızca aktif paritenin
+  // grafiğe zaten uygulanmış hâliyle senkron değilse imperatif olarak
+  // uygulanır. drawingsVersion yalnızca gerçek sunucu verisiyle arttığı için
+  // yerel düzenlemeler bu efekti tetiklemez.
+  useEffect(() => {
+    if (!primitiveRef.current) return;
+    if (dragStateRef.current || currentPointsRef.current.length > 0) return;
+    const persisted = chartSettingsApi.getState().drawings[currentDrawingKeyRef.current] || [];
+    drawingsRef.current = persisted;
+    primitiveRef.current.setDrawings(persisted);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartSettings.drawingsVersion]);
 
   useEffect(() => {
     if (!chartRef.current) return;

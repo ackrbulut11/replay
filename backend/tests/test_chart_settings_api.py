@@ -46,13 +46,22 @@ class TestChartSettingsAPI(unittest.TestCase):
     def test_get_returns_empty_when_no_row(self):
         response = self.client.get("/api/chart-settings")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"rsi": {}, "drawing_defaults": {}})
+        self.assertEqual(
+            response.json(),
+            {"rsi": {}, "drawing_defaults": {}, "log_scale": False, "drawings": {}},
+        )
 
     def test_put_then_get_round_trip(self):
         payload = {
             "rsi": {"period": 21, "overbought": 75, "oversold": 25},
             "drawing_defaults": {
                 "trendLine": {"color": "#ffffff", "lineWidth": 2, "opacity": 1, "lineStyle": "dashed"},
+            },
+            "log_scale": True,
+            "drawings": {
+                "BINANCE:BTCUSDT": [
+                    {"id": "drawing_1", "tool": "trendLine", "points": [{"time": 1, "price": 2}], "color": "#fff", "lineWidth": 2, "opacity": 1},
+                ],
             },
         }
         put_response = self.client.put("/api/chart-settings", json=payload)

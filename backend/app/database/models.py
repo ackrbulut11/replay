@@ -237,6 +237,11 @@ class ChartSettings(Base):
     )
     rsi = Column(JSON, nullable=False, default=dict)
     drawing_defaults = Column(JSON, nullable=False, default=dict)
+    # Logaritmik fiyat eksenini kalıcı kılar (bkz. CandleChart PriceScaleMode).
+    log_scale = Column(Boolean, nullable=False, default=False)
+    # Çizimler "PROVIDER:SYMBOL" anahtarıyla saklanır (bkz. CandleChart
+    # currentDrawingKeyRef), her paritenin kendi çizim seti korunur.
+    drawings = Column(JSON, nullable=False, default=dict)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="chart_settings")

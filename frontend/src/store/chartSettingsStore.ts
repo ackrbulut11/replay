@@ -4,7 +4,7 @@ import { TOKEN_STORAGE_KEY } from '../context/AuthContext';
 import {
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY, DEFAULT_LINE_STYLE,
 } from '../charts/drawings/types';
-import type { DrawingTool, DrawingEditOptions } from '../charts/drawings/types';
+import type { Drawing, DrawingTool, DrawingEditOptions } from '../charts/drawings/types';
 
 export interface RsiSettings {
   period: number;
@@ -137,11 +137,23 @@ export const DEFAULT_DRAWING_DEFAULTS: Record<DrawingTool, DrawingEditOptions> =
   parallelChannel: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE },
 };
 
+/** Çizimler "PROVIDER:SYMBOL" anahtarıyla saklanır (bkz. CandleChart currentDrawingKeyRef). */
+export type DrawingsBySymbol = Record<string, Drawing[]>;
+
 export interface ChartSettingsState {
   rsi: RsiSettings;
   indicators: IndicatorSettingsMap;
   activeIndicators: ActiveIndicatorsState;
   drawingDefaults: Record<DrawingTool, DrawingEditOptions>;
+  logScale: boolean;
+  drawings: DrawingsBySymbol;
+  /**
+   * Yalnızca syncFromServer sunucudan gerçek veri uyguladığında artar; yerel
+   * çizim düzenlemelerinde değişmez. CandleChart bu sayaca abone olup yalnızca
+   * sunucudan gelen veriyi imperatif olarak grafiğe uygular — aksi halde her
+   * yerel düzenleme kendi kendini tetikleyen bir döngüye girer.
+   */
+  drawingsVersion: number;
 }
 
 const LOCAL_STORAGE_KEY = 'replay_chart_settings_v1';
@@ -185,6 +197,9 @@ function loadInitialState(): ChartSettingsState {
         indicators,
         activeIndicators,
         drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS, ...(parsed.drawingDefaults || {}) },
+        logScale: parsed.logScale ?? false,
+        drawings: parsed.drawings || {},
+        drawingsVersion: 0,
       };
     }
   } catch (e) {
@@ -195,6 +210,9 @@ function loadInitialState(): ChartSettingsState {
     indicators: JSON.parse(JSON.stringify(DEFAULT_INDICATOR_SETTINGS)),
     activeIndicators: { ...DEFAULT_ACTIVE_INDICATORS },
     drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS },
+    logScale: false,
+    drawings: {},
+    drawingsVersion: 0,
   };
 }
 
@@ -227,6 +245,8 @@ function persistablePayload(state: ChartSettingsState) {
       active_indicators: state.activeIndicators,
     },
     drawing_defaults: state.drawingDefaults,
+    log_scale: state.logScale,
+    drawings: state.drawings,
   };
 }
 
@@ -330,6 +350,15 @@ export const chartSettingsStore = {
     applyState({ drawingDefaults: { ...currentState.drawingDefaults, [tool]: options } });
   },
 
+  setLogScale: (value: boolean) => {
+    applyState({ logScale: value });
+  },
+
+  /** Bir paritenin çizim setini değiştirir (ör. yeni çizim, silme, sürükleme sonu). */
+  setSymbolDrawings: (key: string, drawings: Drawing[]) => {
+    applyState({ drawings: { ...currentState.drawings, [key]: drawings } });
+  },
+
   /** Giriş yapıldıktan sonra ayarları sunucudan yükler. */
   syncFromServer: async () => {
     if (!localStorage.getItem(TOKEN_STORAGE_KEY)) return;
@@ -337,8 +366,18 @@ export const chartSettingsStore = {
     syncInFlight = true;
 
     try {
-      const data = await apiRequest<{ rsi: Partial<RsiSettings> & { indicators?: any; active_indicators?: any }; drawing_defaults: Partial<Record<DrawingTool, DrawingEditOptions>> }>('/api/chart-settings');
-      const hasServerData = data && (Object.keys(data.rsi || {}).length > 0 || Object.keys(data.drawing_defaults || {}).length > 0);
+      const data = await apiRequest<{
+        rsi: Partial<RsiSettings> & { indicators?: any; active_indicators?: any };
+        drawing_defaults: Partial<Record<DrawingTool, DrawingEditOptions>>;
+        log_scale?: boolean;
+        drawings?: DrawingsBySymbol;
+      }>('/api/chart-settings');
+      const hasServerData = data && (
+        Object.keys(data.rsi || {}).length > 0
+        || Object.keys(data.drawing_defaults || {}).length > 0
+        || Object.keys(data.drawings || {}).length > 0
+        || data.log_scale === true
+      );
 
       if (hasServerData) {
         const indicators = mergeIndicatorDefaults(data.rsi?.indicators);
@@ -352,6 +391,9 @@ export const chartSettingsStore = {
           indicators,
           activeIndicators,
           drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS, ...(data.drawing_defaults || {}) },
+          logScale: data.log_scale ?? false,
+          drawings: data.drawings || {},
+          drawingsVersion: currentState.drawingsVersion + 1,
         };
         lastPersistedJson = JSON.stringify(persistablePayload(merged));
         syncedOnce = true;
@@ -385,6 +427,9 @@ export const chartSettingsStore = {
       indicators: defaultIndicators,
       activeIndicators: { ...DEFAULT_ACTIVE_INDICATORS },
       drawingDefaults: { ...DEFAULT_DRAWING_DEFAULTS },
+      logScale: false,
+      drawings: {},
+      drawingsVersion: 0,
     };
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY);

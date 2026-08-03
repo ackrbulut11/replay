@@ -31,6 +31,9 @@ class ChartSettingsPayload(BaseModel):
 
     rsi: Dict[str, Any] = Field(default_factory=dict)
     drawing_defaults: Dict[str, Any] = Field(default_factory=dict)
+    log_scale: bool = False
+    # "PROVIDER:SYMBOL" -> çizim listesi.
+    drawings: Dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("", response_model=ChartSettingsPayload)
@@ -41,8 +44,13 @@ def get_chart_settings(
     """Kullanıcının grafik ayarlarını döndürür; hiç kaydı yoksa boş döner."""
     row = db.query(ChartSettings).filter(ChartSettings.user_id == current_user.id).first()
     if not row:
-        return ChartSettingsPayload(rsi={}, drawing_defaults={})
-    return ChartSettingsPayload(rsi=row.rsi or {}, drawing_defaults=row.drawing_defaults or {})
+        return ChartSettingsPayload(rsi={}, drawing_defaults={}, log_scale=False, drawings={})
+    return ChartSettingsPayload(
+        rsi=row.rsi or {},
+        drawing_defaults=row.drawing_defaults or {},
+        log_scale=bool(row.log_scale),
+        drawings=row.drawings or {},
+    )
 
 
 @router.put("", response_model=ChartSettingsPayload)
@@ -59,12 +67,21 @@ def save_chart_settings(
             user_id=current_user.id,
             rsi=payload.rsi,
             drawing_defaults=payload.drawing_defaults,
+            log_scale=payload.log_scale,
+            drawings=payload.drawings,
         )
         db.add(row)
     else:
         row.rsi = payload.rsi
         row.drawing_defaults = payload.drawing_defaults
+        row.log_scale = payload.log_scale
+        row.drawings = payload.drawings
 
     db.commit()
     db.refresh(row)
-    return ChartSettingsPayload(rsi=row.rsi, drawing_defaults=row.drawing_defaults)
+    return ChartSettingsPayload(
+        rsi=row.rsi,
+        drawing_defaults=row.drawing_defaults,
+        log_scale=bool(row.log_scale),
+        drawings=row.drawings,
+    )

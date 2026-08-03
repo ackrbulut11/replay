@@ -2605,9 +2605,11 @@ export default function CandleChart({
         </div>
       )}
 
-      {/* Yüzen Replay Araç Çubuğu Kontrolleri */}
+      {/* Yüzen Replay Araç Çubuğu Kontrolleri + Manuel İşlem Paneli (Faz 4).
+          Panel, araç çubuğunun tam altında ve ortalanmış başlar; başlıktan
+          sürüklenerek istenen yere taşınabilir (bkz. ReplayTradePanel). */}
       {replayState.isReplayActive && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2">
           <ReplayControls
             totalBars={data.length}
             onStepForward={handleStepForward}
@@ -2616,26 +2618,20 @@ export default function CandleChart({
             onExitReplay={handleToggleReplayMode}
             onResetToCutoff={handleResetToCutoff}
           />
-        </div>
-      )}
-
-      {/* Manuel İşlem Paneli (Faz 4) — replay sırasında pozisyon aç/kapat.
-          Sol altta durur: sağ kenar fiyat cetvelidir ve panel oraya
-          konduğunda cetveli okunamaz hâle getiriyordu. */}
-      {replayState.isReplayActive && !replayState.isSelectingCutoff && data.length > 0 && (
-        <div className="absolute bottom-3 left-3 z-30">
-          <ReplayTradePanel
-            symbol={symbol}
-            provider={provider}
-            timeframe={timeframe}
-            currentPrice={
-              data[Math.min(replayState.currentIndex ?? data.length - 1, data.length - 1)]?.close
-            }
-            currentBarIndex={replayState.currentIndex}
-            currentBarTime={
-              data[Math.min(replayState.currentIndex ?? data.length - 1, data.length - 1)]?.time as number
-            }
-          />
+          {!replayState.isSelectingCutoff && data.length > 0 && (
+            <ReplayTradePanel
+              symbol={symbol}
+              provider={provider}
+              timeframe={timeframe}
+              currentPrice={
+                data[Math.min(replayState.currentIndex ?? data.length - 1, data.length - 1)]?.close
+              }
+              currentBarIndex={replayState.currentIndex}
+              currentBarTime={
+                data[Math.min(replayState.currentIndex ?? data.length - 1, data.length - 1)]?.time as number
+              }
+            />
+          )}
         </div>
       )}
 

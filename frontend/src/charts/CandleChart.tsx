@@ -1821,11 +1821,16 @@ export default function CandleChart({
           priceScaleId: 'rsi_scale',
           autoscaleInfoProvider: () => ({
             priceRange: { minValue: 0, maxValue: 100 },
-            margins: { above: 2, below: 2 },
+            margins: { above: 0, below: 0 },
           }),
         }, rsiPaneIndex);
         // rightPriceScale'e uygulanan logaritmik/normal mod bu ölçeği etkilemesin.
-        chart.priceScale('rsi_scale').applyOptions({ mode: PriceScaleMode.Normal });
+        // Varsayılan scaleMargins (üstte %20, altta %10) 0-100 bandının üstünde ve
+        // altında kocaman boşluk bırakıyordu; panelin tamamını RSI bandına ayır.
+        chart.priceScale('rsi_scale').applyOptions({
+          mode: PriceScaleMode.Normal,
+          scaleMargins: { top: 0.02, bottom: 0.02 },
+        });
 
         rsiPriceLinesRef.current.overbought = rsiRef.current.createPriceLine({
           price: indicatorSettings.rsi.overbought,

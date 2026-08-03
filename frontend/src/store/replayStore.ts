@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 
+import { startReplaySession } from '../services/journalApi';
+
 export interface ReplayState {
   isReplayActive: boolean;
   isSelectingCutoff: boolean;
@@ -36,6 +38,9 @@ type Listener = (state: ReplayState) => void;
 let currentState: ReplayState = { ...INITIAL_REPLAY_STATE };
 const listeners: Set<Listener> = new Set();
 
+/** Uçuştaki oturum açma isteği — eşzamanlı çağrılar tek isteği paylaşır. */
+let pendingSession: Promise<string> | null = null;
+
 export const replayStore = {
   getState: (): ReplayState => currentState,
   
@@ -44,9 +49,10 @@ export const replayStore = {
     const next = { ...currentState, ...nextPartial };
 
     // Replay kapanınca oturum kimliği düşer — sonraki açılış sunucudan yeni
-    // bir oturum ister (bkz. CandleChart.tsx sessionCreationRef efekti).
+    // bir oturum ister (bkz. ensureSession).
     if (!next.isReplayActive) {
       next.sessionId = null;
+      pendingSession = null;
     }
 
     currentState = next;
@@ -60,8 +66,39 @@ export const replayStore = {
     };
   },
 
+  /**
+   * Aktif oturumun kimliğini döndürür; yoksa sunucuda yeni bir oturum açar.
+   *
+   * İşlem paneli bu çağrıyı beklemek zorunda KALMAZ: düğmeler oturum hazır
+   * değil diye kilitlenirse (ör. sunucu uykudayken) kullanıcı pozisyon
+   * açamıyordu. Onun yerine ilk Long/Short'ta oturum burada garanti edilir.
+   *
+   * Aynı anda birden çok çağrı gelirse tek istek gider: `pendingSession`
+   * uçuştaki sözü paylaşır, aksi halde her tıklama ayrı bir oturum satırı
+   * yaratırdı.
+   */
+  ensureSession: async (symbol: string, timeframe: string): Promise<string> => {
+    if (currentState.sessionId) return currentState.sessionId;
+    if (pendingSession) return pendingSession;
+
+    pendingSession = startReplaySession({ symbol, timeframe })
+      .then((session) => {
+        // Bu arada replay kapandıysa kimliği geri yazma.
+        if (currentState.isReplayActive) {
+          replayStore.setState({ sessionId: session.id });
+        }
+        return session.id;
+      })
+      .finally(() => {
+        pendingSession = null;
+      });
+
+    return pendingSession;
+  },
+
   reset: () => {
     currentState = { ...INITIAL_REPLAY_STATE };
+    pendingSession = null;
     listeners.forEach((listener) => listener(currentState));
   },
 };

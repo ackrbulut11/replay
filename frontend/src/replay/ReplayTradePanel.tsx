@@ -14,7 +14,7 @@ import { TrendingUp, TrendingDown, X, Loader2, AlertTriangle, GripHorizontal } f
 
 import { closeTrade, openTrade } from '../services/journalApi';
 import { journalStore, useJournalStore } from '../store/journalStore';
-import { useReplayStore } from '../store/replayStore';
+import { replayStore, useReplayStore } from '../store/replayStore';
 import { logError, logEvent } from '../services/eventLog';
 import type { TradeSide } from '../types/journal';
 
@@ -145,10 +145,7 @@ export default function ReplayTradePanel({
 
   const handleOpen = useCallback(
     async (side: TradeSide) => {
-      // sessionId sunucudan gelene kadar (bkz. CandleChart.tsx sessionCreationRef
-      // efekti) pozisyon açılamaz — `journal_trades.session_id` gerçek bir
-      // `replay_sessions` satırına yabancı anahtardır.
-      if (!currentPrice || busy || !sessionId) return;
+      if (!currentPrice || busy) return;
 
       const stop = parsePositive(stopLoss);
       const target = parsePositive(takeProfit);
@@ -173,6 +170,12 @@ export default function ReplayTradePanel({
       setBusy(true);
       setError(null);
       try {
+        // Oturum ön yüklemede açılmış olmalı; olmadıysa (ör. sunucu o an
+        // uykudaydı) burada garanti edilir. `journal_trades.session_id`
+        // gerçek bir `replay_sessions` satırına yabancı anahtar olduğundan
+        // uydurma bir kimlikle pozisyon açılamaz.
+        const activeSessionId = await replayStore.ensureSession(symbol, timeframe);
+
         await openTrade({
           symbol,
           provider,
@@ -187,11 +190,11 @@ export default function ReplayTradePanel({
           take_profit_pct: byPercent ? target : null,
           entry_bar_index: currentBarIndex,
           entry_time: barTimeIso,
-          session_id: sessionId,
+          session_id: activeSessionId,
         });
         setStopLoss('');
         setTakeProfit('');
-        await journalStore.reload(symbol, sessionId);
+        await journalStore.reload(symbol, activeSessionId);
         logEvent('replay_trade_opened', { context: { symbol, side } });
       } catch (err: any) {
         setError(err?.message || 'Pozisyon açılamadı.');
@@ -200,7 +203,7 @@ export default function ReplayTradePanel({
         setBusy(false);
       }
     },
-    [busy, currentPrice, stopLoss, takeProfit, quantity, levelMode, symbol, provider, timeframe, currentBarIndex, barTimeIso, sessionId]
+    [busy, currentPrice, stopLoss, takeProfit, quantity, levelMode, symbol, provider, timeframe, currentBarIndex, barTimeIso]
   );
 
   const handleClose = useCallback(async () => {
@@ -225,172 +228,179 @@ export default function ReplayTradePanel({
     }
   }, [position, currentPrice, busy, currentBarIndex, barTimeIso, symbol, sessionId]);
 
-  const disabled = busy || !currentPrice || !sessionId;
+  const disabled = busy || !currentPrice;
   const levelSuffix = levelMode === 'percent' ? '%' : '';
+  // Alanlar dar tutulur: şerit tek satırda kaldığı sürece mumları örtmez.
   const inputClass =
-    'w-full bg-slate-950 border border-slate-700/80 text-zinc-200 text-[10px] rounded px-1.5 py-0.5 focus:border-indigo-500 outline-none font-mono';
+    'w-14 bg-slate-950 border border-slate-700/80 text-zinc-200 text-[10px] rounded px-1 py-0.5 focus:border-indigo-500 outline-none font-mono';
+  const fieldLabel = 'text-[8px] uppercase tracking-wider text-zinc-500';
 
   return (
     // transform JSX'te verilmez; sürükleme sırasında doğrudan DOM'a yazılır ve
     // React'in yeniden render'ı bu değeri sıfırlamasın diye burada tutulmaz.
+    //
+    // Dikey panel yerine YATAY şerit: eskiden grafiğin sağında duruyor ve fiyat
+    // cetvelini kapatıyordu; taşındığında da cetvelin bir bölümü kullanılamaz
+    // hâlde kalıyordu. Şerit artık sol altta, cetvelden uzakta durur.
     <div
       ref={panelRef}
-      className="w-44 bg-[#0a0b0e]/95 border border-white/[0.1] rounded-lg shadow-2xl backdrop-blur-md text-zinc-100 select-none"
+      className="flex items-center gap-1.5 bg-[#0a0b0e]/95 border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-zinc-100 select-none"
     >
-      {/* Sürükleme tutamacı */}
+      {/* Sürükleme tutamacı + anlık fiyat */}
       <div
         onMouseDown={handleDragStart}
         title="Sürükleyerek taşı"
-        className="flex items-center justify-between gap-1 px-2 py-1 border-b border-white/[0.06] cursor-grab active:cursor-grabbing"
+        className="flex items-center gap-1 pr-1.5 border-r border-white/[0.08] cursor-grab active:cursor-grabbing"
       >
-        <span className="flex items-center gap-1 font-mono text-[9px] tracking-[0.15em] text-indigo-400 font-semibold uppercase">
-          <GripHorizontal className="w-3 h-3 text-zinc-600" />
-          İşlem
+        <GripHorizontal className="w-3 h-3 text-zinc-600" />
+        <span className="text-[10px] font-mono text-zinc-400 tabular-nums">
+          {formatPrice(currentPrice)}
         </span>
-        <span className="text-[10px] font-mono text-zinc-400">{formatPrice(currentPrice)}</span>
       </div>
 
-      <div className="p-2 space-y-1.5">
-        {error && (
-          <div className="flex items-start gap-1 text-[9px] text-red-400 bg-red-500/10 border border-red-500/30 rounded px-1.5 py-1">
-            <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-px" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {position ? (
-          <>
-            <div className="rounded border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-1 space-y-0.5">
-              <div className="flex items-center gap-1 text-[10px] font-semibold">
-                {position.side === 'long' ? (
-                  <TrendingUp className="w-3 h-3 text-emerald-400" />
-                ) : (
-                  <TrendingDown className="w-3 h-3 text-red-400" />
-                )}
-                <span className={position.side === 'long' ? 'text-emerald-400' : 'text-red-400'}>
-                  {position.side === 'long' ? 'LONG' : 'SHORT'}
-                </span>
-                <span className="text-zinc-500 font-mono text-[9px]">x{position.quantity ?? 1}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-1 text-[9px] font-mono text-zinc-500">
-                <span>Giriş</span>
-                <span className="text-right text-zinc-300">{formatPrice(position.entry_price)}</span>
-                <span>Stop</span>
-                <span className="text-right">{formatPrice(position.stop_loss)}</span>
-                <span>Hedef</span>
-                <span className="text-right">{formatPrice(position.take_profit)}</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={disabled}
-              className="w-full flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-semibold rounded bg-zinc-100 text-zinc-900 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
-            >
-              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-              Kapat
-            </button>
-          </>
-        ) : (
-          <>
-            {/* Seviye birimi: mutlak fiyat mı, yüzde mi */}
-            <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.06] rounded p-0.5">
-              {(['price', 'percent'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setLevelMode(mode)}
-                  className={`flex-1 px-1 py-0.5 text-[9px] font-semibold rounded transition-colors cursor-pointer ${
-                    levelMode === mode
-                      ? 'bg-indigo-500/20 text-indigo-300'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  {mode === 'price' ? 'Fiyat' : 'Yüzde'}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-1">
-              <label className="space-y-0.5">
-                <span className="text-[8px] uppercase tracking-wider text-zinc-500">
-                  Stop{levelSuffix}
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={stopLoss}
-                  onChange={(e) => setStopLoss(e.target.value)}
-                  placeholder="—"
-                  className={inputClass}
-                />
-              </label>
-              <label className="space-y-0.5">
-                <span className="text-[8px] uppercase tracking-wider text-zinc-500">
-                  Hedef{levelSuffix}
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={takeProfit}
-                  onChange={(e) => setTakeProfit(e.target.value)}
-                  placeholder="—"
-                  className={inputClass}
-                />
-              </label>
-            </div>
-
-            <label className="block space-y-0.5">
-              <span className="text-[8px] uppercase tracking-wider text-zinc-500">Miktar</span>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                className={inputClass}
-              />
-            </label>
-
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => handleOpen('long')}
-                disabled={disabled}
-                className="flex items-center justify-center gap-0.5 px-1 py-1 text-[10px] font-semibold rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
-              >
-                <TrendingUp className="w-3 h-3" />
-                Long
-              </button>
-              <button
-                type="button"
-                onClick={() => handleOpen('short')}
-                disabled={disabled}
-                className="flex items-center justify-center gap-0.5 px-1 py-1 text-[10px] font-semibold rounded bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
-              >
-                <TrendingDown className="w-3 h-3" />
-                Short
-              </button>
-            </div>
-          </>
-        )}
-
-        {!position && lastClosed && (
-          // Kâr/zarar sunucudan gelir; burada hesaplanmaz (RULES.md "Yasaklar").
-          <div className="rounded border border-white/[0.08] bg-white/[0.02] px-1.5 py-0.5 text-[9px] font-mono flex items-center justify-between">
-            <span className="text-zinc-500">Son</span>
-            <span className={(lastClosed.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-              {formatPrice(lastClosed.pnl)}
-              {lastClosed.pnl_percent !== null && lastClosed.pnl_percent !== undefined
-                ? ` (${lastClosed.pnl_percent.toFixed(2)}%)`
-                : ''}
+      {position ? (
+        <>
+          <span className="flex items-center gap-1 text-[10px] font-semibold">
+            {position.side === 'long' ? (
+              <TrendingUp className="w-3 h-3 text-emerald-400" />
+            ) : (
+              <TrendingDown className="w-3 h-3 text-red-400" />
+            )}
+            <span className={position.side === 'long' ? 'text-emerald-400' : 'text-red-400'}>
+              {position.side === 'long' ? 'LONG' : 'SHORT'}
             </span>
+            <span className="text-zinc-500 font-mono text-[9px]">x{position.quantity ?? 1}</span>
+          </span>
+
+          <span className="flex items-center gap-1.5 text-[9px] font-mono text-zinc-500 tabular-nums">
+            <span title="Giriş fiyatı">
+              G <span className="text-zinc-300">{formatPrice(position.entry_price)}</span>
+            </span>
+            <span title="Stop seviyesi">
+              S <span className="text-red-400/90">{formatPrice(position.stop_loss)}</span>
+            </span>
+            <span title="Hedef seviyesi">
+              H <span className="text-emerald-400/90">{formatPrice(position.take_profit)}</span>
+            </span>
+          </span>
+
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={disabled}
+            title="Pozisyonu kapat"
+            className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded bg-zinc-100 text-zinc-900 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+          >
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+            Kapat
+          </button>
+        </>
+      ) : (
+        <>
+          {/* Seviye birimi: mutlak fiyat mı, yüzde mi */}
+          <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.06] rounded p-0.5">
+            {(['price', 'percent'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setLevelMode(mode)}
+                title={mode === 'price' ? 'Seviyeleri fiyat olarak gir' : 'Seviyeleri yüzde olarak gir'}
+                className={`px-1.5 py-0.5 text-[9px] font-semibold rounded transition-colors cursor-pointer ${
+                  levelMode === mode
+                    ? 'bg-indigo-500/20 text-indigo-300'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {mode === 'price' ? 'Fiyat' : 'Yüzde'}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+
+          <label className="flex items-center gap-1">
+            <span className={fieldLabel}>Stop{levelSuffix}</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={stopLoss}
+              onChange={(e) => setStopLoss(e.target.value)}
+              placeholder="—"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="flex items-center gap-1">
+            <span className={fieldLabel}>Hedef{levelSuffix}</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={takeProfit}
+              onChange={(e) => setTakeProfit(e.target.value)}
+              placeholder="—"
+              className={inputClass}
+            />
+          </label>
+
+          <label className="flex items-center gap-1">
+            <span className={fieldLabel}>Miktar</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => handleOpen('long')}
+            disabled={disabled}
+            title="Long pozisyon aç"
+            className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-semibold rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+          >
+            <TrendingUp className="w-3 h-3" />
+            Long
+          </button>
+          <button
+            type="button"
+            onClick={() => handleOpen('short')}
+            disabled={disabled}
+            title="Short pozisyon aç"
+            className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-semibold rounded bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+          >
+            <TrendingDown className="w-3 h-3" />
+            Short
+          </button>
+        </>
+      )}
+
+      {!position && lastClosed && (
+        // Kâr/zarar sunucudan gelir; burada hesaplanmaz (RULES.md "Yasaklar").
+        <span
+          className="flex items-center gap-1 pl-1.5 border-l border-white/[0.08] text-[9px] font-mono tabular-nums"
+          title="Son kapanan işlemin kâr/zararı"
+        >
+          <span className="text-zinc-500">Son</span>
+          <span className={(lastClosed.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+            {formatPrice(lastClosed.pnl)}
+            {lastClosed.pnl_percent !== null && lastClosed.pnl_percent !== undefined
+              ? ` (${lastClosed.pnl_percent.toFixed(2)}%)`
+              : ''}
+          </span>
+        </span>
+      )}
+
+      {error && (
+        <span className="flex items-center gap-1 pl-1.5 border-l border-white/[0.08] text-[9px] text-red-400 max-w-[220px]">
+          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+          <span className="truncate" title={error}>
+            {error}
+          </span>
+        </span>
+      )}
     </div>
   );
 }

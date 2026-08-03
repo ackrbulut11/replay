@@ -27,7 +27,6 @@ import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
 import { journalStore, useJournalStore } from '../store/journalStore';
 import { getCoverage } from '../services/marketApi';
-import { startReplaySession } from '../services/journalApi';
 import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 
@@ -464,32 +463,18 @@ export default function CandleChart({
     }
   }, [replayState.sessionId]);
 
-  // Replay etkinleşince ama henüz bir oturum kimliği yokken sunucudan gerçek
-  // bir `replay_sessions` satırı istenir (bkz. journalApi.startReplaySession).
-  // İstemcide üretilen bir kimlik burada KULLANILAMAZ: `journal_trades.session_id`
-  // o tabloya yabancı anahtardır ve uydurma bir id pozisyon açarken sunucuda
-  // yakalanmayan bir bütünlük hatasına (500) yol açar. Ref, aynı aktivasyon
-  // için isteğin birden fazla kez (ör. hem araç çubuğu düğmesi hem "Replay"
-  // sekmesi aynı anda tetiklediğinde) gönderilmesini engeller; replay
-  // kapanınca sıfırlanır ki sonraki açılış yeniden istek atsın.
-  const sessionCreationRef = useRef(false);
+  // Replay etkinleşince sunucuda gerçek bir `replay_sessions` satırı açılır:
+  // `journal_trades.session_id` o tabloya yabancı anahtardır ve istemcide
+  // uydurulmuş bir kimlik pozisyon açarken bütünlük hatasına (500) yol açar.
+  // Burada yalnızca ÖN YÜKLEME yapılır — başarısız olursa işlem paneli
+  // kilitlenmez, ilk Long/Short'ta `ensureSession` yeniden dener.
   useEffect(() => {
-    if (!replayState.isReplayActive) {
-      sessionCreationRef.current = false;
-      return;
-    }
-    if (replayState.sessionId || sessionCreationRef.current) return;
+    if (!replayState.isReplayActive || replayState.sessionId) return;
 
-    sessionCreationRef.current = true;
-    startReplaySession({ symbol, timeframe })
-      .then((session) => {
-        setReplayState({ sessionId: session.id });
-      })
-      .catch((err) => {
-        console.error('Replay oturumu başlatılamadı:', err);
-        sessionCreationRef.current = false;
-      });
-  }, [replayState.isReplayActive, replayState.sessionId, symbol, timeframe, setReplayState]);
+    replayStore.ensureSession(symbol, timeframe).catch((err) => {
+      console.error('Replay oturumu başlatılamadı:', err);
+    });
+  }, [replayState.isReplayActive, replayState.sessionId, symbol, timeframe]);
 
   // ─── Replay'de zaman dilimi değişimi ────────────────────────────────────
   // Replay'de geriye gidildiğinde zaman dilimi değiştirmek konumu korumalıdır.
@@ -2634,9 +2619,11 @@ export default function CandleChart({
         </div>
       )}
 
-      {/* Manuel İşlem Paneli (Faz 4) — replay sırasında pozisyon aç/kapat */}
+      {/* Manuel İşlem Paneli (Faz 4) — replay sırasında pozisyon aç/kapat.
+          Sol altta durur: sağ kenar fiyat cetvelidir ve panel oraya
+          konduğunda cetveli okunamaz hâle getiriyordu. */}
       {replayState.isReplayActive && !replayState.isSelectingCutoff && data.length > 0 && (
-        <div className="absolute top-16 right-3 z-30">
+        <div className="absolute bottom-3 left-3 z-30">
           <ReplayTradePanel
             symbol={symbol}
             provider={provider}

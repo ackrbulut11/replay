@@ -2130,8 +2130,7 @@ export default function CandleChart({
   }, [visibleData, symbol, provider]);
 
 
-
-
+  
   return (
     <div className="relative w-full h-full border border-white/[0.06] rounded-xl overflow-hidden bg-[#090d16]">
       {/* Yüzen Kontrol Paneli Araç Çubuğu */}
@@ -2143,7 +2142,7 @@ export default function CandleChart({
             <span
               className="text-xs font-extrabold tracking-[0.14em] font-sans select-none bg-clip-text text-transparent"
               style={{
-                backgroundImage: 'linear-gradient(90deg, rgba(160, 106, 222, 1) 0%, rgba(121, 217, 171, 1) 50%, rgba(87, 199, 133, 1) 100%)',
+                backgroundImage: 'linear-gradient(90deg, rgba(42, 123, 155, 1) 0%, rgba(87, 199, 133, 1) 35%, rgba(151, 79, 196, 1) 88%)',
               }}
             >
               REPLAY

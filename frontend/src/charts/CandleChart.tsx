@@ -1013,51 +1013,60 @@ export default function CandleChart({
 
     if (drawing.tool === 'parallelChannel' && drawing.points.length >= 3) {
       // Kanal üç noktayla saklanır: taban çizginin iki ucu (p0, p1) ve ofset
-      // çizginin başlangıcı (p2). Ofset çizginin bitişi p2 + (p1 - p0) olarak
-      // türetildiği için iki çizgi her koşulda paralel kalır. Kanal genişliği
-      // fiyat cinsinden sabit farktır: p2.price - p0.price.
-      //
-      // İki çizgi TradingView'daki gibi hep aynı zaman aralığını kapsar, bu
-      // yüzden p2.time daima p0.time'a eşitlenir.
-      let [p0, p1] = [drawing.points[0], drawing.points[1]];
-      let width = drawing.points[2].price - p0.price;
+      // çizginin sol ucu (p2). Ofset çizginin sağ ucu render'da p2 + (p1 - p0)
+      // olarak türetildiği için iki çizgi her koşulda paralel kalır — p2'nin
+      // zamanı taban çizgiyle aynı olmak ZORUNDA değildir, yalnızca 3. tıklamada
+      // varsayılan olarak öyle başlar.
+      let p0 = drawing.points[0];
+      let p1 = drawing.points[1];
+      let p2 = drawing.points[2];
 
       switch (CHANNEL_HANDLE_LABELS[handleIndex]) {
-        case 'start':
+        case 'start': {
+          // Taban çizginin sol ucu serbestçe taşınır; ofset çizgi aynı miktarda
+          // (zaman + fiyat) kayarak paralelliğini ve genişliğini korur.
+          const dt = newPoint.time - p0.time;
+          const dp = newPoint.price - p0.price;
+          p2 = { time: p2.time + dt, price: p2.price + dp };
           p0 = newPoint;
           break;
+        }
         case 'end':
+          // Sağ uç serbestçe taşınır; ofset çizginin sağ ucu p2'den ve (p1-p0)
+          // vektöründen türetildiği için otomatik güncellenir, p2'ye dokunulmaz.
           p1 = newPoint;
           break;
-        // Alt köşeler: zaman ilgili üst köşeyle ortak, fiyat ise kanal
-        // genişliğini belirler.
+        // Alt köşeler artık üst köşelerle birebir aynı şekilde davranır:
+        // taban çizgiye hiç dokunmadan, ofset çizgiyi bir bütün olarak,
+        // hem zaman hem fiyatta serbestçe taşırlar (önceden yalnızca dikey
+        // hareket ediyorlardı, yani orta tutamaçlarla aynı davranıyorlardı).
         case 'offsetStart':
-          p0 = { time: newPoint.time, price: p0.price };
-          width = newPoint.price - p0.price;
+          p2 = newPoint;
           break;
         case 'offsetEnd':
-          p1 = { time: newPoint.time, price: p1.price };
-          width = newPoint.price - p1.price;
+          p2 = {
+            time: newPoint.time - (p1.time - p0.time),
+            price: newPoint.price - (p1.price - p0.price),
+          };
           break;
-        // Orta tutamaçlar: ilgili çizgiyi paralelliği bozmadan dikey kaydırır.
+        // Orta tutamaçlar: ilgili çizgiyi yalnızca dikey kaydırır (genişliği
+        // değiştirir), zaman ekseninde hiç hareket etmezler.
         case 'baseMid': {
           const delta = newPoint.price - (p0.price + p1.price) / 2;
           p0 = { ...p0, price: p0.price + delta };
           p1 = { ...p1, price: p1.price + delta };
-          // Ofset çizgi yerinde kalmalı, dolayısıyla genişlik delta kadar azalır.
-          width -= delta;
           break;
         }
         case 'offsetMid': {
-          const midPrice = (p0.price + p1.price) / 2 + width;
-          width += newPoint.price - midPrice;
+          const currentMidPrice = p2.price + (p1.price - p0.price) / 2;
+          p2 = { ...p2, price: p2.price + (newPoint.price - currentMidPrice) };
           break;
         }
       }
 
       return {
         ...drawing,
-        points: [p0, p1, { time: p0.time, price: p0.price + width }],
+        points: [p0, p1, p2],
       };
     }
 

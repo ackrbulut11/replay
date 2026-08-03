@@ -9,10 +9,13 @@ export interface ReplayState {
   isPlaying: boolean;
   speedMs: number; // e.g. 1000ms = 1 sec per candle
   /**
-   * Bu replay oturumunun kimliği. Replay her açıldığında yenilenir, kapanınca
-   * düşer. Manuel işlemler bu kimlikle kaydedilir ve grafik yalnızca bu
-   * kimliğe ait işlemleri çizer — aksi halde önceki oturumların giriş/çıkış
-   * okları yeni oturumun grafiğinde asılı kalıyordu.
+   * Bu replay oturumunun kimliği — backend'de gerçek bir `replay_sessions`
+   * satırının id'si (bkz. `startReplaySession` in journalApi.ts). `journal_trades.
+   * session_id` bu tabloya YABANCI ANAHTAR olduğundan istemcide üretilmiş
+   * rastgele bir kimlik burada KULLANILAMAZ — pozisyon açılırken sunucuda
+   * "IntegrityError" ile patlar. Kimlik, replay etkinleşince CandleChart'taki
+   * bir efekt tarafından sunucudan istenir; hazır olana kadar null kalır ve
+   * işlem paneli o süre boyunca devre dışıdır.
    */
   sessionId: string | null;
 }
@@ -28,13 +31,6 @@ export const INITIAL_REPLAY_STATE: ReplayState = {
   sessionId: null,
 };
 
-/** `crypto.randomUUID` güvensiz kaynakta/eski tarayıcıda yok; yedeği var. */
-function createSessionId(): string {
-  const webCrypto = globalThis.crypto as Crypto | undefined;
-  if (webCrypto?.randomUUID) return webCrypto.randomUUID();
-  return `replay-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 type Listener = (state: ReplayState) => void;
 
 let currentState: ReplayState = { ...INITIAL_REPLAY_STATE };
@@ -47,12 +43,9 @@ export const replayStore = {
     const nextPartial = typeof partial === 'function' ? partial(currentState) : partial;
     const next = { ...currentState, ...nextPartial };
 
-    // Oturum kimliği durumdan türetilir; çağıranların ayrıca üretmesi gerekmez.
-    // Replay birden çok yerden açılıyor (araç çubuğu düğmesi, "Replay" sekmesi)
-    // ve kimliği tek tek o noktalara bırakmak er geç unutulacak bir ayrıntıydı.
-    if (next.isReplayActive && !next.sessionId) {
-      next.sessionId = createSessionId();
-    } else if (!next.isReplayActive) {
+    // Replay kapanınca oturum kimliği düşer — sonraki açılış sunucudan yeni
+    // bir oturum ister (bkz. CandleChart.tsx sessionCreationRef efekti).
+    if (!next.isReplayActive) {
       next.sessionId = null;
     }
 

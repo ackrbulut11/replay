@@ -18,6 +18,8 @@ from app.database.models import JournalTrade, User
 from app.database.postgres import get_db
 from app.journal.models import (
     PerformanceResponse,
+    ReplaySessionCreateRequest,
+    ReplaySessionResponse,
     TradeCloseRequest,
     TradeOpenRequest,
     TradeResponse,
@@ -89,6 +91,16 @@ def list_trades(
         session_id=session_id,
         limit=limit,
     )
+
+
+@router.post("/sessions", response_model=ReplaySessionResponse, status_code=201)
+def start_session(
+    request: ReplaySessionCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Yeni bir replay oturumu başlatır; manuel işlemler bu oturuma bağlanır."""
+    return _journal.start_session(db, request, user_id=current_user.id)
 
 
 @router.post("/trades", response_model=TradeResponse, status_code=201)

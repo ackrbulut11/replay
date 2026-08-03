@@ -65,6 +65,24 @@ class TradeOpenRequest(BaseModel):
         return value
 
 
+class ReplaySessionCreateRequest(BaseModel):
+    """Yeni bir replay oturumu başlatma isteği."""
+
+    symbol: str
+    timeframe: str = "1h"
+
+
+class ReplaySessionResponse(BaseModel):
+    """`replay_sessions` satırının API yanıtı — yalnızca kimliği ilgilendiren alanlar."""
+
+    id: str
+    symbol: str
+    timeframe: str
+
+    class Config:
+        from_attributes = True
+
+
 class TradeCloseRequest(BaseModel):
     """Açık pozisyonu kapatma isteği."""
 

@@ -17,10 +17,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database.models import JournalTrade, generate_uuid
+from app.database.models import JournalTrade, ReplaySession, generate_uuid
 from app.engines import replay_engine
 from app.journal.models import (
     ExitReason,
+    ReplaySessionCreateRequest,
     TradeCloseRequest,
     TradeOpenRequest,
     TradeStatus,
@@ -31,6 +32,29 @@ from app.reports.performance_report import calculate_performance
 
 class TradeJournal:
     """İşlem günlüğü motoru (veritabanı destekli)."""
+
+    @staticmethod
+    def start_session(
+        db: Session, request: ReplaySessionCreateRequest, user_id: str
+    ) -> ReplaySession:
+        """
+        Yeni bir replay oturumu açar.
+
+        `journal_trades.session_id` bu tabloya yabancı anahtardır; işlem
+        panelinin göndereceği kimlik burada üretilen gerçek bir satıra
+        karşılık gelmek ZORUNDADIR — istemcide uydurulmuş bir kimlik
+        `open_trade`'de yakalanmayan bir bütünlük hatasına yol açar.
+        """
+        session = ReplaySession(
+            id=generate_uuid(),
+            user_id=user_id,
+            symbol=request.symbol.upper(),
+            timeframe=request.timeframe,
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        return session
 
     @staticmethod
     def open_trade(db: Session, request: TradeOpenRequest, user_id: str) -> JournalTrade:

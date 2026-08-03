@@ -45,6 +45,24 @@ function buildQuery(params: Record<string, string | number | undefined>): string
   return query ? `?${query}` : '';
 }
 
+/**
+ * Yeni bir replay oturumu açar (backend `replay_sessions` tablosunda).
+ *
+ * `journal_trades.session_id` bu tabloya yabancı anahtar olduğundan replay
+ * moduna girildiğinde önce burası çağrılıp dönen id işlem açma isteklerinde
+ * kullanılmalıdır — istemcide üretilmiş bir kimlik sunucuda bütünlük
+ * hatasına (500) yol açar.
+ */
+export async function startReplaySession(data: {
+  symbol: string;
+  timeframe: string;
+}): Promise<{ id: string; symbol: string; timeframe: string }> {
+  return request(`${API_BASE}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function getTrades(filters: TradeListFilters = {}): Promise<JournalTrade[]> {
   const query = buildQuery({
     symbol: filters.symbol,

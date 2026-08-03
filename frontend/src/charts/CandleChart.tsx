@@ -27,6 +27,7 @@ import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
 import { journalStore, useJournalStore } from '../store/journalStore';
 import { getCoverage } from '../services/marketApi';
+import { startReplaySession } from '../services/journalApi';
 import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 
@@ -462,6 +463,33 @@ export default function CandleChart({
       journalStore.reset();
     }
   }, [replayState.sessionId]);
+
+  // Replay etkinleşince ama henüz bir oturum kimliği yokken sunucudan gerçek
+  // bir `replay_sessions` satırı istenir (bkz. journalApi.startReplaySession).
+  // İstemcide üretilen bir kimlik burada KULLANILAMAZ: `journal_trades.session_id`
+  // o tabloya yabancı anahtardır ve uydurma bir id pozisyon açarken sunucuda
+  // yakalanmayan bir bütünlük hatasına (500) yol açar. Ref, aynı aktivasyon
+  // için isteğin birden fazla kez (ör. hem araç çubuğu düğmesi hem "Replay"
+  // sekmesi aynı anda tetiklediğinde) gönderilmesini engeller; replay
+  // kapanınca sıfırlanır ki sonraki açılış yeniden istek atsın.
+  const sessionCreationRef = useRef(false);
+  useEffect(() => {
+    if (!replayState.isReplayActive) {
+      sessionCreationRef.current = false;
+      return;
+    }
+    if (replayState.sessionId || sessionCreationRef.current) return;
+
+    sessionCreationRef.current = true;
+    startReplaySession({ symbol, timeframe })
+      .then((session) => {
+        setReplayState({ sessionId: session.id });
+      })
+      .catch((err) => {
+        console.error('Replay oturumu başlatılamadı:', err);
+        sessionCreationRef.current = false;
+      });
+  }, [replayState.isReplayActive, replayState.sessionId, symbol, timeframe, setReplayState]);
 
   // ─── Replay'de zaman dilimi değişimi ────────────────────────────────────
   // Replay'de geriye gidildiğinde zaman dilimi değiştirmek konumu korumalıdır.

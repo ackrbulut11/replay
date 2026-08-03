@@ -145,7 +145,10 @@ export default function ReplayTradePanel({
 
   const handleOpen = useCallback(
     async (side: TradeSide) => {
-      if (!currentPrice || busy) return;
+      // sessionId sunucudan gelene kadar (bkz. CandleChart.tsx sessionCreationRef
+      // efekti) pozisyon açılamaz — `journal_trades.session_id` gerçek bir
+      // `replay_sessions` satırına yabancı anahtardır.
+      if (!currentPrice || busy || !sessionId) return;
 
       const stop = parsePositive(stopLoss);
       const target = parsePositive(takeProfit);
@@ -222,7 +225,7 @@ export default function ReplayTradePanel({
     }
   }, [position, currentPrice, busy, currentBarIndex, barTimeIso, symbol, sessionId]);
 
-  const disabled = busy || !currentPrice;
+  const disabled = busy || !currentPrice || !sessionId;
   const levelSuffix = levelMode === 'percent' ? '%' : '';
   const inputClass =
     'w-full bg-slate-950 border border-slate-700/80 text-zinc-200 text-[10px] rounded px-1.5 py-0.5 focus:border-indigo-500 outline-none font-mono';

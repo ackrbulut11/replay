@@ -450,16 +450,18 @@ export default function CandleChart({
   const isSelectingCutoffRef = useRef(false);
   isSelectingCutoffRef.current = replayState.isSelectingCutoff;
 
-  // Manuel işlem işaretleri yalnızca replay modunda anlamlıdır. Store panel
-  // kapandıktan sonra da veriyi tuttuğu için, replay'den çıkıldığında temizlenmezse
-  // giriş/çıkış okları normal grafik görünümünde asılı kalıyordu. Mum kesme
-  // sırasında panel geçici olarak gizlenir ama replay hâlâ aktiftir; bu yüzden
-  // temizlik panelin unmount'una değil, replay modunun kapanmasına bağlanır.
+  // Manuel işlem işaretleri yalnızca içinde bulunulan replay oturumunda
+  // anlamlıdır. Store panel kapandıktan sonra da veriyi tuttuğu için, replay'den
+  // çıkıldığında temizlenmezse giriş/çıkış okları normal grafik görünümünde
+  // asılı kalıyordu. Mum kesme sırasında panel geçici olarak gizlenir ama replay
+  // hâlâ aktiftir; bu yüzden temizlik panelin unmount'una değil, oturumun
+  // kapanmasına bağlanır. Oturum değişiminde temizliği journalStore.reload
+  // kendisi yapar (yükleme sürerken eski oturumun işaretleri kalmasın diye).
   useEffect(() => {
-    if (!replayState.isReplayActive) {
+    if (!replayState.sessionId) {
       journalStore.reset();
     }
-  }, [replayState.isReplayActive]);
+  }, [replayState.sessionId]);
 
   // ─── Replay'de zaman dilimi değişimi ────────────────────────────────────
   // Replay'de geriye gidildiğinde zaman dilimi değiştirmek konumu korumalıdır.
@@ -522,9 +524,23 @@ export default function CandleChart({
     if (!replayState.isReplayActive || replayState.currentIndex === null) {
       return data;
     }
+
+    // Zaman dilimi değiştiğinde yeni mumlar gelene kadar `currentIndex` hâlâ
+    // ESKİ dizinin indeksidir. Replay konumu yeni verinin başlangıcından da
+    // eskiyse (düşük zaman dilimleri çok daha kısa geçmiş taşır) konum henüz
+    // kurulamaz; seriyi olduğu gibi göstermek replay'i "şimdi"ye taşır ve
+    // gelecekteki mumları sızdırır. Konum bulunana dek hiçbir mum gösterilmez.
+    if (
+      replayState.targetTimestamp !== null &&
+      data.length > 0 &&
+      data[0].time > replayState.targetTimestamp
+    ) {
+      return [];
+    }
+
     const maxIdx = Math.min(replayState.currentIndex, data.length - 1);
     return data.slice(0, Math.max(0, maxIdx + 1));
-  }, [data, replayState.isReplayActive, replayState.currentIndex]);
+  }, [data, replayState.isReplayActive, replayState.currentIndex, replayState.targetTimestamp]);
 
   // Replay playback timer effect
   useEffect(() => {
@@ -1222,6 +1238,11 @@ export default function CandleChart({
             replayStore.setState({
               cutoffIndex: barIdx,
               currentIndex: barIdx,
+              // Kesim noktasının ZAMANI da yazılmalı: zaman dilimi değişiminde
+              // konum bu zaman damgasından geri kurulur. Yazılmadığında replay
+              // aktive edilirken konan "son mum" damgası geçerli kalıyor ve
+              // interval değiştirir değiştirmez grafik güncele dönüyordu.
+              targetTimestamp: fullDataRef.current[barIdx]?.time ?? null,
               isSelectingCutoff: false,
               isPlaying: false,
             });

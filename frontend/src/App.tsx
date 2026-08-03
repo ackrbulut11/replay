@@ -192,8 +192,25 @@ function App() {
     const userStart = start && start.trim() ? start : null;
     const endParam = end && end.trim() ? end : '';
     const quickDays = QUICK_WINDOW_DAYS[timeframe] ?? 365;
+    const dayMs = 24 * 60 * 60 * 1000;
     const endDate = endParam ? new Date(endParam) : new Date();
-    const quickStartDate = new Date(endDate.getTime() - quickDays * 24 * 60 * 60 * 1000);
+    let quickStartDate = new Date(endDate.getTime() - quickDays * dayMs);
+
+    // Replay sürerken zaman dilimi değiştirildiğinde hızlı pencere "şimdi"den
+    // geriye sayıldığı için replay konumu çoğu kez pencerenin dışında kalıyor,
+    // konum ilk yanıtta bulunamıyordu. Replay aktifken pencerenin başlangıcı
+    // konumun gerisine çekilir; böylece replay yeni zaman diliminde kaldığı
+    // yerden devam eder (arkadaki geçmiş yine arkaplanda tamamlanır).
+    const replayPos = replayStore.getState();
+    if (replayPos.isReplayActive && replayPos.targetTimestamp !== null) {
+      const anchor = new Date(replayPos.targetTimestamp * 1000);
+      if (Number.isFinite(anchor.getTime()) && anchor < quickStartDate) {
+        // Konumun gerisinde de bir miktar geçmiş kalsın: göstergelerin ısınma
+        // süresi ve kullanıcının geriye bakabilmesi için.
+        quickStartDate = new Date(anchor.getTime() - quickDays * dayMs);
+      }
+    }
+
     const quickStartStr = quickStartDate.toISOString().slice(0, 10);
 
     // Kullanıcı zaten hızlı pencereden daha dar bir aralık istemişse

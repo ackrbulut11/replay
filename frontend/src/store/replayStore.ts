@@ -8,6 +8,13 @@ export interface ReplayState {
   targetTimestamp: number | null;
   isPlaying: boolean;
   speedMs: number; // e.g. 1000ms = 1 sec per candle
+  /**
+   * Bu replay oturumunun kimliği. Replay her açıldığında yenilenir, kapanınca
+   * düşer. Manuel işlemler bu kimlikle kaydedilir ve grafik yalnızca bu
+   * kimliğe ait işlemleri çizer — aksi halde önceki oturumların giriş/çıkış
+   * okları yeni oturumun grafiğinde asılı kalıyordu.
+   */
+  sessionId: string | null;
 }
 
 export const INITIAL_REPLAY_STATE: ReplayState = {
@@ -18,7 +25,15 @@ export const INITIAL_REPLAY_STATE: ReplayState = {
   targetTimestamp: null,
   isPlaying: false,
   speedMs: 1000,
+  sessionId: null,
 };
+
+/** `crypto.randomUUID` güvensiz kaynakta/eski tarayıcıda yok; yedeği var. */
+function createSessionId(): string {
+  const webCrypto = globalThis.crypto as Crypto | undefined;
+  if (webCrypto?.randomUUID) return webCrypto.randomUUID();
+  return `replay-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 type Listener = (state: ReplayState) => void;
 
@@ -30,7 +45,18 @@ export const replayStore = {
   
   setState: (partial: Partial<ReplayState> | ((prev: ReplayState) => Partial<ReplayState>)) => {
     const nextPartial = typeof partial === 'function' ? partial(currentState) : partial;
-    currentState = { ...currentState, ...nextPartial };
+    const next = { ...currentState, ...nextPartial };
+
+    // Oturum kimliği durumdan türetilir; çağıranların ayrıca üretmesi gerekmez.
+    // Replay birden çok yerden açılıyor (araç çubuğu düğmesi, "Replay" sekmesi)
+    // ve kimliği tek tek o noktalara bırakmak er geç unutulacak bir ayrıntıydı.
+    if (next.isReplayActive && !next.sessionId) {
+      next.sessionId = createSessionId();
+    } else if (!next.isReplayActive) {
+      next.sessionId = null;
+    }
+
+    currentState = next;
     listeners.forEach((listener) => listener(currentState));
   },
 

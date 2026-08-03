@@ -14,6 +14,7 @@ import { TrendingUp, TrendingDown, X, Loader2, AlertTriangle, GripHorizontal } f
 
 import { closeTrade, openTrade } from '../services/journalApi';
 import { journalStore, useJournalStore } from '../store/journalStore';
+import { useReplayStore } from '../store/replayStore';
 import { logError, logEvent } from '../services/eventLog';
 import type { TradeSide } from '../types/journal';
 
@@ -56,6 +57,9 @@ export default function ReplayTradePanel({
   currentBarTime,
 }: ReplayTradePanelProps) {
   const { trades } = useJournalStore();
+  // İşlemler açık replay oturumuna bağlanır; panel de yalnızca o oturumun
+  // pozisyonlarını görür (bkz. journalStore.reload).
+  const [{ sessionId }] = useReplayStore();
   const position = trades.find((t) => t.status === 'OPEN') ?? null;
   const lastClosed = trades.find((t) => t.status === 'CLOSED') ?? null;
 
@@ -133,9 +137,9 @@ export default function ReplayTradePanel({
 
   // ─── Veri ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    journalStore.reload(symbol);
+    journalStore.reload(symbol, sessionId);
     setError(null);
-  }, [symbol]);
+  }, [symbol, sessionId]);
 
   const barTimeIso = currentBarTime ? new Date(currentBarTime * 1000).toISOString() : null;
 
@@ -180,10 +184,11 @@ export default function ReplayTradePanel({
           take_profit_pct: byPercent ? target : null,
           entry_bar_index: currentBarIndex,
           entry_time: barTimeIso,
+          session_id: sessionId,
         });
         setStopLoss('');
         setTakeProfit('');
-        await journalStore.reload(symbol);
+        await journalStore.reload(symbol, sessionId);
         logEvent('replay_trade_opened', { context: { symbol, side } });
       } catch (err: any) {
         setError(err?.message || 'Pozisyon açılamadı.');
@@ -192,7 +197,7 @@ export default function ReplayTradePanel({
         setBusy(false);
       }
     },
-    [busy, currentPrice, stopLoss, takeProfit, quantity, levelMode, symbol, provider, timeframe, currentBarIndex, barTimeIso]
+    [busy, currentPrice, stopLoss, takeProfit, quantity, levelMode, symbol, provider, timeframe, currentBarIndex, barTimeIso, sessionId]
   );
 
   const handleClose = useCallback(async () => {
@@ -207,7 +212,7 @@ export default function ReplayTradePanel({
         exit_time: barTimeIso,
         exit_reason: 'manual',
       });
-      await journalStore.reload(symbol);
+      await journalStore.reload(symbol, sessionId);
       logEvent('replay_trade_closed', { context: { symbol, pnl: closed.pnl } });
     } catch (err: any) {
       setError(err?.message || 'Pozisyon kapatılamadı.');
@@ -215,7 +220,7 @@ export default function ReplayTradePanel({
     } finally {
       setBusy(false);
     }
-  }, [position, currentPrice, busy, currentBarIndex, barTimeIso, symbol]);
+  }, [position, currentPrice, busy, currentBarIndex, barTimeIso, symbol, sessionId]);
 
   const disabled = busy || !currentPrice;
   const levelSuffix = levelMode === 'percent' ? '%' : '';

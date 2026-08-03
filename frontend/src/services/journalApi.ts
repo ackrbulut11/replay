@@ -78,7 +78,14 @@ export async function openTrade(data: TradeOpenRequest): Promise<JournalTrade> {
 
     await delay(WAKE_RETRY_DELAY_MS);
 
-    const open = await getTrades({ symbol: data.symbol, status: 'OPEN', limit: 1 }).catch(() => []);
+    // Oturum filtresi zorunlu: sembolde önceki bir replay oturumundan kalmış
+    // açık pozisyon, bu isteğin sonucu sanılıp geri döndürülürdü.
+    const open = await getTrades({
+      symbol: data.symbol,
+      status: 'OPEN',
+      sessionId: data.session_id ?? undefined,
+      limit: 1,
+    }).catch(() => []);
     if (open.length > 0) return open[0];
 
     // Sunucuya gerçekten ulaşılamamış; artık uyanık olduğu için tek deneme yeterli.

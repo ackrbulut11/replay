@@ -1014,39 +1014,44 @@ export default function CandleChart({
     if (drawing.tool === 'parallelChannel' && drawing.points.length >= 3) {
       // Kanal üç noktayla saklanır: taban çizginin iki ucu (p0, p1) ve ofset
       // çizginin sol ucu (p2). Ofset çizginin sağ ucu render'da p2 + (p1 - p0)
-      // olarak türetildiği için iki çizgi her koşulda paralel kalır — p2'nin
-      // zamanı taban çizgiyle aynı olmak ZORUNDA değildir, yalnızca 3. tıklamada
-      // varsayılan olarak öyle başlar.
+      // olarak türetildiği için iki çizgi tanım gereği paraleldir.
+      //
+      // Dört köşe de tek bir kurala uyar: sürüklenen köşe imlece gider, karşı
+      // kenar sabit kalır ve kanal genişliği korunur — yani köşenin dikey eşi
+      // (üst köşe sürükleniyorsa alttaki, alt köşe sürükleniyorsa üstteki) aynı
+      // miktarda kayar. Kanalı genişletip daraltan tek hareket orta
+      // tutamaçlardır.
       let p0 = drawing.points[0];
       let p1 = drawing.points[1];
       let p2 = drawing.points[2];
+      // Kanal genişliği: ofset çizginin taban çizgiye olan fiyat farkı.
+      // Köşe sürüklemelerinde sabit tutulur, bu yüzden mutasyondan önce alınır.
+      const width = p2.price - p0.price;
 
       switch (CHANNEL_HANDLE_LABELS[handleIndex]) {
-        case 'start': {
-          // Taban çizginin sol ucu serbestçe taşınır; ofset çizgi aynı miktarda
-          // (zaman + fiyat) kayarak paralelliğini ve genişliğini korur.
-          const dt = newPoint.time - p0.time;
-          const dp = newPoint.price - p0.price;
-          p2 = { time: p2.time + dt, price: p2.price + dp };
+        case 'start':
+          // Üst-sol köşe: sol kenarın tamamı imlece taşınır, sağ kenar sabit.
+          p2 = { time: newPoint.time, price: newPoint.price + width };
           p0 = newPoint;
           break;
-        }
         case 'end':
-          // Sağ uç serbestçe taşınır; ofset çizginin sağ ucu p2'den ve (p1-p0)
-          // vektöründen türetildiği için otomatik güncellenir, p2'ye dokunulmaz.
+          // Üst-sağ köşe: alt-sağ köşe p2 + (p1 - p0) ile türetildiği için
+          // p1'i taşımak onu da aynı miktarda kaydırır; p2'ye dokunulmaz.
           p1 = newPoint;
           break;
-        // Alt köşeler artık üst köşelerle birebir aynı şekilde davranır:
-        // taban çizgiye hiç dokunmadan, ofset çizgiyi bir bütün olarak,
-        // hem zaman hem fiyatta serbestçe taşırlar (önceden yalnızca dikey
-        // hareket ediyorlardı, yani orta tutamaçlarla aynı davranıyorlardı).
         case 'offsetStart':
+          // Alt-sol köşe: üst-sol köşenin aynadaki eşi. Alt-sol köşe doğrudan
+          // p2 olduğu için imlece o gider, p0 genişlik kadar yukarıda kalır.
+          p0 = { time: newPoint.time, price: newPoint.price - width };
           p2 = newPoint;
           break;
         case 'offsetEnd':
-          p2 = {
-            time: newPoint.time - (p1.time - p0.time),
-            price: newPoint.price - (p1.price - p0.price),
+          // Alt-sağ köşe: üst-sağ köşenin aynadaki eşi. Bu köşe p1'den
+          // türetildiği için gerçekte taşınan nokta p1'dir — p2 + (p1 - p0)
+          // ifadesi imlece eşitlenip p1 çözülür.
+          p1 = {
+            time: newPoint.time - p2.time + p0.time,
+            price: newPoint.price - width,
           };
           break;
         // Orta tutamaçlar: ilgili çizgiyi yalnızca dikey kaydırır (genişliği

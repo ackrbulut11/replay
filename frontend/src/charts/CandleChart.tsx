@@ -1093,6 +1093,14 @@ export default function CandleChart({
         background: { type: ColorType.Solid, color: '#090d16' },
         textColor: '#94a3b8',
         fontSize: 12,
+        // Alt panellerin (RSI/MACD) sınırını fare ile sürükleyip yükseklik
+        // ayarlanabilsin; varsayılan ayırıcı rengi arka planla neredeyse aynı
+        // olduğu için görünmüyor ve tutulamıyordu.
+        panes: {
+          enableResize: true,
+          separatorColor: '#334155',
+          separatorHoverColor: 'rgba(100, 116, 139, 0.35)',
+        },
       },
       grid: {
         vertLines: { color: '#1e293b' },
@@ -1102,6 +1110,14 @@ export default function CandleChart({
         borderColor: '#1e293b',
         autoScale: true,
         mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+      },
+      // Tüm fiyat eksenleri (ana grafik + RSI/MACD alt panelleri) elle
+      // sürüklenerek yakınlaştırılıp uzaklaştırılabilsin (cetvel gibi).
+      handleScale: {
+        axisPressedMouseMove: { time: true, price: true },
+        axisDoubleClickReset: { time: true, price: true },
+        mouseWheel: true,
+        pinch: true,
       },
       timeScale: {
         borderColor: '#1e293b',
@@ -2443,8 +2459,8 @@ export default function CandleChart({
             absolute katman değil, bu sütunun bir parçası. */}
         {(() => {
           const activeLegendKeys = (['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).filter((key) => indicators[key]);
-          const shouldCollapse = activeLegendKeys.length > 2;
-          const showItems = !shouldCollapse || isLegendExpanded;
+          const shouldCollapse = activeLegendKeys.length > 0;
+          const showItems = shouldCollapse && isLegendExpanded;
 
           return (
             <div className="flex flex-col gap-1.5 pointer-events-auto items-start">

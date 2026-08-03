@@ -1830,7 +1830,7 @@ export default function CandleChart({
         // altında kocaman boşluk bırakıyordu; panelin tamamını RSI bandına ayır.
         chart.priceScale('rsi_scale').applyOptions({
           mode: PriceScaleMode.Normal,
-          scaleMargins: { top: 0.02, bottom: 0.02 },
+          scaleMargins: { top: 0.01, bottom: 0.01 },
         });
 
         rsiPriceLinesRef.current.overbought = rsiRef.current.createPriceLine({

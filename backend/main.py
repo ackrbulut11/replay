@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 
 import uvicorn
 from fastapi import FastAPI
@@ -85,9 +86,24 @@ def start_market_update_scheduler() -> None:
     print(f"Gece yarısı piyasa verisi güncelleme işi zamanlandı: {scheduler.get_jobs()}")
 
 
+def warm_binance_endpoint() -> None:
+    """
+    Binance yansı seçimini arkaplanda önceden yapar.
+
+    Seçim, yansıları paralel yoklayıp en hızlısını bulur ve süreç boyunca
+    hatırlanır; ama ilk kez çağrıldığında ~1,2 s sürüyor. Burada tetiklenmezse
+    o bedeli ilk kullanıcı isteği öderdi — replay'de zaman dilimi değiştirmenin
+    bütçesi toplam 1-2 saniye olduğu için bu tek başına bütçeyi taşırıyordu.
+    """
+    from app.data.providers.binance import get_ordered_endpoints
+
+    threading.Thread(target=get_ordered_endpoints, daemon=True).start()
+
+
 init_error_monitoring()
 run_migrations()
 start_market_update_scheduler()
+warm_binance_endpoint()
 
 app = FastAPI(
     title="Trading Research Platform API",

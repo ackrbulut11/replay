@@ -4,13 +4,49 @@ import os
 import time
 import pandas as pd
 import threading
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from ..core.config import settings
 from .providers.binance import BinanceProvider
 from .providers.nasdaq import NasdaqProvider
 from .providers.bist import BistProvider
 from .providers.forex import ForexProvider
+
+# Replay penceresinin varsayılan ölçüleri. Toplam ~1500 mum, sağlayıcıdan iki
+# sayfa (sayfa başına 1000 mum) demek — ölçümde ~1 saniye.
+#
+# Arkadaki pay göstergelerin ısınması içindir: en uzun periyot 200 (EMA200)
+# olduğundan 500 rahat yeter. Öndeki pay replay'in ilerleyebileceği mesafedir;
+# 1000 mum, 1 sn/mum hızda ~16 dakikalık kesintisiz oynatma demek, bu sürede
+# bir sonraki pencere arkaplanda çoktan yüklenir.
+WINDOW_BARS_BEFORE = 500
+WINDOW_BARS_AFTER = 1000
+
+# Bellekte tutulacak azami pencere sayısı (RULES.md #24: sınırsız ham veri
+# biriktirmek yasak). Bir pencere ~1500 satır, yani birkaç yüz KB.
+WINDOW_CACHE_MAX = 40
+
+# Bir mumun süresi. Pencerenin sınırlarını mum SAYISINDAN tarihe çevirmek için
+# gerekli; tarih aralığıyla çalışmak zaman dilimi değiştikçe mum sayısını
+# öngörülemez kılıyordu (aynı 30 gün 1g'de 30, 5dk'da 8640 mum).
+TIMEFRAME_DELTAS = {
+    "1m": timedelta(minutes=1),
+    "5m": timedelta(minutes=5),
+    "15m": timedelta(minutes=15),
+    "1h": timedelta(hours=1),
+    "4h": timedelta(hours=4),
+    "1d": timedelta(days=1),
+    "1w": timedelta(weeks=1),
+    "1mo": timedelta(days=30),
+}
+
+
+def timeframe_delta(timeframe: str) -> timedelta:
+    delta = TIMEFRAME_DELTAS.get(timeframe)
+    if delta is None:
+        raise ValueError(f"Bilinmeyen zaman dilimi: {timeframe}")
+    return delta
+
 
 class DataLoader:
     def __init__(self):
@@ -37,6 +73,11 @@ class DataLoader:
         
         # In-memory L1 cache: key -> (mtime, df)
         self._mem_cache = {}
+
+        # Replay pencereleri: ana parquet'ten ayrı, sınırlı bir LRU.
+        # Ana önbelleğe karışmaz — bkz. get_window.
+        self._window_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+        self._window_lock = threading.Lock()
 
     def get_provider(self, provider_name: str):
         provider = self.providers.get(provider_name.lower())
@@ -98,6 +139,129 @@ class DataLoader:
             "last": last.isoformat(),
             "bars": int(len(df)),
         }
+
+    def get_window(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        anchor: datetime,
+        bars_before: int = WINDOW_BARS_BEFORE,
+        bars_after: int = WINDOW_BARS_AFTER,
+    ) -> pd.DataFrame:
+        """
+        `anchor` etrafındaki sabit sayıda mumu döndürür — replay için.
+
+        Neden `load_data` yetmiyor: parquet önbelleği BİTİŞİK bir aralık olmak
+        zorunda, bu yüzden `load_data` istenen başlangıç önbelleğin başlangıcından
+        eskiyse aradaki TÜM boşluğu indiriyor (bkz. aynı dosyada prefix çekimi).
+        2019'daki 1500 mumu istemek araya giren altı yılı da indirmek demekti:
+        ölçümde 15dk için ~210 sayfa / dakikalar.
+
+        Burada maliyet mesafeden bağımsızdır: hangi tarihe bakılırsa bakılsın
+        yalnızca `bars_before + bars_after` mum çekilir (~2 sayfa, ~1 s). Replay
+        zaten pencereyle çalışıyor — konumun ilerisi görünmüyor (lookahead),
+        gerisi de gösterge ısınması kadar gerekli.
+
+        Sonuç ana parquet'e YAZILMAZ: yazmak bitişikliği bozardı ve retention
+        budaması pencereyi anında silerdi. Bunun yerine süreç içi sınırlı bir
+        LRU'da tutulur (RULES.md #24: sınırsız ham veri biriktirmek yasak).
+        """
+        delta = timeframe_delta(timeframe)
+        start_time = anchor - delta * bars_before
+        end_time = anchor + delta * bars_after
+
+        # 1. Ana önbellek bu aralığı zaten kapsıyorsa oradan kes: ağa hiç çıkma.
+        #    Kaba zaman dilimleri (1g/1h) tüm geçmişi taşıdığı için çoğu geçiş
+        #    bu daldan döner ve anlık gelir.
+        cached = self._read_cache_if_covers(provider_name, symbol, timeframe, start_time, end_time)
+        if cached is not None:
+            return cached
+
+        cache_key = self._window_cache_key(
+            provider_name, symbol, timeframe, start_time, end_time
+        )
+        with self._window_lock:
+            hit = self._window_cache.get(cache_key)
+            if hit is not None:
+                self._window_cache.move_to_end(cache_key)
+                return hit.copy()
+
+        provider = self.get_provider(provider_name)
+        df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
+
+        if df is None or df.empty:
+            return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+        df = df.sort_values("timestamp").reset_index(drop=True)
+
+        with self._window_lock:
+            self._window_cache[cache_key] = df
+            self._window_cache.move_to_end(cache_key)
+            # En eski pencereleri at: bellekte sınırsız birikmesin.
+            while len(self._window_cache) > WINDOW_CACHE_MAX:
+                self._window_cache.popitem(last=False)
+
+        return df.copy()
+
+    def _window_cache_key(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> tuple:
+        return (provider_name.lower(), symbol.upper(), timeframe, start_time, end_time)
+
+    def _read_cache_if_covers(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> pd.DataFrame | None:
+        """
+        Ana parquet istenen aralığı tümüyle kapsıyorsa ilgili dilimi döndürür.
+
+        Kapsamıyorsa `None` döner — "veri yok" değil, "buradan karşılanamaz"
+        demektir; çağıran taraf sağlayıcıya gider.
+        """
+        cache_path = self._get_cache_path(provider_name, symbol, timeframe)
+        if not os.path.exists(cache_path):
+            return None
+
+        # Önce YALNIZCA timestamp sütununu okuyup kapsama bak. Tüm dosyayı okuyup
+        # sonra "kapsamıyor" demek pahalıya patlıyordu: 5m önbelleği 100.000 satır
+        # ve o gereksiz okuma tek başına ölçümde ~1,6 s ekliyordu.
+        try:
+            stamps = pd.read_parquet(cache_path, columns=["timestamp"])
+        except Exception:
+            return None
+
+        if stamps.empty:
+            return None
+
+        if pd.to_datetime(stamps["timestamp"]).min() > start_time:
+            return None
+
+        try:
+            df = pd.read_parquet(cache_path)
+        except Exception:
+            return None
+
+        if df.empty:
+            return None
+
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+        # Sağ uç, önbelleğin sonunu aşabilir: "şimdi"nin ötesi zaten yok. Yalnızca
+        # sol uç (geçmiş) kapsanıyorsa bu dilim işimizi görür.
+        sliced = df[(df["timestamp"] >= start_time) & (df["timestamp"] <= end_time)]
+        if sliced.empty:
+            return None
+        return sliced.reset_index(drop=True)
 
     def _prune_to_retention(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """RULES.md #24-27: her zaman dilimi için ham veriyi sınırsız biriktirmez."""

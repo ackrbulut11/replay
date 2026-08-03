@@ -4,6 +4,7 @@ import CandleChart from './charts/CandleChart';
 import { IndicatorsState } from './charts/IndicatorToolbar';
 import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
+import { getWindow } from './services/marketApi';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import { watchlistStore } from './store/watchlistStore';
 import { useChartSettingsStore, chartSettingsStore, DEFAULT_ACTIVE_INDICATORS } from './store/chartSettingsStore';
@@ -189,28 +190,45 @@ function App() {
     setLoading(true);
     setError(null);
 
+    // ─── Replay: konuma çapalı pencere ──────────────────────────────────────
+    // Replay sürerken tarih aralığıyla veri istemek maliyeti "konum ne kadar
+    // geride" değişkenine bağlıyor: /data bitişik bir önbellek tuttuğu için
+    // uzak bir tarihte aradaki tüm boşluğu indiriyor (15dk'da 2019 için ~210
+    // sayfa, dakikalarca). /window ise hangi tarih olursa olsun sabit sayıda
+    // mum çekiyor — ölçümde 2019 da 2022 de ~0,65 s.
+    const replayPos = replayStore.getState();
+    if (replayPos.isReplayActive && replayPos.targetTimestamp !== null) {
+      try {
+        const candles = await getWindow({
+          provider,
+          symbol,
+          timeframe,
+          anchor: replayPos.targetTimestamp,
+        });
+        if (signal.aborted) return;
+        if (candles.length === 0) {
+          setError('Bu zaman diliminde replay konumu için veri bulunamadı.');
+          setChartData([]);
+        } else {
+          setChartData(candles);
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        console.error('Replay penceresi yüklenemedi:', err);
+        setError(err?.message || 'Sunucu bağlantı hatası.');
+        setChartData([]);
+      } finally {
+        if (!signal.aborted) setLoading(false);
+      }
+      return;
+    }
+
     const userStart = start && start.trim() ? start : null;
     const endParam = end && end.trim() ? end : '';
     const quickDays = QUICK_WINDOW_DAYS[timeframe] ?? 365;
     const dayMs = 24 * 60 * 60 * 1000;
     const endDate = endParam ? new Date(endParam) : new Date();
-    let quickStartDate = new Date(endDate.getTime() - quickDays * dayMs);
-
-    // Replay sürerken zaman dilimi değiştirildiğinde hızlı pencere "şimdi"den
-    // geriye sayıldığı için replay konumu çoğu kez pencerenin dışında kalıyor,
-    // konum ilk yanıtta bulunamıyordu. Replay aktifken pencerenin başlangıcı
-    // konumun gerisine çekilir; böylece replay yeni zaman diliminde kaldığı
-    // yerden devam eder (arkadaki geçmiş yine arkaplanda tamamlanır).
-    const replayPos = replayStore.getState();
-    if (replayPos.isReplayActive && replayPos.targetTimestamp !== null) {
-      const anchor = new Date(replayPos.targetTimestamp * 1000);
-      if (Number.isFinite(anchor.getTime()) && anchor < quickStartDate) {
-        // Konumun gerisinde de bir miktar geçmiş kalsın: göstergelerin ısınma
-        // süresi ve kullanıcının geriye bakabilmesi için.
-        quickStartDate = new Date(anchor.getTime() - quickDays * dayMs);
-      }
-    }
-
+    const quickStartDate = new Date(endDate.getTime() - quickDays * dayMs);
     const quickStartStr = quickStartDate.toISOString().slice(0, 10);
 
     // Kullanıcı zaten hızlı pencereden daha dar bir aralık istemişse
@@ -257,6 +275,10 @@ function App() {
   // AbortController: bir önceki (henüz tamamlanmamış) istek burada iptal edilir; aksi halde
   // parite/interval hızlı değiştiğinde geç dönen eski bir yanıt, yeni seçili paritenin/interval'ın
   // üzerine eski (yanlış) mum verisini yazabilir (bkz. "1h seçili ama günlük gösteriyor" hatası).
+  //
+  // `isReplayActive` de bir tetikleyicidir: replay'de veri konuma çapalı bir
+  // PENCERE olarak yükleniyor ve o pencere geçmişte bitiyor. Replay kapandığında
+  // yeniden yüklenmezse grafik geçmişte takılı kalırdı.
   useEffect(() => {
     if (!isAuthenticated || !symbol || symbol.trim().length < 2) return;
 
@@ -272,7 +294,7 @@ function App() {
       controller.abort();
       bgControllerRef.current?.abort();
     };
-  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated]);
+  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, replayState.isReplayActive]);
 
   if (isLoading) {
     return (

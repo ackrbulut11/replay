@@ -4,7 +4,7 @@ from typing import Optional, List, Dict
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.data.loader import DataLoader
+from app.data.loader import DataLoader, WINDOW_BARS_AFTER, WINDOW_BARS_BEFORE
 from app.data.symbols import get_symbols, search_symbols
 
 router = APIRouter(prefix="/market", tags=["market"])
@@ -112,6 +112,59 @@ def get_market_coverage(
     return {"available": True, "provider": provider, "symbol": symbol.upper(), "timeframe": timeframe, **coverage}
 
 
+def _to_chart_candles(df) -> list[dict]:
+    """DataFrame'i lightweight-charts'ın beklediği biçime çevirir (zaman = saniye)."""
+    if df is None or df.empty:
+        return []
+    return [
+        {
+            "time": int(row["timestamp"].timestamp()),
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+            "volume": float(row["volume"]),
+        }
+        for _, row in df.iterrows()
+    ]
+
+
+@router.get("/window")
+def get_market_window(
+    provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),
+    symbol: str = Query(..., description="Market symbol (e.g. BTCUSDT, AAPL, THYAO)"),
+    timeframe: str = Query(..., description="Timeframe (1m, 5m, 15m, 1h, 4h, 1d)"),
+    anchor: int = Query(..., description="Pencerenin merkezi — saniye cinsinden unix zaman damgası"),
+    bars_before: int = Query(WINDOW_BARS_BEFORE, gt=0, le=5000, description="Çapanın gerisindeki mum sayısı"),
+    bars_after: int = Query(WINDOW_BARS_AFTER, gt=0, le=5000, description="Çapanın ilerisindeki mum sayısı"),
+):
+    """
+    `anchor` etrafındaki sabit sayıda mumu döndürür — replay'de zaman dilimi
+    değiştirmek için.
+
+    `/data`'dan farkı: maliyeti çapanın ne kadar geride olduğuna bağlı DEĞİLDİR.
+    `/data` bitişik bir parquet önbelleği tuttuğu için uzak bir tarih istendiğinde
+    aradaki tüm boşluğu indiriyor (15dk'da 2019 için ~210 sayfa, dakikalar).
+    Burada her zaman `bars_before + bars_after` mum çekilir — ölçümde 2019 da
+    2022 de 0,65 s.
+    """
+    try:
+        df = loader.get_window(
+            provider_name=provider,
+            symbol=symbol,
+            timeframe=timeframe,
+            anchor=datetime.utcfromtimestamp(anchor),
+            bars_before=bars_before,
+            bars_after=bars_after,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return _to_chart_candles(df)
+
+
 @router.get("/data")
 def get_market_data(
     provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),
@@ -173,22 +226,7 @@ def get_market_data(
             start_time=start_dt,
             end_time=end_dt
         )
-        if df.empty:
-            return []
-            
-        # lightweight-charts için format:
-        # zaman saniye cinsinden unix zaman damgası olmalıdır
-        result = []
-        for _, row in df.iterrows():
-            result.append({
-                "time": int(row["timestamp"].timestamp()),
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": float(row["volume"])
-            })
-        return result
-        
+        return _to_chart_candles(df)
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -16,7 +16,7 @@ import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './d
 import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, AlertTriangle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2, ChevronRight } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2, ChevronRight } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import ReplayTradePanel from '../replay/ReplayTradePanel';
@@ -26,7 +26,6 @@ import { useAlertStore, alertStore } from '../store/alertStore';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
 import { journalStore, useJournalStore } from '../store/journalStore';
-import { getCoverage } from '../services/marketApi';
 import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 
@@ -477,52 +476,18 @@ export default function CandleChart({
   }, [replayState.isReplayActive, replayState.sessionId, symbol, timeframe]);
 
   // ─── Replay'de zaman dilimi değişimi ────────────────────────────────────
-  // Replay'de geriye gidildiğinde zaman dilimi değiştirmek konumu korumalıdır.
-  // Ancak düşük çözünürlüklü veriler çok daha kısa bir geçmiş saklar
-  // (RULES.md #24-27): 4h yıllar öncesine giderken 5m yalnızca birkaç ay geriye
-  // gider. Hedef tarih yeni zaman diliminde hiç yoksa geçişe izin verilmez;
-  // aksi halde replay sessizce alakasız bir tarihe sıçrıyordu.
-  const [timeframeWarning, setTimeframeWarning] = useState<string | null>(null);
-
+  // Burada eskiden bir kapsama kontrolü vardı: hedef tarih yeni zaman diliminin
+  // parquet önbelleğinden eskiyse geçiş engelleniyordu. Artık gereksiz — replay
+  // verisi `/market/window` üzerinden geliyor ve o uç bitişik önbelleğe bağlı
+  // olmadığından, sağlayıcıda veri olan HER tarihi sabit maliyetle getirebiliyor
+  // (bkz. App.tsx handleLoadChart ve loader.get_window). Gerçekten veri yoksa
+  // pencere boş döner ve App.tsx hata mesajını gösterir.
   const handleTimeframeChange = useCallback(
-    async (nextTimeframe: string) => {
-      const { isReplayActive, targetTimestamp } = replayStore.getState();
-
-      if (!isReplayActive || targetTimestamp === null) {
-        setTimeframeWarning(null);
-        setTimeframe(nextTimeframe);
-        return;
-      }
-
-      try {
-        const coverage = await getCoverage(provider, symbol, nextTimeframe);
-        // `available: false` "bilinmiyor" demektir (önbellek yok) — engelleme.
-        if (coverage.available && coverage.first) {
-          const firstSeconds = Math.floor(new Date(coverage.first).getTime() / 1000);
-          if (Number.isFinite(firstSeconds) && targetTimestamp < firstSeconds) {
-            const hedef = new Date(targetTimestamp * 1000).toLocaleDateString('tr-TR');
-            const enEski = new Date(coverage.first).toLocaleDateString('tr-TR');
-            setTimeframeWarning(
-              `${nextTimeframe} verisi yalnızca ${enEski} tarihine kadar geriye gidiyor; ` +
-                `replay konumunuz (${hedef}) bu aralığın dışında. Zaman dilimi değiştirilmedi.`
-            );
-            return;
-          }
-        }
-      } catch {
-        // Kapsama sorgusu başarısızsa kullanıcıyı engelleme; geçişe izin ver.
-      }
-
-      setTimeframeWarning(null);
+    (nextTimeframe: string) => {
       setTimeframe(nextTimeframe);
     },
-    [provider, symbol, setTimeframe]
+    [setTimeframe]
   );
-
-  // Uyarı yalnızca replay sürerken anlamlı; moddan çıkınca temizlenir.
-  useEffect(() => {
-    if (!replayState.isReplayActive) setTimeframeWarning(null);
-  }, [replayState.isReplayActive]);
 
   const fullDataRef = useRef<CandleData[]>(data);
   fullDataRef.current = data;
@@ -2640,23 +2605,6 @@ export default function CandleChart({
         <div className="absolute top-28 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-full shadow-lg border border-amber-300/50 backdrop-blur-md animate-bounce flex items-center gap-2 select-none pointer-events-none">
           <Scissors className="w-4 h-4" />
           <span>Grafikte kestirmek istediğiniz muma tıklayın!</span>
-        </div>
-      )}
-
-      {/* Zaman dilimi değişimi engellendiğinde uyarı — hedef tarih yeni
-          çözünürlükte mevcut olmadığında gösterilir. */}
-      {timeframeWarning && (
-        <div className="absolute top-28 left-1/2 -translate-x-1/2 z-40 max-w-md bg-amber-500/95 text-slate-950 text-xs px-4 py-2 rounded-xl shadow-2xl border border-amber-300/60 backdrop-blur-md flex items-start gap-2 select-none">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-px" />
-          <span className="font-semibold leading-snug">{timeframeWarning}</span>
-          <button
-            type="button"
-            onClick={() => setTimeframeWarning(null)}
-            title="Kapat"
-            className="ml-1 flex-shrink-0 hover:bg-slate-950/10 rounded p-0.5 cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
         </div>
       )}
 

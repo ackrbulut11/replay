@@ -1046,15 +1046,27 @@ export default function CandleChart({
           p0 = { time: newPoint.time, price: newPoint.price - width };
           p2 = newPoint;
           break;
-        case 'offsetEnd':
+        case 'offsetEnd': {
           // Alt-sağ köşe: üst-sağ köşenin aynadaki eşi. Bu köşe p1'den
           // türetildiği için gerçekte taşınan nokta p1'dir — p2 + (p1 - p0)
-          // ifadesi imlece eşitlenip p1 çözülür.
-          p1 = {
+          // ifadesi imlece eşitlenip p1 çözülür. Render bu köşeyi pixel
+          // uzayında türetiyor (getChannelHandlePositions), zaman ekseni ise
+          // hafta sonu/seans boşlukları yüzünden pixel'e doğrusal eşlenmiyor.
+          // Bu yüzden çıkarımı zaman/fiyat yerine pixel uzayında yapıp sonucu
+          // geri çeviriyoruz — aksi halde bu köşe sürüklenirken sıçrama olur.
+          const primitive = primitiveRef.current;
+          const p0px = primitive?.pointToPixel(p0.time, p0.price);
+          const p2px = primitive?.pointToPixel(p2.time, p2.price);
+          const newPx = primitive?.pointToPixel(newPoint.time, newPoint.price);
+          const solved = p0px && p2px && newPx
+            ? getPointFromPixel(newPx.x - p2px.x + p0px.x, newPx.y - p2px.y + p0px.y, false)
+            : null;
+          p1 = solved ?? {
             time: newPoint.time - p2.time + p0.time,
             price: newPoint.price - width,
           };
           break;
+        }
         // Orta tutamaçlar: ilgili çizgiyi yalnızca dikey kaydırır (genişliği
         // değiştirir), zaman ekseninde hiç hareket etmezler.
         case 'baseMid': {

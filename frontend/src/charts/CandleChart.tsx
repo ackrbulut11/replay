@@ -16,7 +16,7 @@ import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './d
 import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, AlertTriangle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2 } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, AlertTriangle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2, ChevronRight } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import ReplayTradePanel from '../replay/ReplayTradePanel';
@@ -157,6 +157,7 @@ export default function CandleChart({
   const toolSettings = chartSettings.drawingDefaults;
   const indicatorSettings = chartSettings.indicators;
   const [editingIndicator, setEditingIndicator] = useState<keyof IndicatorSettingsMap | null>(null);
+  const [isLegendExpanded, setIsLegendExpanded] = useState(false);
 
   const toolSettingsRef = useRef(toolSettings);
   toolSettingsRef.current = toolSettings;
@@ -2436,46 +2437,64 @@ export default function CandleChart({
         {/* Göstergeler İçin Canlı Lejant ve Hızlı Ayarlar (TradingView Tarzı) — çizim
             araç çubuğunun altında, aynı sütunda; üst üste binmesin diye ayrı bir
             absolute katman değil, bu sütunun bir parçası. */}
-        <div className="flex flex-wrap gap-1.5 pointer-events-auto">
-          {(['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).map((key) => {
-            if (!indicators[key]) return null;
-            const conf = indicatorSettings[key] as any;
-            const val = latestIndicatorValues[key];
-            const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
-            const color = key === 'bb' ? conf.upperColor : conf.color;
+        {(() => {
+          const activeLegendKeys = (['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).filter((key) => indicators[key]);
+          const shouldCollapse = activeLegendKeys.length > 2;
+          const showItems = !shouldCollapse || isLegendExpanded;
 
-            return (
-              <div
-                key={key}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100"
-              >
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                <span className="font-medium text-zinc-200">{label}</span>
-                {val !== undefined && val !== null && (
-                  <span className="font-mono text-zinc-400 text-[10px]">
-                    {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
-                  </span>
-                )}
+          return (
+            <div className="flex flex-col gap-1.5 pointer-events-auto items-start">
+              {shouldCollapse && (
                 <button
                   type="button"
-                  title={`${label} Ayarları`}
-                  onClick={() => setEditingIndicator(key)}
-                  className="p-0.5 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                  title={isLegendExpanded ? 'Göstergeleri Gizle' : 'Göstergeleri Göster'}
+                  onClick={() => setIsLegendExpanded((v) => !v)}
+                  className="flex items-center justify-center w-5 h-5 rounded-md bg-[#0a0b0e]/90 border border-white/[0.08] text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/30 transition-colors shadow-md backdrop-blur-md cursor-pointer"
                 >
-                  <Settings2 className="w-3 h-3" />
+                  <ChevronRight className={`w-3 h-3 transition-transform ${isLegendExpanded ? 'rotate-90' : ''}`} />
                 </button>
-                <button
-                  type="button"
-                  title="Kapat"
-                  onClick={() => onToggleIndicator(key)}
-                  className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
+              )}
+              {showItems &&
+                activeLegendKeys.map((key) => {
+                  const conf = indicatorSettings[key] as any;
+                  const val = latestIndicatorValues[key];
+                  const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
+                  const color = key === 'bb' ? conf.upperColor : conf.color;
+
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100"
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                      <span className="font-medium text-zinc-200">{label}</span>
+                      {val !== undefined && val !== null && (
+                        <span className="font-mono text-zinc-400 text-[10px]">
+                          {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        title={`${label} Ayarları`}
+                        onClick={() => setEditingIndicator(key)}
+                        className="p-0.5 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                      >
+                        <Settings2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Kapat"
+                        onClick={() => onToggleIndicator(key)}
+                        className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Durum Gösterge Katmanları */}

@@ -202,6 +202,43 @@ class TestFiltreler(JournalTestCase):
         self.assertEqual(len(self.journal.list_trades(self.db, self.alice.id, status="CLOSED")), 1)
 
 
+class TestSaveSession(JournalTestCase):
+    def test_acik_islem_kaydedilmez(self):
+        """
+        Açık bir işlem "Kaydet" ile is_saved=True olursa, include_saved
+        sorgusu onu sembolün HER YENİ oturumuna hayalet bir açık pozisyon
+        olarak sızdırır (bkz. journalStore.reload, ReplayTradePanel). Bu yüzden
+        save_session yalnızca kapanmış işlemleri işaretlemeli.
+        """
+        open_trade = self.journal.open_trade(self.db, _open_request(session_id="session-1"), user_id=self.alice.id)
+        closed_trade = self.journal.open_trade(
+            self.db, _open_request(session_id="session-1"), user_id=self.alice.id
+        )
+        self.journal.close_trade(self.db, closed_trade, TradeCloseRequest(exit_price=110.0))
+
+        saved_count = self.journal.save_session(self.db, "session-1", user_id=self.alice.id)
+
+        self.assertEqual(saved_count, 1)
+        self.db.refresh(open_trade)
+        self.db.refresh(closed_trade)
+        self.assertFalse(open_trade.is_saved)
+        self.assertTrue(closed_trade.is_saved)
+
+    def test_kaydedilmis_acik_islem_yeni_oturuma_sizmaz(self):
+        """Uçtan uca: eski oturumdaki açık işlem, yeni bir oturumun include_saved sorgusunda görünmemeli."""
+        old_open = self.journal.open_trade(
+            self.db, _open_request(session_id="session-old"), user_id=self.alice.id
+        )
+        self.journal.save_session(self.db, "session-old", user_id=self.alice.id)
+        self.db.refresh(old_open)
+        self.assertFalse(old_open.is_saved)
+
+        results = self.journal.list_trades(
+            self.db, self.alice.id, symbol="BTCUSDT", session_id="session-new", include_saved=True
+        )
+        self.assertEqual(results, [])
+
+
 class TestUpdateTrade(JournalTestCase):
     def test_gunluk_alanlari_guncellenir(self):
         trade = self.journal.open_trade(self.db, _open_request(), user_id=self.alice.id)

@@ -61,7 +61,13 @@ export default function ReplayTradePanel({
   // İşlemler açık replay oturumuna bağlanır; panel de yalnızca o oturumun
   // pozisyonlarını görür (bkz. journalStore.reload).
   const [{ sessionId }] = useReplayStore();
-  const position = trades.find((t) => t.status === 'OPEN') ?? null;
+  // `trades` yalnızca bu oturuma değil, aynı sembolde daha önce "Kaydet" ile
+  // kalıcılaştırılmış işlemlere de sahip olabilir (bkz. journalStore.reload,
+  // include_saved). Session filtresi olmadan, eski bir oturumdan kalma ve
+  // hâlâ OPEN durumdaki kaydedilmiş bir işlem burada "güncel pozisyon" gibi
+  // gösterilir — fiyatı o oturumdan kalma olduğundan ekrandaki anlık fiyatla
+  // hiç ilgisi olmaz.
+  const position = trades.find((t) => t.status === 'OPEN' && t.session_id === sessionId) ?? null;
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

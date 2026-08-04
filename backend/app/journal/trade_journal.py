@@ -162,17 +162,25 @@ class TradeJournal:
     @staticmethod
     def save_session(db: Session, session_id: str, user_id: str) -> int:
         """
-        Bir replay oturumunun işlemlerini kalıcı olarak işaretler.
+        Bir replay oturumunun KAPANMIŞ işlemlerini kalıcı olarak işaretler.
 
         Kaç işlemin işaretlendiğini döndürür. Yalnızca çağıranın kendi
         işlemlerine dokunur (sahiplik sorguda filtrelenir, ayrıca kontrol
         edilmesine gerek kalmaz).
+
+        Açık pozisyon kasıtlı olarak dışarıda bırakılır: `is_saved` işlemi
+        `include_saved` sorgusuyla sembolün HER YENİ oturumuna sızıyor
+        (bkz. list_trades). Hâlâ açık bir işlem bu şekilde kaydedilirse,
+        sonraki bir replay oturumunda güncel fiyattan tamamen kopuk, hayalet
+        bir "açık pozisyon" olarak geri gelir ve panel onu günceliyle
+        karıştırır.
         """
         updated = (
             db.query(JournalTrade)
             .filter(
                 JournalTrade.user_id == user_id,
                 JournalTrade.session_id == session_id,
+                JournalTrade.status == TradeStatus.CLOSED.value,
             )
             .update({JournalTrade.is_saved: True}, synchronize_session=False)
         )

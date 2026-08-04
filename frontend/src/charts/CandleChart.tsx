@@ -222,6 +222,10 @@ export default function CandleChart({
   // Strateji sinyallerini grafik üzerinde oklar (BUY/SELL) olarak çizdir
   const { evaluateResult } = useStrategyStore();
   const { trades: journalTrades } = useJournalStore();
+  // Sinyallerin kaçının grafikte gerçekten işaretlendiği: henüz yüklenmemiş
+  // (arka planda hâlâ getirilen) geçmiş mumlara denk gelen sinyaller çizilemez;
+  // rozette toplamla birlikte gösterilerek "sinyal sayısı tutmuyor" kafa karışıklığı önlenir.
+  const [shownSignalCount, setShownSignalCount] = useState<number>(0);
 
   /**
    * Manuel işlemlerin giriş/çıkış işaretleri.
@@ -325,6 +329,7 @@ export default function CandleChart({
     };
 
     if (!evaluateResult || !Array.isArray(evaluateResult.signals) || evaluateResult.signals.length === 0) {
+      setShownSignalCount(0);
       try {
         setMarkers([]);
       } catch {}
@@ -335,13 +340,20 @@ export default function CandleChart({
 
     // Sembol kontrolü
     if (evaluateResult.symbol && symbol && evaluateResult.symbol.toUpperCase() !== symbol.toUpperCase()) {
+      setShownSignalCount(0);
       try {
         setMarkers([]);
       } catch {}
       return;
     }
 
-    const markersMap = new Map<Time, any>();
+    // Aynı muma "snap" olan farklı sinyalleri (ör. bir çıkış hemen ardından bir
+    // yeniden giriş) zaman bazlı bir Map ile eşlemek biri diğerini sessizce
+    // ezerdi — bu yüzden zaman + yön + orijinal timestamp birlikte anahtar olur,
+    // yalnızca gerçekten birebir aynı sinyaller (savunma amaçlı) elenir.
+    const seenKeys = new Set<string>();
+    const markers: any[] = [];
+    let unmatchedCount = 0;
 
     evaluateResult.signals.forEach((sig) => {
       if (!sig) return;
@@ -367,7 +379,16 @@ export default function CandleChart({
         }
       }
 
-      if (!targetTime) return;
+      if (!targetTime) {
+        // Sinyalin mumu henüz yüklenmemiş (arka planda getirilen geçmiş veri
+        // bekleniyor) ya da yüklü aralığın tamamen dışında — grafikte çizilemez.
+        unmatchedCount += 1;
+        return;
+      }
+
+      const dedupeKey = `${targetTime}-${sig.signal}-${sig.timestamp}`;
+      if (seenKeys.has(dedupeKey)) return;
+      seenKeys.add(dedupeKey);
 
       const isBuy = sig.signal === 'BUY';
       const priceText = typeof sig.price === 'number' && !isNaN(sig.price) ? sig.price.toFixed(2) : '';
@@ -380,7 +401,7 @@ export default function CandleChart({
         labelText += ` (${sig.pnl_percent >= 0 ? '+' : ''}${sig.pnl_percent.toFixed(2)}%)`;
       }
 
-      markersMap.set(targetTime, {
+      markers.push({
         time: targetTime,
         position: isBuy ? ('belowBar' as const) : ('aboveBar' as const),
         color: isBuy ? '#22d3ee' : '#f97316',
@@ -389,7 +410,15 @@ export default function CandleChart({
       });
     });
 
-    const markers = Array.from(markersMap.values()).sort((a, b) => Number(a.time) - Number(b.time));
+    markers.sort((a, b) => Number(a.time) - Number(b.time));
+
+    if (unmatchedCount > 0) {
+      console.warn(
+        `Strateji sinyallerinden ${unmatchedCount}/${evaluateResult.signals.length} tanesi grafikte gösterilemedi ` +
+          `(henüz yüklenmemiş ya da yüklü aralığın dışında kalan mumlara denk geliyor).`
+      );
+    }
+    setShownSignalCount(markers.length);
 
     try {
       setMarkers(markers);
@@ -2293,9 +2322,22 @@ export default function CandleChart({
 
           {/* Strateji Sinyalleri Temizleme Rozeti */}
           {evaluateResult && Array.isArray(evaluateResult.signals) && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-xs">
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-xs"
+              title={
+                shownSignalCount < evaluateResult.signals.length
+                  ? `${evaluateResult.signals.length} sinyalden ${shownSignalCount} tanesi grafikte gösteriliyor — geri kalanı henüz yüklenmemiş geçmiş mumlara denk geliyor.`
+                  : undefined
+              }
+            >
               <Zap className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Strateji ({evaluateResult.signals.length} Sinyal)</span>
+              <span>
+                Strateji ({evaluateResult.total_trades ?? 0} İşlem ·{' '}
+                {shownSignalCount < evaluateResult.signals.length
+                  ? `${shownSignalCount}/${evaluateResult.signals.length}`
+                  : evaluateResult.signals.length}{' '}
+                Sinyal)
+              </span>
               <button
                 onClick={() => strategyStore.clearEvaluateResult()}
                 className="ml-1 p-0.5 hover:bg-emerald-500/30 text-emerald-300 hover:text-white rounded transition-colors"

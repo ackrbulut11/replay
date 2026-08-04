@@ -351,8 +351,8 @@ export default function StrategyPage({
                   >
                     <BatchScannerTab
                       strategy={activeStrategy}
-                      onSelectSymbolAndShowChart={(sym, prov, tf) => {
-                        handleNavigateToChartWithSymbol(sym, prov, tf);
+                      onSelectSymbolAndShowChart={(sym, prov, tf, limitBars) => {
+                        handleNavigateToChartWithSymbol(sym, prov, tf, { limitBars });
                       }}
                     />
                   </div>

@@ -27,7 +27,7 @@ import { useWatchlistStore } from '../store/watchlistStore';
 
 interface BatchScannerTabProps {
   strategy: Strategy;
-  onSelectSymbolAndShowChart: (symbol: string, provider: string, timeframe: string) => void;
+  onSelectSymbolAndShowChart: (symbol: string, provider: string, timeframe: string, limitBars: number) => void;
 }
 
 interface ScanGroup {
@@ -909,7 +909,7 @@ export default function BatchScannerTab({
                       <td className="py-3 px-4 text-right">
                         <button
                           onClick={() =>
-                            onSelectSymbolAndShowChart(item.symbol, item.provider, timeframe)
+                            onSelectSymbolAndShowChart(item.symbol, item.provider, timeframe, limitBars)
                           }
                           className="inline-flex items-center gap-1.5 py-1 px-3 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 rounded-xl font-semibold text-xs transition-all active:scale-95 cursor-pointer shadow-sm"
                           title={`${item.symbol} sembolünü grafikte aç`}

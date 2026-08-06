@@ -133,37 +133,37 @@ const Eyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const STEPS = [
   {
     no: '01',
-    title: 'Pick a symbol and a date',
-    body: 'One symbol, one timeframe, one start date — cached, so it never re-downloads.',
+    title: 'Build the rule',
+    body: 'Indicators, operators, levels. No code involved.',
   },
   {
     no: '02',
-    title: 'Step through it bar by bar',
-    body: 'The chart stops at your date. Each step closes one bar — decide right there.',
+    title: 'Backtest it',
+    body: 'Entries, exits, win rate and PnL over past bars.',
   },
   {
     no: '03',
-    title: 'Turn it into a rule',
-    body: 'Write what you just traded as a rule, then test it on that same symbol.',
+    title: 'Scan your watchlist',
+    body: 'The same rule on every symbol, in a single scan.',
   },
   {
     no: '04',
-    title: 'Scan your whole watchlist',
-    body: 'Run the same rule across every symbol you follow, in one pass.',
+    title: 'Replay the setup',
+    body: 'Step through it bar by bar, without seeing what comes next.',
   },
 ];
 
 const SHIPPED = [
-  'Candlestick chart with drawing tools',
-  'Replay controls — step one bar at a time',
   'Strategy builder on JSON rule trees',
-  'Single-symbol tests and batch scans',
-  'Price and indicator alerts',
-  'Watchlists, Google sign-in',
+  'Backtest a rule over historical bars',
+  'Batch scan — one rule, your whole list',
+  'Replay controls — step one bar at a time',
+  'Candlestick chart with drawing tools',
+  'Price and indicator alerts, watchlists',
 ];
 
 const PLANNED = [
-  'Detailed backtest reports',
+  'Backtest reports — equity curve, drawdown',
   'Trade journal and statistics',
   'Parameter optimization',
   'Live data over WebSocket',
@@ -208,25 +208,24 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           <div>
             <Eyebrow>EARLY ACCESS · IN DEVELOPMENT</Eyebrow>
             <h1 className="mt-5 text-[34px] font-semibold leading-[1.06] tracking-[-0.03em] sm:text-[44px] lg:text-[50px]">
-              Replay the market,
+              One rule.
               <br />
-              one bar at a time.
+              Every symbol.
               <br />
               {/* Satır sonu bilinçli: cümle zaten bu genişlikte iki satıra
                   düşüyor, kırılma yerini şansa bırakmamak için sabitlendi. */}
               <span className="text-zinc-500">
-                Without seeing
+                Tested on history,
                 <br />
-                what comes next.
+                not on your money.
               </span>
             </h1>
             <p className="mt-6 max-w-[440px] text-[14px] leading-[1.75] text-zinc-400">
-              {/* "and more markets" bilinçli: sabit dört piyasa listesi
-                  kapanmış bir set gibi okunuyor, halbuki yeni piyasalar
-                  eklenecek. Bkz. numbers strip'teki "4 markets" — o gerçek
-                  bir sayı olduğu için orada kalıyor, burada değil. */}
-              Replay Forex, Nasdaq, Crypto and more markets on closed bars.
-              Decide blind, turn it into a rule, then scan your whole watchlist.
+              {/* Piyasa adları bilinçli olarak sayfanın hiçbir yerinde yok:
+                  sabit bir liste kapanmış bir set gibi okunuyor, halbuki yeni
+                  piyasalar eklenecek. */}
+              Build a rule, backtest it on historical data, then run it across every
+              symbol in your watchlist in a single scan.
             </p>
 
             <div className="mt-9">
@@ -247,7 +246,7 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       <section className="border-y border-white/[0.06]">
         <Container className="grid grid-cols-2 divide-white/[0.06] sm:grid-cols-4 sm:divide-x">
           {[
-            ['4 markets', 'BIST · NASDAQ · Crypto · Forex'],
+            ['Every symbol', 'One rule across your whole watchlist'],
             ['8 timeframes', '1 minute up to 1 month'],
             ['No code', 'Strategies are JSON rule trees'],
             ['No lookahead', 'Signals come from closed bars only'],
@@ -274,7 +273,7 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         <Container>
           <Eyebrow>HOW IT WORKS</Eyebrow>
           <h2 className="mt-5 max-w-[560px] text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
-            Manual backtesting first. Then the same call, on every symbol you track.
+            Write the rule once. Run it on everything you follow.
           </h2>
 
           <div className="mt-14 grid grid-cols-1 gap-10 divide-white/[0.06] sm:grid-cols-2 sm:gap-x-8 sm:gap-y-12 lg:grid-cols-4 lg:gap-0 lg:divide-x">
@@ -304,14 +303,14 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       <section className="border-b border-white/[0.06] py-20 lg:py-28">
         <Container className="grid grid-cols-1 items-start gap-14 lg:grid-cols-2 lg:gap-16">
           <div>
-            <Eyebrow>STRATEGY TESTING</Eyebrow>
+            <Eyebrow>STRATEGY ENGINE</Eyebrow>
             <h2 className="mt-5 text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
-              Test on one symbol. Scan your whole list.
+              Backtest one symbol. Scan them all.
             </h2>
             <p className="mt-6 max-w-[440px] text-[14px] leading-[1.75] text-zinc-400">
-              A strategy is a rule tree: test it on one symbol, then run the same
-              rule across your whole watchlist in one batch. Each symbol comes back
-              with its own trades, win rate and signal.
+              Backtest on one symbol, then send the same rule across your whole
+              watchlist in one batch. Each symbol returns its own trades, win rate,
+              PnL and latest signal.
             </p>
           </div>
 
@@ -372,12 +371,12 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           <div>
             <Eyebrow>DESIGN DECISION</Eyebrow>
             <h2 className="mt-5 text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
-              A test engine that cannot see the future.
+              A backtest that cannot see the future.
             </h2>
             <p className="mt-6 max-w-[440px] text-[14px] leading-[1.75] text-zinc-400">
-              Forward-looking access is banned by design &mdash; indicators stay
-              blank until warm-up, and signals only ever come from a closed bar.
-              Replay and live scans run the exact same engine.
+              Forward-looking access is banned by design: indicators stay blank
+              until warm-up, signals only ever come from a closed bar. Backtest,
+              scan and replay share one engine.
             </p>
           </div>
 
@@ -471,8 +470,8 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
             Early access list
           </h2>
           <p className="mx-auto mt-4 max-w-[420px] text-[14px] leading-[1.75] text-zinc-400">
-            Replay and the strategy engine work today. We&rsquo;ll email you when
-            the rest is ready.
+            The engine, replay and batch scans are already available. We&rsquo;ll
+            email you when the rest is ready.
           </p>
           <div className="mt-8 flex justify-center">
             <WaitlistForm source="footer" />

@@ -62,6 +62,7 @@ export async function getWindow(params: {
   anchor: number;
   barsBefore?: number;
   barsAfter?: number;
+  signal?: AbortSignal;
 }): Promise<MarketCandle[]> {
   const query = new URLSearchParams({
     provider: params.provider,
@@ -72,5 +73,7 @@ export async function getWindow(params: {
   if (params.barsBefore !== undefined) query.set('bars_before', String(params.barsBefore));
   if (params.barsAfter !== undefined) query.set('bars_after', String(params.barsAfter));
 
-  return request<MarketCandle[]>(`${API_BASE}/window?${query.toString()}`);
+  return request<MarketCandle[]>(`${API_BASE}/window?${query.toString()}`, {
+    signal: params.signal,
+  });
 }

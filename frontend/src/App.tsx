@@ -48,6 +48,13 @@ const QUICK_WINDOW_DAYS: Record<string, number> = {
   '1mo': 3650,
 };
 
+// Replay'de veri, konuma çapalı bir PENCERE olarak gelir (bkz. handleLoadChart).
+// O pencere ilk boyamayı hızlı tutmak için dardır; manuel backtest içinse konumun
+// gerisi dar kalmamalı — "geriye 500 mum" ile sağlıklı test yapılamıyordu.
+// Pencere ekrana çizildikten sonra bu kadar mum daha, arkaplanda ve ekrandaki en
+// eski muma çapalanarak geriye doğru eklenir (backend'de bars_before tavanı 5000).
+const REPLAY_HISTORY_BARS = 5000;
+
 function App() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -118,31 +125,44 @@ function App() {
     chartSettingsApi.toggleActiveIndicator(key);
   };
 
+  // chartData'nın senkron kopyası + tek yazma noktası.
+  //
+  // Birleştirme, güncel diziyi setChartData(prev => ...) içinden okuyamaz:
+  // React StrictMode güncelleyici fonksiyonu iki kez çağırıyor ve içerideki
+  // replay index kaydırması iki kez uygulanıyordu (imleç sessizce ileri sıçrar).
+  //
+  // Ref render beklenmeden yazılır: yeni pencere ekrana verildikten milisaniyeler
+  // sonra dönen bir arkaplan yanıtı, aksi halde bir ÖNCEKİ sembolün dizisiyle
+  // birleşirdi (önbellekten dönen istekler bu kadar hızlı).
+  const chartDataRef = useRef<CandleData[]>([]);
+  const applyChartData = useCallback((data: CandleData[]) => {
+    chartDataRef.current = data;
+    setChartData(data);
+  }, []);
+
   // Arkaplanda gelen daha eski mumları mevcut chartData'nın başına ekler.
   // Replay aktifse currentIndex/cutoffIndex, chartData içindeki index'lere
   // referans verdiğinden, başa eklenen mum sayısı kadar kaydırılır — aksi
   // halde replay konumu sessizce yanlış muma kayar.
   const mergeOlderData = useCallback((olderData: CandleData[]) => {
-    setChartData((prev) => {
-      if (prev.length === 0 || olderData.length === 0) return prev;
-      const existingTimes = new Set(prev.map((c) => c.time));
-      const newBars = olderData.filter((c) => !existingTimes.has(c.time));
-      if (newBars.length === 0) return prev;
+    const prev = chartDataRef.current;
+    if (prev.length === 0 || olderData.length === 0) return;
 
-      const merged = [...newBars, ...prev].sort((a, b) => a.time - b.time);
-      const addedCount = merged.length - prev.length;
+    const existingTimes = new Set(prev.map((c) => c.time));
+    const newBars = olderData.filter((c) => !existingTimes.has(c.time));
+    if (newBars.length === 0) return;
 
-      const rs = replayStore.getState();
-      if (rs.currentIndex !== null || rs.cutoffIndex !== null) {
-        replayStore.setState((s) => ({
-          currentIndex: s.currentIndex !== null ? s.currentIndex + addedCount : s.currentIndex,
-          cutoffIndex: s.cutoffIndex !== null ? s.cutoffIndex + addedCount : s.cutoffIndex,
-        }));
-      }
+    const merged = [...newBars, ...prev].sort((a, b) => a.time - b.time);
+    applyChartData(merged);
 
-      return merged;
-    });
-  }, []);
+    const rs = replayStore.getState();
+    if (rs.currentIndex !== null || rs.cutoffIndex !== null) {
+      replayStore.setState((s) => ({
+        currentIndex: s.currentIndex !== null ? s.currentIndex + newBars.length : s.currentIndex,
+        cutoffIndex: s.cutoffIndex !== null ? s.cutoffIndex + newBars.length : s.cutoffIndex,
+      }));
+    }
+  }, [applyChartData]);
 
   const loadOlderDataInBackground = useCallback((params: {
     provider: string;
@@ -168,6 +188,47 @@ function App() {
       .catch((err: any) => {
         if (err?.name === 'AbortError') return;
         console.error("Background historical fetch failed:", err);
+      })
+      .finally(() => {
+        if (bgControllerRef.current === controller) {
+          setIsBackgroundLoading(false);
+          bgControllerRef.current = null;
+        }
+      });
+  }, [mergeOlderData]);
+
+  // Replay penceresinin gerisini arkaplanda derinleştirir.
+  //
+  // Çapa olarak ekrandaki EN ESKİ mum kullanılır: böylece yalnızca onun gerisi
+  // istenir, elde olan aralık ikinci kez indirilmez. Sonuç mergeOlderData ile
+  // başa eklenir — orası replay index'lerini de kaydırdığı için konum kaymaz.
+  const loadOlderWindowInBackground = useCallback((params: {
+    provider: string;
+    symbol: string;
+    timeframe: string;
+    oldestTime: number;
+  }) => {
+    const controller = new AbortController();
+    bgControllerRef.current = controller;
+    setIsBackgroundLoading(true);
+
+    getWindow({
+      provider: params.provider,
+      symbol: params.symbol,
+      timeframe: params.timeframe,
+      anchor: params.oldestTime,
+      barsBefore: REPLAY_HISTORY_BARS,
+      barsAfter: 1,
+      signal: controller.signal,
+    })
+      .then((older) => {
+        if (controller.signal.aborted) return;
+        mergeOlderData(older);
+      })
+      .catch((err: any) => {
+        // İptal edilmiş istek: sembol/zaman dilimi değişti, sonucu birleştirme.
+        if (controller.signal.aborted || err?.name === 'AbortError') return;
+        console.error('Replay geçmiş penceresi yüklenemedi:', err);
       })
       .finally(() => {
         if (bgControllerRef.current === controller) {
@@ -208,15 +269,23 @@ function App() {
         if (signal.aborted) return;
         if (candles.length === 0) {
           setError('Bu zaman diliminde replay konumu için veri bulunamadı.');
-          setChartData([]);
+          applyChartData([]);
         } else {
-          setChartData(candles);
+          applyChartData(candles);
+          // Pencere ekranda ve işlem yapılabilir durumda; konumun gerisini
+          // arkaplanda derinleştir (bkz. REPLAY_HISTORY_BARS).
+          loadOlderWindowInBackground({
+            provider,
+            symbol,
+            timeframe,
+            oldestTime: candles[0].time,
+          });
         }
       } catch (err: any) {
         if (err?.name === 'AbortError') return;
         console.error('Replay penceresi yüklenemedi:', err);
         setError(err?.message || 'Sunucu bağlantı hatası.');
-        setChartData([]);
+        applyChartData([]);
       } finally {
         if (!signal.aborted) setLoading(false);
       }
@@ -249,9 +318,9 @@ function App() {
       console.log(`Fetched ${data.length} data points.`);
       if (data.length === 0) {
         setError('Belirtilen tarih aralığında veri bulunamadı. Lütfen önce bu veriyi indirdiğinizden emin olun.');
-        setChartData([]);
+        applyChartData([]);
       } else {
-        setChartData(data);
+        applyChartData(data);
         // Grafik artık görünür/işlem yapılabilir durumda — kalan geçmiş veriyi
         // arkaplanda çekmeye devam et (sıçrama olmadan başa eklenecek).
         if (needsBackgroundExtend) {
@@ -265,11 +334,11 @@ function App() {
       if (err?.name === 'AbortError') return;
       console.error("Fetch data failed:", err);
       setError(err.message || 'Sunucu bağlantı hatası.');
-      setChartData([]);
+      applyChartData([]);
     } finally {
       if (!signal.aborted) setLoading(false);
     }
-  }, [provider, symbol, timeframe, start, end, isAuthenticated, loadOlderDataInBackground]);
+  }, [provider, symbol, timeframe, start, end, isAuthenticated, applyChartData, loadOlderDataInBackground, loadOlderWindowInBackground]);
 
   // Girdiler değiştiğinde grafiği otomatik olarak yükle (sembol yazımı için debounce uygulandı).
   // AbortController: bir önceki (henüz tamamlanmamış) istek burada iptal edilir; aksi halde

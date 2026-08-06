@@ -12,15 +12,25 @@ from .providers.nasdaq import NasdaqProvider
 from .providers.bist import BistProvider
 from .providers.forex import ForexProvider
 
-# Replay penceresinin varsayılan ölçüleri. Toplam ~1500 mum, sağlayıcıdan iki
-# sayfa (sayfa başına 1000 mum) demek — ölçümde ~1 saniye.
+# Replay penceresinin varsayılan ölçüleri — ilk boyamada gösterilen "hızlı"
+# pencere. Toplam ~2500 mum, sağlayıcıdan üç sayfa (sayfa başına 1000 mum) demek.
 #
-# Arkadaki pay göstergelerin ısınması içindir: en uzun periyot 200 (EMA200)
-# olduğundan 500 rahat yeter. Öndeki pay replay'in ilerleyebileceği mesafedir;
-# 1000 mum, 1 sn/mum hızda ~16 dakikalık kesintisiz oynatma demek, bu sürede
-# bir sonraki pencere arkaplanda çoktan yüklenir.
-WINDOW_BARS_BEFORE = 500
+# Arkadaki pay yalnızca gösterge ısınması değil, kullanıcının konumun gerisini
+# GÖREBİLMESİ içindir: 500 mumla manuel backtest yapılamıyordu. Bu pencere de
+# nihai derinlik değil — istemci ilk pencereyi çizdikten sonra arkaplanda daha
+# geriye doğru genişletiyor (bkz. frontend REPLAY_HISTORY_BARS), böylece ilk
+# görüntü hızlı gelirken geçmiş derinliği de kısıtlı kalmıyor.
+#
+# Öndeki pay replay'in ilerleyebileceği mesafedir; 1000 mum, 1 sn/mum hızda
+# ~16 dakikalık kesintisiz oynatma demek.
+WINDOW_BARS_BEFORE = 1500
 WINDOW_BARS_AFTER = 1000
+
+# Pencere başlangıcının inebileceği en eski tarih. `bars_before` büyük ve zaman
+# dilimi kabaysa (5000 haftalık = ~96 yıl) hesap 1970 öncesine düşebiliyor;
+# `datetime.timestamp()` orada Windows'ta OSError fırlatıyor. Piyasa verisi bu
+# tarihin gerisine zaten uzanmadığı için taban veri kaybına yol açmaz.
+WINDOW_MIN_START = datetime(1971, 1, 1)
 
 # Bellekte tutulacak azami pencere sayısı (RULES.md #24: sınırsız ham veri
 # biriktirmek yasak). Bir pencere ~1500 satır, yani birkaç yüz KB.
@@ -46,6 +56,37 @@ def timeframe_delta(timeframe: str) -> timedelta:
     if delta is None:
         raise ValueError(f"Bilinmeyen zaman dilimi: {timeframe}")
     return delta
+
+
+# Mum sayısını tarihe çevirirken piyasanın KAPALI olduğu zamanı telafi eden pay.
+#
+# `anchor - delta * bars` yalnızca 7/24 çalışan bir piyasada doğru: Binance'te
+# 500 saat geriye gitmek 500 mumdur. BIST/NASDAQ'ta ise günde ~7-8 saat ve
+# haftada 5 gün işlem olduğu için aynı hesap 500 mum yerine ~145 mum getiriyordu;
+# günlükte 500 takvim günü ~345 işlem gününe denk geliyor (kullanıcının gördüğü
+# "345 mum" tam olarak buydu). İstenen ölçü takvim değil MUM sayısı olduğundan
+# aralık bu katsayıyla genişletilir, sonuç `_trim_window` ile tam sayıya indirilir.
+_INTRADAY_TIMEFRAMES = ("1m", "5m", "15m", "1h", "4h")
+
+
+def calendar_stretch(provider_name: str, timeframe: str) -> float:
+    provider_name = provider_name.lower()
+    intraday = timeframe in _INTRADAY_TIMEFRAMES
+
+    # Kripto 7/24: takvim ile mum birebir örtüşür.
+    if provider_name == "binance":
+        return 1.0
+
+    # Forex hafta sonu kapalı, gün içinde kesintisiz (7/5 ≈ 1.4; tatil payıyla).
+    if provider_name in ("forex", "fx"):
+        return 1.6
+
+    # Hisse senedi: hafta sonu + resmi tatil + seans saatleri.
+    # NASDAQ gün içi en dar durum: 168 takvim saati / (6.5 sa × 5 gün) ≈ 5.2.
+    if intraday:
+        return 6.0
+    # Günlük ve üzeri: 365 / ~250 işlem günü ≈ 1.46; tatil payıyla.
+    return 1.7
 
 
 class DataLoader:
@@ -166,20 +207,43 @@ class DataLoader:
         Sonuç ana parquet'e YAZILMAZ: yazmak bitişikliği bozardı ve retention
         budaması pencereyi anında silerdi. Bunun yerine süreç içi sınırlı bir
         LRU'da tutulur (RULES.md #24: sınırsız ham veri biriktirmek yasak).
-        """
-        delta = timeframe_delta(timeframe)
-        start_time = anchor - delta * bars_before
-        end_time = anchor + delta * bars_after
 
-        # 1. Ana önbellek bu aralığı zaten kapsıyorsa oradan kes: ağa hiç çıkma.
+        `bars_before`/`bars_after` MUM sayısıdır, takvim süresi değil: kapalı
+        piyasalarda aralık `calendar_stretch` ile genişletilir ve sonuç istenen
+        sayıya indirilir.
+        """
+        # Hisse/forex sağlayıcıları 4h'i doğrudan vermez; `load_data` gibi burada
+        # da 1h'ten yeniden örneklenir. Aksi halde replay sürerken 4h'e geçmek
+        # "Unsupported timeframe" ile 400 dönüyordu.
+        if provider_name.lower() in ("nasdaq", "bist", "forex", "fx") and timeframe == "4h":
+            df_1h = self.get_window(
+                provider_name, symbol, "1h", anchor, bars_before * 4, bars_after * 4
+            )
+            if df_1h.empty:
+                return df_1h
+            return self._trim_window(
+                self.resample_ohlcv(df_1h, "4h"), anchor, bars_before, bars_after
+            )
+
+        delta = timeframe_delta(timeframe)
+        stretch = calendar_stretch(provider_name, timeframe)
+        start_time = max(anchor - delta * int(bars_before * stretch + 1), WINDOW_MIN_START)
+        end_time = anchor + delta * int(bars_after * stretch + 1)
+
+        # 1. Ana önbellek bu kadar mumu zaten taşıyorsa oradan kes: ağa hiç çıkma.
         #    Kaba zaman dilimleri (1g/1h) tüm geçmişi taşıdığı için çoğu geçiş
         #    bu daldan döner ve anlık gelir.
-        cached = self._read_cache_if_covers(provider_name, symbol, timeframe, start_time, end_time)
+        cached = self._read_cache_window(
+            provider_name, symbol, timeframe, anchor, bars_before, bars_after, start_time
+        )
         if cached is not None:
             return cached
 
+        # Önbellek anahtarı İSTENEN ölçülerden üretilir (tarihlerden değil):
+        # aşağıdaki genişletme denemesi start_time'ı değiştirebiliyor, anahtar
+        # tarihe bağlı olsaydı aynı istek her seferinde ıskalardı.
         cache_key = self._window_cache_key(
-            provider_name, symbol, timeframe, start_time, end_time
+            provider_name, symbol, timeframe, anchor, bars_before, bars_after
         )
         with self._window_lock:
             hit = self._window_cache.get(cache_key)
@@ -195,6 +259,28 @@ class DataLoader:
 
         df = df.sort_values("timestamp").reset_index(drop=True)
 
+        # Tatil yoğunluğu tahmini aşmışsa istenen mum sayısı dolmamış olabilir:
+        # eksik oranında genişletilmiş bir aralıkla BİR kez daha dene.
+        #
+        # Yalnızca veri SOL SINIRDA kesilmişse denenir. Dönen ilk mum istenen
+        # başlangıcın belirgin şekilde ilerisindeyse sebep katsayı değil,
+        # sağlayıcının geçmişinin bitmiş olmasıdır (BTCUSDT 2017'de başlar);
+        # o durumda genişletmek yalnızca boşa bir istek daha demektir.
+        got_before = int((df["timestamp"] <= anchor).sum())
+        cut_at_left_edge = df["timestamp"].min() <= start_time + delta * int(20 * stretch)
+        if 0 < got_before < bars_before and cut_at_left_edge:
+            factor = min(bars_before / got_before, 4.0)
+            # datetime.timestamp() 1970 öncesi tarihlerde Windows'ta OSError
+            # fırlatıyor; taban olmadan uzun geçmişli semboller sağlayıcıyı
+            # geçersiz bir tarihle çağırıyordu.
+            wider_start = max(anchor - (anchor - start_time) * factor, WINDOW_MIN_START)
+            if wider_start < start_time:
+                retry = provider.fetch_ohlcv(symbol, timeframe, wider_start, end_time)
+                if retry is not None and len(retry) > len(df):
+                    df = retry.sort_values("timestamp").reset_index(drop=True)
+
+        df = self._trim_window(df, anchor, bars_before, bars_after)
+
         with self._window_lock:
             self._window_cache[cache_key] = df
             self._window_cache.move_to_end(cache_key)
@@ -209,41 +295,73 @@ class DataLoader:
         provider_name: str,
         symbol: str,
         timeframe: str,
-        start_time: datetime,
-        end_time: datetime,
+        anchor: datetime,
+        bars_before: int,
+        bars_after: int,
     ) -> tuple:
-        return (provider_name.lower(), symbol.upper(), timeframe, start_time, end_time)
+        return (
+            provider_name.lower(),
+            symbol.upper(),
+            timeframe,
+            anchor,
+            bars_before,
+            bars_after,
+        )
 
-    def _read_cache_if_covers(
+    @staticmethod
+    def _trim_window(
+        df: pd.DataFrame, anchor: datetime, bars_before: int, bars_after: int
+    ) -> pd.DataFrame:
+        """
+        Pencereyi çapanın iki yanında İSTENEN MUM SAYISINA indirir.
+
+        Aralık `calendar_stretch` yüzünden bilerek geniş isteniyor; dönen pencere
+        boyutu buna göre dalgalanmasın diye burada kesiliyor. Çapa mumunun kendisi
+        "geride" sayılır: replay'in o an durduğu mumdur, pencerede bulunmalıdır.
+        """
+        before = df[df["timestamp"] <= anchor].tail(bars_before)
+        after = df[df["timestamp"] > anchor].head(bars_after)
+        return pd.concat([before, after], ignore_index=True)
+
+    def _read_cache_window(
         self,
         provider_name: str,
         symbol: str,
         timeframe: str,
+        anchor: datetime,
+        bars_before: int,
+        bars_after: int,
         start_time: datetime,
-        end_time: datetime,
     ) -> pd.DataFrame | None:
         """
-        Ana parquet istenen aralığı tümüyle kapsıyorsa ilgili dilimi döndürür.
+        Ana parquet istenen mumları taşıyorsa pencereyi oradan keser.
 
-        Kapsamıyorsa `None` döner — "veri yok" değil, "buradan karşılanamaz"
+        Yeterlilik ölçütü mum SAYISIDIR: önbellek çapanın gerisinde `bars_before`
+        mum verebiliyorsa, dosyanın başlangıcı `start_time`'ın gerisine uzanmasa
+        bile bu dilim işimizi görür (genişletilmiş takvim aralığını birebir aramak
+        elde yeterli veri varken boş yere sağlayıcıya çıkmak olurdu).
+
+        Karşılanamıyorsa `None` döner — "veri yok" değil, "buradan karşılanamaz"
         demektir; çağıran taraf sağlayıcıya gider.
         """
         cache_path = self._get_cache_path(provider_name, symbol, timeframe)
         if not os.path.exists(cache_path):
             return None
 
-        # Önce YALNIZCA timestamp sütununu okuyup kapsama bak. Tüm dosyayı okuyup
-        # sonra "kapsamıyor" demek pahalıya patlıyordu: 5m önbelleği 100.000 satır
+        # Önce YALNIZCA timestamp sütununu okuyup yeterliliğe bak. Tüm dosyayı okuyup
+        # sonra "yetmiyor" demek pahalıya patlıyordu: 5m önbelleği 100.000 satır
         # ve o gereksiz okuma tek başına ölçümde ~1,6 s ekliyordu.
         try:
-            stamps = pd.read_parquet(cache_path, columns=["timestamp"])
+            stamps = pd.to_datetime(pd.read_parquet(cache_path, columns=["timestamp"])["timestamp"])
         except Exception:
             return None
 
         if stamps.empty:
             return None
 
-        if pd.to_datetime(stamps["timestamp"]).min() > start_time:
+        # Önbellek yeterli sayıda geçmiş mum taşımıyor VE dosyanın başı istenen
+        # aralığın gerisine de uzanmıyorsa, geride daha fazlası olabilir: sağlayıcıya git.
+        if int((stamps <= anchor).sum()) < bars_before and stamps.min() > start_time:
             return None
 
         try:
@@ -256,9 +374,8 @@ class DataLoader:
 
         df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-        # Sağ uç, önbelleğin sonunu aşabilir: "şimdi"nin ötesi zaten yok. Yalnızca
-        # sol uç (geçmiş) kapsanıyorsa bu dilim işimizi görür.
-        sliced = df[(df["timestamp"] >= start_time) & (df["timestamp"] <= end_time)]
+        # Sağ uç, önbelleğin sonunu aşabilir: "şimdi"nin ötesi zaten yok.
+        sliced = self._trim_window(df.sort_values("timestamp"), anchor, bars_before, bars_after)
         if sliced.empty:
             return None
         return sliced.reset_index(drop=True)

@@ -36,6 +36,18 @@ WINDOW_MIN_START = datetime(1971, 1, 1)
 # biriktirmek yasak). Bir pencere ~1500 satır, yani birkaç yüz KB.
 WINDOW_CACHE_MAX = 40
 
+# Çapa, sağlayıcının o zaman dilimindeki geçmişinden de eskiyse pencere boş
+# dönüyordu (kullanıcı tarafında "Veri Yüklenemedi" ekranı): 1g'de 2019'a kesip
+# 15dk'ya geçmek tipik durum — Yahoo 15dk'da yalnızca son ~58 günü veriyor.
+# Bu durumda pencere, o zaman diliminin EN ESKİ mumuna çapalanarak döner;
+# istemci konumu oraya taşıyıp uyarı gösterir (bkz. `_earliest_window`).
+#
+# Yoklama "şimdi"den geriye bu kadar MUM ister. Sağlayıcıların kendi tavanı
+# (Yahoo: 1dk 6 gün, 15dk 58 gün, 1s 700 gün) bu aralığın içinde kaldığı için
+# tek istekte gerçekten en eski muma ulaşılır; tavanı olmayan sağlayıcılarda
+# (Binance) da indirme bu sayıyla sınırlı kalır, tüm geçmiş inmez.
+EARLIEST_PROBE_BARS = 5000
+
 # Bir mumun süresi. Pencerenin sınırlarını mum SAYISINDAN tarihe çevirmek için
 # gerekli; tarih aralığıyla çalışmak zaman dilimi değiştikçe mum sayısını
 # öngörülemez kılıyordu (aynı 30 gün 1g'de 30, 5dk'da 8640 mum).
@@ -191,6 +203,35 @@ class DataLoader:
         bars_after: int = WINDOW_BARS_AFTER,
     ) -> pd.DataFrame:
         """
+        `anchor` etrafındaki pencere; çapa sağlayıcının geçmişinden eskiyse
+        bunun yerine o zaman dilimindeki EN ESKİ muma çapalanmış pencere.
+
+        Boş dönmek yerine geri çekilmenin sebebi: replay'de düşük bir zaman
+        dilimine geçildiğinde (o dilim çok daha kısa geçmiş taşır) kullanıcı
+        hata ekranında kalıp elle tarih düzeltmek zorunda kalıyordu. Dönen
+        pencerenin TAMAMI çapanın ilerisindedir; istemci bunu görüp konumu
+        oraya taşır ve uyarı gösterir (bkz. frontend App.tsx replay dalı).
+        """
+        df = self._window_at(
+            provider_name, symbol, timeframe, anchor, bars_before, bars_after
+        )
+        if not df.empty:
+            return df
+
+        return self._earliest_window(
+            provider_name, symbol, timeframe, anchor, bars_before, bars_after
+        )
+
+    def _window_at(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        anchor: datetime,
+        bars_before: int = WINDOW_BARS_BEFORE,
+        bars_after: int = WINDOW_BARS_AFTER,
+    ) -> pd.DataFrame:
+        """
         `anchor` etrafındaki sabit sayıda mumu döndürür — replay için.
 
         Neden `load_data` yetmiyor: parquet önbelleği BİTİŞİK bir aralık olmak
@@ -289,6 +330,60 @@ class DataLoader:
                 self._window_cache.popitem(last=False)
 
         return df.copy()
+
+    def _earliest_window(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        anchor: datetime,
+        bars_before: int,
+        bars_after: int,
+    ) -> pd.DataFrame:
+        """
+        Sağlayıcının bu zaman diliminde verdiği EN ESKİ muma çapalanmış pencere.
+
+        Yalnızca `_window_at` boş döndüğünde çağrılır. "Şimdi"den geriye tek bir
+        geniş istek atılır (bkz. EARLIEST_PROBE_BARS): kendi tavanı olan
+        sağlayıcılar isteği zaten kırptığı için dönen ilk mum gerçekten
+        ulaşılabilen en eski mumdur.
+
+        Dönen mumların hepsi çapadan YENİ değilse boş döner: o zaman boşluğun
+        sebebi geçmişin bitmesi değil başka bir sorundur (sembol hatası, geçici
+        sağlayıcı arızası) ve kullanıcıyı sessizce alakasız bir tarihe taşımak
+        yerine hatanın görünmesi doğru olur.
+        """
+        empty = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+        try:
+            delta = timeframe_delta(timeframe)
+        except ValueError:
+            return empty
+
+        stretch = calendar_stretch(provider_name, timeframe)
+        now = datetime.now()
+        probe_start = max(
+            now - delta * int(EARLIEST_PROBE_BARS * stretch), WINDOW_MIN_START
+        )
+
+        try:
+            provider = self.get_provider(provider_name)
+            df = provider.fetch_ohlcv(symbol, timeframe, probe_start, now)
+        except Exception as exc:
+            # Geri çekilme yolu "olsa iyi olur" niteliğinde: burada patlamak,
+            # asıl istekteki boş sonucu bir 500'e çevirmek olurdu.
+            print(f"En eski mum yoklaması başarısız ({symbol} {timeframe}): {exc}")
+            return empty
+
+        if df is None or df.empty:
+            return empty
+
+        df = df.sort_values("timestamp").reset_index(drop=True)
+        earliest = df["timestamp"].min()
+        if earliest <= anchor:
+            return empty
+
+        return self._trim_window(df, earliest, bars_before, bars_after).reset_index(drop=True)
 
     def _window_cache_key(
         self,

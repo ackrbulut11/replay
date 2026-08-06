@@ -119,6 +119,38 @@ class TestGetWindow(unittest.TestCase):
         self.assertEqual(provider.calls, 1)
         self.assertEqual(len(first), len(second))
 
+    def test_capa_gecmisin_gerisindeyse_en_eski_muma_cekilir(self):
+        """
+        Replay konumu, sağlayıcının o zaman dilimindeki geçmişinden eskiyse
+        (1g'de 2019'a kesip 15dk'ya geçmek) pencere boş dönüyordu ve kullanıcı
+        "Veri Yüklenemedi" ekranında kalıyordu. Artık en eski muma çekilir.
+        """
+        history_start = datetime.now() - timedelta(days=40)
+        loader = make_loader(FakeProvider(history_start=history_start), "binance")
+        anchor = datetime(2019, 1, 1)
+
+        df = loader.get_window("binance", "TEST", "1d", anchor, bars_before=300, bars_after=100)
+
+        self.assertFalse(df.empty)
+        # Pencerenin TAMAMI çapanın ilerisinde: istemci bunu "konum bu dilimde
+        # yok, en eski muma taşındı" olarak okuyup uyarı gösterir.
+        self.assertTrue(bool((df["timestamp"] > anchor).all()))
+        self.assertEqual(df["timestamp"].min().date(), history_start.date())
+
+    def test_veri_hic_yoksa_bos_doner(self):
+        """Geri çekilme yolu, gerçek bir "veri yok" durumunu maskelememeli."""
+
+        class BosProvider:
+            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
+                return pd.DataFrame(
+                    columns=["timestamp", "open", "high", "low", "close", "volume"]
+                )
+
+        loader = make_loader(BosProvider(), "binance")
+        df = loader.get_window("binance", "TEST", "1d", datetime(2019, 1, 1))
+
+        self.assertTrue(df.empty)
+
     def test_taban_1970_oncesine_inmez(self):
         """5000 haftalık ~96 yıl geriye düşüyordu; timestamp() orada patlıyor."""
         provider = FakeProvider()

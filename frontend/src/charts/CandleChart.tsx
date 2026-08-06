@@ -61,6 +61,9 @@ interface CandleChartProps {
   setEnd: (v: string) => void;
   loading?: boolean;
   error?: string | null;
+  /** Grafiği engellemeyen bilgilendirme şeridi (bkz. App.tsx `notice`). */
+  notice?: string | null;
+  onDismissNotice?: () => void;
   onOpenSearchModal?: () => void;
   onSelectTab?: (tab: any) => void;
 }
@@ -109,6 +112,8 @@ export default function CandleChart({
   setEnd,
   loading = false,
   error = null,
+  notice = null,
+  onDismissNotice,
   onOpenSearchModal,
   onSelectTab,
 }: CandleChartProps) {
@@ -2658,6 +2663,24 @@ export default function CandleChart({
         <div className="absolute top-28 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-full shadow-lg border border-amber-300/50 backdrop-blur-md animate-bounce flex items-center gap-2 select-none pointer-events-none">
           <Scissors className="w-4 h-4" />
           <span>Grafikte kestirmek istediğiniz muma tıklayın!</span>
+        </div>
+      )}
+
+      {/* Bilgilendirme Şeridi — hata değil: veri var ama istenen yerde değil
+          (ör. replay konumu bu zaman diliminde yok, en eski muma taşındı).
+          Grafiği kapatmaz; kullanıcı kapatabilir, sonraki yüklemede sıfırlanır. */}
+      {notice && !loading && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 max-w-xl flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <span className="text-amber-100/90 text-xs leading-relaxed">{notice}</span>
+          <button
+            type="button"
+            title="Kapat"
+            onClick={onDismissNotice}
+            className="p-0.5 text-amber-200/60 hover:text-amber-100 transition-colors shrink-0 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

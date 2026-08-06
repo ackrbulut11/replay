@@ -66,6 +66,31 @@ const REPLAY_HISTORY_BARS = 5000;
 const REPLAY_FORWARD_TRIGGER = 300;
 const REPLAY_FORWARD_BARS = 2000;
 
+const INTRADAY_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h'];
+
+/**
+ * Bir mumun zamanını kullanıcıya yazdırır.
+ *
+ * UTC kullanılır: lightweight-charts zaman eksenini varsayılan olarak UTC
+ * yazıyor (grafikte localization ayarı yok), yerel saatle biçimlendirmek
+ * metni eksendeki mumdan saatlerce kaydırırdı.
+ *
+ * Gün içi dilimlerde saat de yazılır — aynı gün içindeki bir konum yalnızca
+ * tarihle belirsiz kalırdı. Gün başına denk gelen (günlük ve üzeri dilimlerden
+ * gelmiş) zaman damgalarında saat "00:00" gürültüsü yazılmaz.
+ */
+function formatBarTime(timeSec: number, timeframe: string): string {
+  const date = new Date(timeSec * 1000);
+  const day = date.toLocaleDateString('tr-TR', { timeZone: 'UTC' });
+  if (!INTRADAY_TIMEFRAMES.includes(timeframe) || timeSec % 86400 === 0) return day;
+  const time = date.toLocaleTimeString('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  });
+  return `${day} ${time}`;
+}
+
 function App() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -88,6 +113,10 @@ function App() {
   const [chartData, setChartData] = useState<CandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Grafiği engellemeyen bilgilendirme (ör. replay konumu bu zaman diliminde
+  // yok, en eski muma taşındı). Hatadan farkı: veri VAR, sadece istenen yerde
+  // değil — bu yüzden tam ekran hata katmanı değil, kapatılabilir bir şerit.
+  const [notice, setNotice] = useState<string | null>(null);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
   const bgControllerRef = useRef<AbortController | null>(null);
@@ -319,6 +348,7 @@ function App() {
 
     setLoading(true);
     setError(null);
+    setNotice(null);
 
     // ─── Replay: konuma çapalı pencere ──────────────────────────────────────
     // Replay sürerken tarih aralığıyla veri istemek maliyeti "konum ne kadar
@@ -328,17 +358,36 @@ function App() {
     // mum çekiyor — ölçümde 2019 da 2022 de ~0,65 s.
     const replayPos = replayStore.getState();
     if (replayPos.isReplayActive && replayPos.targetTimestamp !== null) {
+      const target = replayPos.targetTimestamp;
       try {
         const candles = await getWindow({
           provider,
           symbol,
           timeframe,
-          anchor: replayPos.targetTimestamp,
+          anchor: target,
         });
         if (signal.aborted) return;
         if (candles.length === 0) {
           setError('Bu zaman diliminde replay konumu için veri bulunamadı.');
           applyChartData([]);
+        } else if (candles[0].time > target) {
+          // Pencerenin TAMAMI konumun ilerisinde: backend, çapa sağlayıcının
+          // geçmişinden eski olduğu için en eski muma çapalanmış pencere döndü
+          // (bkz. loader `_earliest_window`). Eskiden burada hata ekranı
+          // gösteriliyordu; onun yerine konumu bu zaman diliminin gidebildiği
+          // en eski muma taşı ve durumu şeritle bildir.
+          applyChartData(candles);
+          replayStore.setState({
+            targetTimestamp: candles[0].time,
+            currentIndex: 0,
+            cutoffIndex: 0,
+            isPlaying: false,
+          });
+          setNotice(
+            `${timeframe} için replay konumuna (${formatBarTime(target, timeframe)}) ait veri yok — ` +
+              `bu zaman diliminde ulaşılabilen en eski muma (${formatBarTime(candles[0].time, timeframe)}) geçildi.`
+          );
+          // Daha eskisi yok: arkaplan derinleştirmesi boşuna istek olurdu.
         } else {
           applyChartData(candles);
           // Pencere ekranda ve işlem yapılabilir durumda; konumun gerisini
@@ -586,6 +635,8 @@ function App() {
                 setEnd={setEnd}
                 loading={loading}
                 error={error}
+                notice={notice}
+                onDismissNotice={() => setNotice(null)}
                 onOpenSearchModal={() => setIsSearchModalOpen(true)}
                 onSelectTab={setActiveTab}
               />

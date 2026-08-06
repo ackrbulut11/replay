@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # düz string tutulup admin_emails üzerinden listeye çevriliyor.
     ADMIN_EMAILS: str = ""
 
+    # Twelve Data (ücretsiz plan) — Yahoo'nun intraday geçmiş sınırlarını (1h için
+    # 730 gün, 15dk için 58 gün...) aşan istekler için ikincil kaynak. Boş bırakılırsa
+    # ilgili sağlayıcılar (nasdaq/bist/forex) sessizce yalnızca Yahoo'ya döner —
+    # RETENTION_1H/1M gibi bir "yok" durumu değil, kapasite artışı.
+    TWELVE_API_KEY: str = ""
+
     # Veri Saklama Limitleri (Varsayılan bar sayıları)
     RETENTION_1M: int = 100000  # son birkaç ay
     RETENTION_1H: int = 20000   # son 1-2 yıl

@@ -55,6 +55,17 @@ const QUICK_WINDOW_DAYS: Record<string, number> = {
 // eski muma çapalanarak geriye doğru eklenir (backend'de bars_before tavanı 5000).
 const REPLAY_HISTORY_BARS = 5000;
 
+// İleri yön. Pencere ilerisi 1000 mumla bitiyor ve oynatma tam orada duruyordu
+// (CandleChart'ın playback timer'ı `nextIdx >= data.length` olunca isPlaying'i
+// kapatıyor) — replay'de zaman dilimi değiştiren biri 1000 mum sonra duvara
+// tosluyordu. İmleç sona TRIGGER mum kala bir sonraki dilim arkaplanda çekilir;
+// yetiştiği sürece oynatma hiç kesilmez.
+//
+// TRIGGER, en hızlı oynatma ayarında bile isteğin yetişeceği kadar geniş:
+// 300 mum × 100 ms = 30 sn.
+const REPLAY_FORWARD_TRIGGER = 300;
+const REPLAY_FORWARD_BARS = 2000;
+
 function App() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -164,6 +175,24 @@ function App() {
     }
   }, [applyChartData]);
 
+  // Yeni (ileri yöndeki) mumları dizinin SONUNA ekler ve eklenen sayıyı döndürür.
+  //
+  // Burada index kaydırması yoktur: currentIndex/cutoffIndex dizinin başından
+  // sayılır, sona eklemek onları etkilemez. Eklenen mumlar imlecin ilerisinde
+  // kaldığı için ekranda da görünmez — `visibleData` diziyi currentIndex'te
+  // kesiyor (lookahead sızıntısı yok, ileri tampon zaten böyle çalışıyordu).
+  const mergeNewerData = useCallback((newerData: CandleData[]) => {
+    const prev = chartDataRef.current;
+    if (prev.length === 0 || newerData.length === 0) return 0;
+
+    const lastTime = prev[prev.length - 1].time;
+    const newBars = newerData.filter((c) => c.time > lastTime);
+    if (newBars.length === 0) return 0;
+
+    applyChartData([...prev, ...newBars]);
+    return newBars.length;
+  }, [applyChartData]);
+
   const loadOlderDataInBackground = useCallback((params: {
     provider: string;
     symbol: string;
@@ -238,15 +267,55 @@ function App() {
       });
   }, [mergeOlderData]);
 
+  // İleri yön uzatması. Ayrı bir controller kullanır: geçmiş yüklemesiyle
+  // birbirlerini iptal etmemeleri gerekir, ikisi aynı anda sürebiliyor.
+  const forwardControllerRef = useRef<AbortController | null>(null);
+  // "Bu son mumun ilerisinde veri yok" işareti — anahtar son mumu içerdiği için
+  // canlı piyasada yeni mum oluştuğunda kendiliğinden geçersizleşir.
+  const forwardExhaustedRef = useRef<string | null>(null);
+
+  const extendReplayForward = useCallback((key: string, lastTime: number) => {
+    const controller = new AbortController();
+    forwardControllerRef.current = controller;
+
+    getWindow({
+      provider,
+      symbol,
+      timeframe,
+      anchor: lastTime,
+      barsBefore: 1,
+      barsAfter: REPLAY_FORWARD_BARS,
+      signal: controller.signal,
+    })
+      .then((newer) => {
+        if (controller.signal.aborted) return;
+        // Hiç yeni mum yoksa "şimdi"ye yetişilmiştir; aynı uçta ısrarla istek
+        // atmamak için işaretle.
+        if (mergeNewerData(newer) === 0) forwardExhaustedRef.current = key;
+      })
+      .catch((err: any) => {
+        if (controller.signal.aborted || err?.name === 'AbortError') return;
+        console.error('Replay ileri penceresi yüklenemedi:', err);
+      })
+      .finally(() => {
+        if (forwardControllerRef.current === controller) {
+          forwardControllerRef.current = null;
+        }
+      });
+  }, [provider, symbol, timeframe, mergeNewerData]);
+
   const handleLoadChart = useCallback(async (signal: AbortSignal) => {
     if (!isAuthenticated) return;
     console.log("Fetching market data for:", { provider, symbol, timeframe, start, end });
 
-    // Bir önceki arkaplan (geçmiş veri) isteği hâlâ sürüyorsa iptal et —
+    // Bir önceki arkaplan (geçmiş/ileri veri) isteği hâlâ sürüyorsa iptal et —
     // artık geçerli olmayan sembol/interval için sonuç birleştirilmesin.
     bgControllerRef.current?.abort();
     bgControllerRef.current = null;
     setIsBackgroundLoading(false);
+    forwardControllerRef.current?.abort();
+    forwardControllerRef.current = null;
+    forwardExhaustedRef.current = null;
 
     setLoading(true);
     setError(null);
@@ -378,8 +447,37 @@ function App() {
       clearTimeout(timer);
       controller.abort();
       bgControllerRef.current?.abort();
+      forwardControllerRef.current?.abort();
     };
   }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, replayExitCount.current]);
+
+  // İmleç yüklü verinin sonuna yaklaştıysa ileri yönü uzat.
+  //
+  // Replay'e girişte veri zaten "şimdi"ye kadar yüklü olduğundan ilk istek boş
+  // döner ve bir daha denenmez; asıl işe yaradığı yer replay sürerken sembol/
+  // zaman dilimi değişince gelen, ilerisi 1000 mumla biten penceredir.
+  useEffect(() => {
+    if (!replayState.isReplayActive || loading) return;
+    if (replayState.currentIndex === null || chartData.length === 0) return;
+    if (chartData.length - 1 - replayState.currentIndex > REPLAY_FORWARD_TRIGGER) return;
+    // Sürmekte olan bir uzatma varsa ikincisini başlatma.
+    if (forwardControllerRef.current) return;
+
+    const lastTime = chartData[chartData.length - 1].time;
+    const key = `${provider}|${symbol}|${timeframe}|${lastTime}`;
+    if (forwardExhaustedRef.current === key) return;
+
+    extendReplayForward(key, lastTime);
+  }, [
+    replayState.isReplayActive,
+    replayState.currentIndex,
+    chartData,
+    loading,
+    provider,
+    symbol,
+    timeframe,
+    extendReplayForward,
+  ]);
 
   if (isLoading) {
     return (

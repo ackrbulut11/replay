@@ -43,6 +43,8 @@ interface CandleData {
   low: number;
   close: number;
   volume: number;
+  /** Mumun geldiği zaman dilimi — yalnızca karma pencerede dolu (bkz. App.tsx). */
+  tf?: string;
 }
 
 interface CandleChartProps {
@@ -2490,6 +2492,20 @@ export default function CandleChart({
               <option value="1mo" className="bg-[#0a0b0e] text-zinc-100">1mo</option>
             </select>
           </div>
+
+          {/* Karma pencere rozeti — geçmiş bölüm başka bir dilimden geliyor.
+              Uyarı şeridi kapatılabildiği için kalıcı işaret burada durur:
+              kullanıcı ekrandaki eski mumların 4s değil 1g olduğunu görebilsin.
+              Kaba bölüm dizinin başındadır, ilk muma bakmak yeter. */}
+          {data.length > 0 && data[0].tf && data[0].tf !== timeframe && (
+            <div
+              className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1 text-[10px] font-medium text-amber-300 select-none"
+              title={`${timeframe} verisi replay konumuna kadar geriye uzanmıyor: geçmiş bölüm ${data[0].tf} mumlarıyla gösteriliyor, ${timeframe} verisinin başladığı tarihten sonrası ${timeframe}.`}
+            >
+              <AlertCircle className="w-3 h-3" />
+              Geçmiş: {data[0].tf}
+            </div>
+          )}
 
           {/* Grafik Tipi Seçimi (Mum / Çizgi) */}
           <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1">

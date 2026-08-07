@@ -4,7 +4,12 @@ from typing import Optional, List, Dict
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.data.loader import DataLoader, WINDOW_BARS_AFTER, WINDOW_BARS_BEFORE
+from app.data.loader import (
+    DataLoader,
+    SOURCE_TIMEFRAME_COLUMN,
+    WINDOW_BARS_AFTER,
+    WINDOW_BARS_BEFORE,
+)
 from app.data.symbols import get_symbols, search_symbols
 
 router = APIRouter(prefix="/market", tags=["market"])
@@ -113,11 +118,19 @@ def get_market_coverage(
 
 
 def _to_chart_candles(df) -> list[dict]:
-    """DataFrame'i lightweight-charts'ın beklediği biçime çevirir (zaman = saniye)."""
+    """
+    DataFrame'i lightweight-charts'ın beklediği biçime çevirir (zaman = saniye).
+
+    Karma pencerede (bkz. loader `_stitched_window`) her mum, geldiği zaman
+    dilimini `tf` alanıyla taşır; istemci dikişin nerede olduğunu buradan
+    anlar. Tek dilimli pencerelerde alan hiç eklenmez.
+    """
     if df is None or df.empty:
         return []
-    return [
-        {
+    tagged = SOURCE_TIMEFRAME_COLUMN in df.columns
+    candles = []
+    for _, row in df.iterrows():
+        candle = {
             "time": int(row["timestamp"].timestamp()),
             "open": float(row["open"]),
             "high": float(row["high"]),
@@ -125,8 +138,10 @@ def _to_chart_candles(df) -> list[dict]:
             "close": float(row["close"]),
             "volume": float(row["volume"]),
         }
-        for _, row in df.iterrows()
-    ]
+        if tagged:
+            candle["tf"] = str(row[SOURCE_TIMEFRAME_COLUMN])
+        candles.append(candle)
+    return candles
 
 
 @router.get("/window")
@@ -147,6 +162,11 @@ def get_market_window(
     aradaki tüm boşluğu indiriyor (15dk'da 2019 için ~210 sayfa, dakikalar).
     Burada her zaman `bars_before + bars_after` mum çekilir — ölçümde 2019 da
     2022 de 0,65 s.
+
+    Çapa, sağlayıcının bu zaman dilimindeki geçmişinden eskiyse pencere KARMA
+    döner: geçmiş bölüm bir üst zaman diliminden, ince mumların başladığı
+    tarihten sonrası istenen dilimden. O durumda her mum geldiği dilimi `tf`
+    alanıyla taşır (bkz. `_to_chart_candles`).
     """
     try:
         df = loader.get_window(

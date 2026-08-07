@@ -43,6 +43,13 @@ export interface MarketCandle {
   low: number;
   close: number;
   volume: number;
+  /**
+   * Mumun geldiği zaman dilimi. Yalnızca KARMA pencerede gelir: istenen dilimin
+   * geçmişi çapaya (replay konumuna) uzanmıyorsa backend geçmiş bölümü bir üst
+   * dilimin mumlarıyla doldurur, dikişten sonrası istenen dilime döner
+   * (bkz. backend `_stitched_window`). Tek dilimli pencerelerde alan yoktur.
+   */
+  tf?: string;
 }
 
 /**

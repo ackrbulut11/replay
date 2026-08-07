@@ -48,6 +48,33 @@ WINDOW_CACHE_MAX = 40
 # (Binance) da indirme bu sayıyla sınırlı kalır, tüm geçmiş inmez.
 EARLIEST_PROBE_BARS = 5000
 
+# Çapa, istenen zaman diliminin geçmişinden eskiyse pencerenin GEÇMİŞ bölümü
+# hangi zaman diliminden doldurulacak (bkz. `_stitched_window`).
+#
+# Kullanıcıyı en eski ince muma fırlatmak yerine, konumun bulunduğu geçmiş bir
+# üst dilimin mumlarıyla gösterilir; ince mumların başladığı tarihten sonrası
+# istenen dilime döner. Böylece replay konumu korunur ve geçmiş görünür kalır.
+#
+# Liste "kabaya doğru" sıralıdır ve yalnızca sağlayıcı tavanı belirgin şekilde
+# daha uzun olan dilimleri içerir (Yahoo: 1dk ~6 gün, 5dk/15dk ~58 gün,
+# 1s ~730 gün, 1g/1h sınırsız) — aynı tavana sahip bir dilimi denemek yalnızca
+# boşa bir istek olurdu. Sırayla denenir, çapayı kapsayan ilk dilim kullanılır.
+COMPOSITE_BASE_TIMEFRAMES = {
+    "1m": ("15m", "1h", "1d"),
+    "5m": ("1h", "1d"),
+    "15m": ("1h", "1d"),
+    "1h": ("1d",),
+    "4h": ("1d",),
+    "1d": ("1w",),
+    "1w": ("1mo",),
+    "1mo": (),
+}
+
+# Karma pencerede her mumun hangi zaman diliminden geldiğini taşıyan sütun.
+# İstemci dikişin nerede olduğunu buradan görür (uyarı metni + geçmişi
+# derinleştirirken hangi dilimin isteneceği).
+SOURCE_TIMEFRAME_COLUMN = "source_timeframe"
+
 # Bir mumun süresi. Pencerenin sınırlarını mum SAYISINDAN tarihe çevirmek için
 # gerekli; tarih aralığıyla çalışmak zaman dilimi değiştikçe mum sayısını
 # öngörülemez kılıyordu (aynı 30 gün 1g'de 30, 5dk'da 8640 mum).
@@ -203,24 +230,138 @@ class DataLoader:
         bars_after: int = WINDOW_BARS_AFTER,
     ) -> pd.DataFrame:
         """
-        `anchor` etrafındaki pencere; çapa sağlayıcının geçmişinden eskiyse
-        bunun yerine o zaman dilimindeki EN ESKİ muma çapalanmış pencere.
+        `anchor` etrafındaki pencere.
 
-        Boş dönmek yerine geri çekilmenin sebebi: replay'de düşük bir zaman
-        dilimine geçildiğinde (o dilim çok daha kısa geçmiş taşır) kullanıcı
-        hata ekranında kalıp elle tarih düzeltmek zorunda kalıyordu. Dönen
-        pencerenin TAMAMI çapanın ilerisindedir; istemci bunu görüp konumu
-        oraya taşır ve uyarı gösterir (bkz. frontend App.tsx replay dalı).
+        Çapa, sağlayıcının bu zaman dilimindeki geçmişinden eskiyse (1g'de
+        2019'a kesip 4s'e geçmek tipik durum — Yahoo 4s/1s'te yalnızca son
+        ~730 günü veriyor) pencere KARMA döner: geçmiş bölüm bir üst zaman
+        diliminin mumlarından, ince mumların başladığı tarihten sonrası ise
+        istenen dilimden (bkz. `_stitched_window`). Böylece replay konumu
+        korunur; kullanıcı hem geçmişi görür hem oynatmaya devam edebilir.
+
+        Üst dilim de yetmiyorsa son çare olarak istenen dilimin EN ESKİ mumuna
+        çapalanmış pencere döner — tamamı çapanın ilerisindedir; istemci bunu
+        görüp konumu oraya taşır ve uyarı gösterir (bkz. App.tsx replay dalı).
         """
-        df = self._window_at(
+        df = self._plain_window(
             provider_name, symbol, timeframe, anchor, bars_before, bars_after
         )
-        if not df.empty:
+        # Gerçekten veri yok (sembol hatası, sağlayıcı arızası) — sessizce
+        # başka bir tarih göstermek yerine hata görünsün.
+        if df.empty:
+            return df
+        # Olağan durum: pencere çapayı kapsıyor.
+        if df["timestamp"].min() <= anchor:
             return df
 
+        # Buradan sonrası: elde olan ince mumların tamamı çapanın ilerisinde.
+        stitched = self._stitched_window(
+            provider_name, symbol, timeframe, anchor, bars_before, bars_after, df
+        )
+        return stitched if not stitched.empty else df
+
+    def _plain_window(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        anchor: datetime,
+        bars_before: int,
+        bars_after: int,
+    ) -> pd.DataFrame:
+        """
+        Tek zaman diliminden pencere: normal pencere, o boşsa bu dilimde
+        ulaşılabilen en eski muma çapalanmış pencere. Karma kurguya girmez.
+
+        Asıl istek HATA verirse de en eskiye çekilme denenir: Yahoo, verisinin
+        başlangıcından çok önceki aralıklarda boş değil 400 dönüyor (GARAN'da
+        1995) ve bu, gün içi dilimler sorunsuz geri çekilirken 1g'nin 500'le
+        düşmesi gibi bir tutarsızlık üretiyordu. Geri çekilme de boş dönerse
+        özgün hata yükseltilir — gerçek bir sağlayıcı arızası maskelenmesin.
+        """
+        try:
+            df = self._window_at(
+                provider_name, symbol, timeframe, anchor, bars_before, bars_after
+            )
+        except Exception as exc:
+            fallback = self._earliest_window(
+                provider_name, symbol, timeframe, anchor, bars_before, bars_after
+            )
+            if fallback.empty:
+                raise
+            print(f"Pencere isteği başarısız, en eskiye çekildi ({symbol} {timeframe}): {exc}")
+            return fallback
+
+        if not df.empty:
+            return df
         return self._earliest_window(
             provider_name, symbol, timeframe, anchor, bars_before, bars_after
         )
+
+    def _stitched_window(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        anchor: datetime,
+        bars_before: int,
+        bars_after: int,
+        fine_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """
+        Geçmişi bir üst zaman diliminden, gerisini istenen dilimden kuran
+        KARMA pencere. Yalnızca çapa istenen dilimin geçmişinden eskiyse çağrılır.
+
+        `fine_df` istenen dilimde ulaşılabilen en eski mumdan başlar. Pencere:
+          [üst dilim mumları ... ince mumların başlangıcına kadar] + [ince mumlar]
+        Kaba bölüm `bars_after` payından ne kadarını yerse ince bölüm o kadar
+        kısalır; kaba bölüm payın tamamını yiyorsa pencere tümüyle üst dilimden
+        oluşur (replay ilerledikçe dikişe ulaşılır, ileri uzatma orada ince
+        mumlara geçer).
+
+        Her satır `SOURCE_TIMEFRAME_COLUMN` ile etiketlenir: istemci dikişi
+        buradan görür. Etiket yalnızca karma pencerede eklenir.
+        """
+        empty = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+        earliest_fine = fine_df["timestamp"].min()
+
+        for base_tf in COMPOSITE_BASE_TIMEFRAMES.get(timeframe, ()):
+            try:
+                coarse = self._window_at(
+                    provider_name, symbol, base_tf, anchor, bars_before, bars_after
+                )
+            except Exception as exc:
+                # Merdiven "olsa iyi olur" niteliğinde: üst dilim isteği patlarsa
+                # (Yahoo çok eski tarihlerde 400 dönüyor, bazı sağlayıcılar
+                # dilimi hiç desteklemiyor) bu, istenen dilimin kendi sonucunu
+                # 500'e çevirmemeli — bir üstünü dene, o da olmazsa elde olanla
+                # yetin (istemci konumu taşıyıp uyarı gösterir).
+                print(f"Karma pencere üst dilim denemesi başarısız ({symbol} {base_tf}): {exc}")
+                continue
+
+            # Üst dilim de çapayı kapsamıyorsa bir üstünü dene.
+            if coarse.empty or coarse["timestamp"].min() > anchor:
+                continue
+
+            coarse_part = coarse[coarse["timestamp"] < earliest_fine]
+            if coarse_part.empty:
+                continue
+
+            # Çapanın ilerisindeki payı kaba bölümle ince bölüm paylaşır;
+            # toplam pencere boyu istenen ölçünün üstüne çıkmasın.
+            used_after = int((coarse_part["timestamp"] > anchor).sum())
+            fine_part = fine_df.head(max(bars_after - used_after, 0))
+
+            stitched = pd.concat(
+                [
+                    coarse_part.assign(**{SOURCE_TIMEFRAME_COLUMN: base_tf}),
+                    fine_part.assign(**{SOURCE_TIMEFRAME_COLUMN: timeframe}),
+                ],
+                ignore_index=True,
+            )
+            return stitched.reset_index(drop=True)
+
+        return empty
 
     def _window_at(
         self,
@@ -257,7 +398,11 @@ class DataLoader:
         # da 1h'ten yeniden örneklenir. Aksi halde replay sürerken 4h'e geçmek
         # "Unsupported timeframe" ile 400 dönüyordu.
         if provider_name.lower() in ("nasdaq", "bist", "forex", "fx") and timeframe == "4h":
-            df_1h = self.get_window(
+            # Karma pencereye başvurmayan yol: buraya 1g mumları karışsaydı
+            # yeniden örnekleme onları 1s sanıp saçma 4s mumları üretirdi.
+            # Karma kurgu bir üst katmanda, 4s mumları elde edildikten sonra
+            # yapılır (bkz. `get_window` → `_stitched_window`).
+            df_1h = self._plain_window(
                 provider_name, symbol, "1h", anchor, bars_before * 4, bars_after * 4
             )
             if df_1h.empty:

@@ -2,18 +2,54 @@ import { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 import { TOKEN_STORAGE_KEY } from '../context/AuthContext';
 
-export type FlagColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple';
+export type FlagColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'cyan' | 'pink';
+
+/**
+ * Sağ tık menüsündeki işaret renkleri (TradingView sırasıyla).
+ *
+ * `flagColor` (sağlayıcıya göre atanan eski alan) ile karıştırılmamalı:
+ * işaretleme kullanıcının bilinçli seçimidir ve `markColor`'da tutulur.
+ */
+export const MARK_COLORS: Array<{ key: FlagColor; hex: string }> = [
+  { key: 'red', hex: '#ef4444' },
+  { key: 'blue', hex: '#3b82f6' },
+  { key: 'green', hex: '#22c55e' },
+  { key: 'yellow', hex: '#eab308' },
+  { key: 'purple', hex: '#a855f7' },
+  { key: 'cyan', hex: '#22d3ee' },
+  { key: 'pink', hex: '#f472b6' },
+];
+
+export function markColorHex(color?: FlagColor | null): string | null {
+  if (!color) return null;
+  return MARK_COLORS.find((c) => c.key === color)?.hex ?? null;
+}
 
 export interface WatchlistItem {
   id: string; // e.g. "bist:THYAO"
+  /**
+   * Satır tipi. Tanımsız = sembol (eski kayıtlarla geriye dönük uyum).
+   * `section` satırları listeyi başlıklara böler; fiyat çekilmez, türetilmiş
+   * piyasa listelerine kopyalanmaz.
+   */
+  kind?: 'symbol' | 'section';
   symbol: string;
   provider: string;
   name: string;
   exchange: string;
   flagColor: FlagColor;
+  /** Kullanıcının sağ tık menüsünden seçtiği işaret rengi; yoksa işaretsiz. */
+  markColor?: FlagColor | null;
+  /** Sembole iliştirilen serbest metin not. */
+  note?: string;
   lastPrice?: number | null;
   change?: number | null;
   changePercent?: number | null;
+}
+
+/** Bölüm başlığı satırları fiyat/türetme akışlarının dışında tutulur. */
+export function isSection(item: WatchlistItem): boolean {
+  return item.kind === 'section';
 }
 
 export interface WatchlistGroup {
@@ -98,10 +134,14 @@ function sanitizeLists(lists: WatchlistGroup[]): WatchlistGroup[] {
   const favorilerGroup = lists.find((g) => g.id === 'favoriler') || DEFAULT_LISTS[0];
   const favoriItems = favorilerGroup.items;
 
-  const bistItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'bist');
-  const nasdaqItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'nasdaq' || i.provider.toLowerCase() === 'nyse');
-  const kriptoItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'binance' || i.provider.toLowerCase() === 'crypto');
-  const forexItems = favoriItems.filter((i) => i.provider.toLowerCase() === 'forex' || i.provider.toLowerCase() === 'fx');
+  // Bölüm başlıkları kullanıcının kendi düzenidir; türetilmiş piyasa
+  // listelerine kopyalanmaz (orada anlamsız başlıklar oluştururdu).
+  const favoriSymbols = favoriItems.filter((i) => !isSection(i));
+
+  const bistItems = favoriSymbols.filter((i) => i.provider.toLowerCase() === 'bist');
+  const nasdaqItems = favoriSymbols.filter((i) => i.provider.toLowerCase() === 'nasdaq' || i.provider.toLowerCase() === 'nyse');
+  const kriptoItems = favoriSymbols.filter((i) => i.provider.toLowerCase() === 'binance' || i.provider.toLowerCase() === 'crypto');
+  const forexItems = favoriSymbols.filter((i) => i.provider.toLowerCase() === 'forex' || i.provider.toLowerCase() === 'fx');
 
   const defaultMarketGroupIds = new Set(['favoriler', 'bist_favoriler', 'nasdaq_favoriler', 'kripto', 'forex_favoriler']);
   const customLists = lists.filter((g) => !defaultMarketGroupIds.has(g.id));
@@ -199,11 +239,14 @@ function persistableLists(lists: WatchlistGroup[]): WatchlistGroup[] {
       color: g.color,
       items: g.items.map((i) => ({
         id: i.id,
+        kind: i.kind,
         symbol: i.symbol,
         provider: i.provider,
         name: i.name,
         exchange: i.exchange,
         flagColor: i.flagColor,
+        markColor: i.markColor ?? null,
+        note: i.note ?? '',
       })),
     }));
 }
@@ -362,7 +405,8 @@ export const watchlistStore = {
     applyState({ panelWidth: clamped });
   },
 
-  createList: (name: string, emoji = '📋', color = '#6366f1') => {
+  /** Yeni liste oluşturur ve kimliğini döndürür (çağıran hemen sembol ekleyebilsin). */
+  createList: (name: string, emoji = '📋', color = '#6366f1'): string => {
     const newGroup: WatchlistGroup = {
       id: `custom_${Date.now()}`,
       name,
@@ -371,6 +415,7 @@ export const watchlistStore = {
       items: [],
     };
     applyState({ lists: [...currentState.lists, newGroup], activeListId: newGroup.id });
+    return newGroup.id;
   },
 
   addSymbol: (symbol: string, provider: string, name?: string, exchange?: string) => {
@@ -380,11 +425,13 @@ export const watchlistStore = {
 
     const newItem: WatchlistItem = {
       id: itemId,
+      kind: 'symbol',
       symbol: symKey,
       provider: providerKey,
       name: name || symKey,
       exchange: (exchange || provider).toUpperCase(),
       flagColor: providerKey === 'bist' ? 'red' : providerKey === 'nasdaq' ? 'blue' : 'yellow',
+      markColor: null,
     };
 
     const favorilerGroup = currentState.lists.find((g) => g.id === 'favoriler') || currentState.lists[0];
@@ -398,6 +445,85 @@ export const watchlistStore = {
     applyState({ lists: sanitizeLists(updatedLists) });
     scheduleFetchQuotes(1500);
   },
+
+  /**
+   * Belirli bir listeye sembol ekler (Favoriler veya kullanıcının özel listesi).
+   *
+   * Türetilmiş piyasa listeleri (BIST/NASDAQ/Kripto/Forex) doğrudan
+   * düzenlenemez — içerikleri Favoriler'den üretilir — bu yüzden sessizce
+   * yok sayılır.
+   */
+  addSymbolToList: (listId: string, symbol: string, provider: string, name?: string, exchange?: string) => {
+    if (DERIVED_LIST_IDS.has(listId)) return;
+
+    const providerKey = provider.toLowerCase();
+    const symKey = symbol.toUpperCase();
+    const itemId = `${providerKey}:${symKey}`;
+
+    const target = currentState.lists.find((g) => g.id === listId);
+    if (!target || target.items.some((i) => i.id === itemId)) return;
+
+    // Sembol başka bir listede zaten varsa işaret/not gibi kullanıcı verisi
+    // korunsun diye oradaki kayıt temel alınır.
+    const existing = currentState.lists
+      .flatMap((g) => g.items)
+      .find((i) => i.id === itemId);
+
+    const newItem: WatchlistItem = existing
+      ? { ...existing, lastPrice: undefined, change: undefined, changePercent: undefined }
+      : {
+          id: itemId,
+          kind: 'symbol',
+          symbol: symKey,
+          provider: providerKey,
+          name: name || symKey,
+          exchange: (exchange || provider).toUpperCase(),
+          flagColor: providerKey === 'bist' ? 'red' : providerKey === 'nasdaq' ? 'blue' : 'yellow',
+          markColor: null,
+        };
+
+    const updatedLists = currentState.lists.map((g) =>
+      g.id === listId ? { ...g, items: [...g.items, newItem] } : g
+    );
+
+    applyState({ lists: sanitizeLists(updatedLists) });
+    scheduleFetchQuotes(1500);
+  },
+
+  /** Sembolü yalnızca verilen listeden çıkarır. */
+  removeSymbolFromList: (listId: string, symbol: string, provider: string) => {
+    if (DERIVED_LIST_IDS.has(listId)) return;
+    const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
+    const updatedLists = currentState.lists.map((g) =>
+      g.id === listId ? { ...g, items: g.items.filter((i) => i.id !== itemId) } : g
+    );
+    applyState({ lists: sanitizeLists(updatedLists) });
+  },
+
+  /** Sağ tık menüsündeki liste onay kutuları için: ekliyse çıkarır, değilse ekler. */
+  toggleSymbolInList: (listId: string, symbol: string, provider: string, name?: string, exchange?: string) => {
+    const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
+    const target = currentState.lists.find((g) => g.id === listId);
+    if (!target) return;
+
+    if (target.items.some((i) => i.id === itemId)) {
+      watchlistStore.removeSymbolFromList(listId, symbol, provider);
+    } else {
+      watchlistStore.addSymbolToList(listId, symbol, provider, name, exchange);
+    }
+  },
+
+  /** Sembolün bulunduğu, kullanıcı tarafından düzenlenebilir liste kimlikleri. */
+  listIdsContaining: (symbol: string, provider: string): string[] => {
+    const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
+    return currentState.lists
+      .filter((g) => !DERIVED_LIST_IDS.has(g.id) && g.items.some((i) => i.id === itemId))
+      .map((g) => g.id);
+  },
+
+  /** Türetilmiş piyasa listeleri hariç, kullanıcının düzenleyebildiği listeler. */
+  editableLists: (): WatchlistGroup[] =>
+    currentState.lists.filter((g) => !DERIVED_LIST_IDS.has(g.id)),
 
   removeSymbol: (symbol: string, provider: string) => {
     const itemId = `${provider.toLowerCase()}:${symbol.toUpperCase()}`;
@@ -457,6 +583,98 @@ export const watchlistStore = {
     applyState({ lists: sanitizeLists(newLists) });
   },
 
+  /**
+   * Sembolü işaretler / işaretini kaldırır (`null` = işareti kaldır).
+   *
+   * İşaret sembole aittir, listeye değil: aynı sembol hangi listede geçiyorsa
+   * hepsinde aynı rengi gösterir.
+   */
+  setMarkColor: (itemId: string, color: FlagColor | null) => {
+    const newLists = currentState.lists.map((group) => ({
+      ...group,
+      items: group.items.map((item) => (item.id === itemId ? { ...item, markColor: color } : item)),
+    }));
+    applyState({ lists: sanitizeLists(newLists) });
+  },
+
+  /** İşaretliyse kaldırır, değilse varsayılan renkle işaretler. */
+  toggleMark: (itemId: string) => {
+    const item = currentState.lists.flatMap((g) => g.items).find((i) => i.id === itemId);
+    watchlistStore.setMarkColor(itemId, item?.markColor ? null : 'red');
+  },
+
+  /** Tüm listelerdeki bütün işaretleri kaldırır. */
+  clearAllMarks: () => {
+    const newLists = currentState.lists.map((group) => ({
+      ...group,
+      items: group.items.map((item) => (item.markColor ? { ...item, markColor: null } : item)),
+    }));
+    applyState({ lists: sanitizeLists(newLists) });
+  },
+
+  /** Sembole not yazar; boş metin notu siler. İşaret gibi tüm listelerde ortaktır. */
+  setNote: (itemId: string, note: string) => {
+    const trimmed = note.trim();
+    const newLists = currentState.lists.map((group) => ({
+      ...group,
+      items: group.items.map((item) =>
+        item.id === itemId ? { ...item, note: trimmed || undefined } : item
+      ),
+    }));
+    applyState({ lists: sanitizeLists(newLists) });
+  },
+
+  getNote: (itemId: string): string =>
+    currentState.lists.flatMap((g) => g.items).find((i) => i.id === itemId)?.note || '',
+
+  /**
+   * Listeye bölüm başlığı ekler.
+   *
+   * `afterItemId` verilirse başlık o satırın hemen altına, verilmezse listenin
+   * sonuna eklenir (sağ tık hangi satırda yapıldıysa oraya).
+   */
+  addSection: (listId: string, title: string, afterItemId?: string) => {
+    if (DERIVED_LIST_IDS.has(listId)) return;
+
+    const section: WatchlistItem = {
+      id: `section_${Date.now()}`,
+      kind: 'section',
+      symbol: '',
+      provider: '',
+      name: title,
+      exchange: '',
+      flagColor: 'red',
+      markColor: null,
+    };
+
+    const newLists = currentState.lists.map((group) => {
+      if (group.id !== listId) return group;
+      const items = [...group.items];
+      const at = afterItemId ? items.findIndex((i) => i.id === afterItemId) : -1;
+      if (at === -1) items.push(section);
+      else items.splice(at + 1, 0, section);
+      return { ...group, items };
+    });
+
+    applyState({ lists: sanitizeLists(newLists) });
+  },
+
+  renameSection: (listId: string, sectionId: string, title: string) => {
+    const newLists = currentState.lists.map((group) =>
+      group.id === listId
+        ? { ...group, items: group.items.map((i) => (i.id === sectionId ? { ...i, name: title } : i)) }
+        : group
+    );
+    applyState({ lists: sanitizeLists(newLists) });
+  },
+
+  removeSection: (listId: string, sectionId: string) => {
+    const newLists = currentState.lists.map((group) =>
+      group.id === listId ? { ...group, items: group.items.filter((i) => i.id !== sectionId) } : group
+    );
+    applyState({ lists: sanitizeLists(newLists) });
+  },
+
   fetchQuotes: async () => {
     const activeGroup = currentState.lists.find((g) => g.id === currentState.activeListId);
     if (!activeGroup || activeGroup.items.length === 0) return;
@@ -464,7 +682,12 @@ export const watchlistStore = {
     applyState({ quotesLoading: true });
 
     try {
-      const itemsToFetch = activeGroup.items;
+      // Bölüm başlıklarının sembolü yoktur; fiyat sorgusuna girmemeli.
+      const itemsToFetch = activeGroup.items.filter((i) => !isSection(i));
+      if (itemsToFetch.length === 0) {
+        applyState({ quotesLoading: false });
+        return;
+      }
       const itemKeys = itemsToFetch.map((i) => `${i.provider}:${i.symbol}`).join(',');
       const res = await fetch(`/api/market/quotes?items=${encodeURIComponent(itemKeys)}`);
       if (res.ok) {

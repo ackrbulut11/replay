@@ -26,6 +26,10 @@ TradingResearchPlatform/
 │   │   │
 │   │   ├── components/               # Ortak UI parçaları
 │   │   │   ├── ui/                   # Modular UI components
+│   │   │   ├── watchlist/
+│   │   │   │   ├── WatchlistPanel.tsx
+│   │   │   │   ├── WatchlistContextMenu.tsx   # Sembol sağ tık menüsü
+│   │   │   │   └── RightActionBar.tsx
 │   │   │   ├── Sidebar.tsx
 │   │   │   ├── Header.tsx
 │   │   │   └── Toolbar.tsx

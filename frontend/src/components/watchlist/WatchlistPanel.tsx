@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, RefreshCw, ChevronDown, Flag, Trash2,
-  Sparkles, ArrowUpDown, GripVertical,
+  Sparkles, ArrowUpDown, GripVertical, StickyNote,
 } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
@@ -11,72 +11,82 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useWatchlistStore, watchlistStore, WatchlistItem } from '../../store/watchlistStore';
+import {
+  useWatchlistStore, watchlistStore, WatchlistItem, markColorHex,
+} from '../../store/watchlistStore';
+import WatchlistContextMenu, { ContextMenuTarget } from './WatchlistContextMenu';
 
-interface SortableItemProps {
+/** Sağlayıcıya göre varsayılan bayrak rengi — sembol işaretli DEĞİLKEN kullanılır. */
+function providerFlagStyle(provider?: string, exchange?: string): string {
+  const p = (provider || '').toLowerCase();
+  const ex = (exchange || '').toLowerCase();
+  if (p === 'bist' || ex.includes('bist')) return 'text-red-500 fill-red-500/20';
+  if (p === 'nasdaq' || ex.includes('nasdaq')) return 'text-blue-400 fill-blue-400/20';
+  if (p === 'forex' || p === 'fx' || ex.includes('forex')) return 'text-emerald-400 fill-emerald-400/20';
+  return 'text-amber-400 fill-amber-400/20';
+}
+
+function formatPrice(price?: number | null, provider?: string): string {
+  if (price === undefined || price === null) return '—';
+  if (provider === 'binance' || provider === 'forex' || provider === 'fx') {
+    return price >= 10 && provider === 'binance'
+      ? price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : price.toFixed(4);
+  }
+  return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+interface RowProps {
   item: WatchlistItem;
   isCurrent: boolean;
   onSelectSymbol: (symbol: string, provider: string) => void;
+  onContextMenu: (e: React.MouseEvent, item: WatchlistItem) => void;
+  /** Satırın bulunduğu listeye göre doğru çıkarma işlemini yapar (bkz. panel). */
+  onRemove: () => void;
 }
 
-function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: item.id,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.85 : undefined,
-    zIndex: isDragging ? 50 : undefined,
-    position: 'relative' as const,
-  };
-
+/**
+ * Tek bir sembol satırı.
+ *
+ * Sıralama açıkken (sürükle-bırak kapalı) ve kapalıyken aynı görünüm
+ * kullanılabilsin diye sunum katmanı ayrı tutulur; sürükleme özellikleri
+ * dışarıdan sarmalayıcı tarafından verilir.
+ */
+function WatchlistRow({
+  item, isCurrent, onSelectSymbol, onContextMenu, onRemove,
+  dragRef, dragStyle, dragProps, isDragging,
+}: RowProps & {
+  dragRef?: (node: HTMLElement | null) => void;
+  dragStyle?: React.CSSProperties;
+  dragProps?: Record<string, unknown>;
+  isDragging?: boolean;
+}) {
   const isPositive = (item.changePercent || 0) >= 0;
-
-
-  const getItemFlagStyle = (provider?: string, exchange?: string) => {
-    const p = (provider || '').toLowerCase();
-    const ex = (exchange || '').toLowerCase();
-    if (p === 'bist' || ex.includes('bist')) {
-      return 'text-red-500 fill-red-500/20';
-    }
-    if (p === 'nasdaq' || ex.includes('nasdaq')) {
-      return 'text-blue-400 fill-blue-400/20';
-    }
-    if (p === 'forex' || p === 'fx' || ex.includes('forex')) {
-      return 'text-emerald-400 fill-emerald-400/20';
-    }
-    return 'text-amber-400 fill-amber-400/20';
-  };
-
-  const formatPrice = (price?: number | null, provider?: string) => {
-    if (price === undefined || price === null) return '—';
-    if (provider === 'binance' || provider === 'forex' || provider === 'fx') {
-      return price >= 10 && provider === 'binance'
-        ? price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : price.toFixed(4);
-    }
-    return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
+  const markHex = markColorHex(item.markColor);
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
+      ref={dragRef}
+      style={dragStyle}
       onClick={() => onSelectSymbol(item.symbol, item.provider)}
+      onContextMenu={(e) => onContextMenu(e, item)}
       className={`group flex items-center justify-between px-2 py-2 rounded-xl cursor-pointer transition-all ${
         isCurrent
           ? 'bg-indigo-600/20 border border-indigo-500/50 shadow-md shadow-indigo-500/10'
           : 'hover:bg-slate-800/50 border border-transparent'
       } ${isDragging ? 'shadow-xl shadow-indigo-500/20 scale-[1.02] bg-slate-800/80' : ''}`}
-      {...attributes}
-      {...listeners}
+      {...(dragProps || {})}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <div className="p-0.5 shrink-0" title={`${(item.provider || '').toUpperCase()} Piyasası`}>
-          <Flag className={`w-3.5 h-3.5 ${getItemFlagStyle(item.provider, item.exchange)}`} />
+        <div
+          className="p-0.5 shrink-0"
+          title={markHex ? 'İşaretli sembol' : `${(item.provider || '').toUpperCase()} Piyasası`}
+        >
+          {markHex ? (
+            <Flag className="w-3.5 h-3.5" style={{ color: markHex, fill: markHex }} />
+          ) : (
+            <Flag className={`w-3.5 h-3.5 ${providerFlagStyle(item.provider, item.exchange)}`} />
+          )}
         </div>
 
         <div className="flex flex-col truncate">
@@ -87,9 +97,16 @@ function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItem
             <span className="text-[9px] font-bold px-1 rounded bg-slate-900 border border-slate-800 text-slate-400 shrink-0">
               {item.exchange}
             </span>
+            {item.note && (
+              <StickyNote
+                className="w-3 h-3 text-amber-400 shrink-0"
+                // Not metni tooltip olarak görünür; düzenlemek için sağ tık menüsü.
+                aria-label="Notu var"
+              />
+            )}
           </div>
           <span className="text-[10px] text-slate-500 truncate max-w-[100px]">
-            {item.name}
+            {item.note || item.name}
           </span>
         </div>
       </div>
@@ -111,19 +128,83 @@ function SortableWatchlistItem({ item, isCurrent, onSelectSymbol }: SortableItem
         <button
           onClick={(e) => {
             e.stopPropagation();
-            watchlistStore.removeSymbol(item.symbol, item.provider);
+            onRemove();
           }}
           className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 hover:bg-red-950/40 rounded transition-all"
           title="Listeden Çıkar"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
-
       </div>
     </div>
   );
 }
 
+/** Listeyi bölen başlık satırı (sağ tık menüsündeki "Bölüm ekle"). */
+function SectionRow({
+  item, onContextMenu,
+  dragRef, dragStyle, dragProps,
+}: {
+  item: WatchlistItem;
+  onContextMenu: (e: React.MouseEvent, item: WatchlistItem) => void;
+  dragRef?: (node: HTMLElement | null) => void;
+  dragStyle?: React.CSSProperties;
+  dragProps?: Record<string, unknown>;
+}) {
+  return (
+    <div
+      ref={dragRef}
+      style={dragStyle}
+      onContextMenu={(e) => onContextMenu(e, item)}
+      className="flex items-center gap-2 px-2 pt-3 pb-1 cursor-default select-none"
+      {...(dragProps || {})}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+        {item.name}
+      </span>
+      <div className="flex-1 h-px bg-slate-800" />
+    </div>
+  );
+}
+
+/** Sürükle-bırak sarmalayıcısı: hem sembol hem bölüm satırları taşınabilir. */
+function SortableWatchlistItem(props: RowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: props.item.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.85 : undefined,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  };
+
+  const dragProps = { ...attributes, ...listeners } as Record<string, unknown>;
+
+  if (props.item.kind === 'section') {
+    return (
+      <SectionRow
+        item={props.item}
+        onContextMenu={props.onContextMenu}
+        dragRef={setNodeRef}
+        dragStyle={style}
+        dragProps={dragProps}
+      />
+    );
+  }
+
+  return (
+    <WatchlistRow
+      {...props}
+      dragRef={setNodeRef}
+      dragStyle={style}
+      dragProps={dragProps}
+      isDragging={isDragging}
+    />
+  );
+}
 
 interface WatchlistPanelProps {
   currentSymbol: string;
@@ -142,8 +223,21 @@ export default function WatchlistPanel({
   const [isListDropdownOpen, setIsListDropdownOpen] = useState(false);
   const [isNewListModalOpen, setIsNewListModalOpen] = useState(false);
   const [newListName, setNewListName] = useState('');
+  // "Yeni Liste Oluştur..." sağ tık menüsünden geldiyse, liste oluşturulur
+  // oluşturulmaz bu sembol içine eklenir.
+  const [pendingListSymbol, setPendingListSymbol] = useState<WatchlistItem | null>(null);
   const [sortField, setSortField] = useState<'symbol' | 'price' | 'change' | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
+
+  // Sağ tık menüsü ve ona bağlı diyaloglar
+  const [menuTarget, setMenuTarget] = useState<ContextMenuTarget | null>(null);
+  const [noteTarget, setNoteTarget] = useState<WatchlistItem | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [sectionDraft, setSectionDraft] = useState('');
+  // Yeni bölüm: hangi satırın altına ekleneceği. Düzenleme: hangi bölüm.
+  const [sectionModal, setSectionModal] = useState<
+    { mode: 'create'; afterItemId?: string } | { mode: 'rename'; sectionId: string } | null
+  >(null);
 
   // Resizable drag state
   const isDraggingRef = useRef(false);
@@ -205,20 +299,30 @@ export default function WatchlistPanel({
     window.addEventListener('mouseup', onMouseUp);
   }, [state.panelWidth]);
 
+  const openContextMenu = useCallback((e: React.MouseEvent, item: WatchlistItem | null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuTarget({ x: e.clientX, y: e.clientY, item, listId: state.activeListId });
+  }, [state.activeListId]);
+
   if (!state.isOpen || state.activeRightTool !== 'watchlist') {
     return null;
   }
 
-  // Sorted items
-  let items = [...(activeGroup?.items || [])];
+  // Sıralama açıkken bölüm başlıkları anlamını yitirir (satırlar başka bir
+  // düzene girer), bu yüzden yalnızca sembol satırları gösterilir.
+  const rawItems = activeGroup?.items || [];
+  let items = sortField ? rawItems.filter((i) => i.kind !== 'section') : [...rawItems];
   if (sortField) {
-    items.sort((a, b) => {
+    items = [...items].sort((a, b) => {
       if (sortField === 'symbol') return sortAsc ? a.symbol.localeCompare(b.symbol) : b.symbol.localeCompare(a.symbol);
       if (sortField === 'price') { const pA = a.lastPrice || 0; const pB = b.lastPrice || 0; return sortAsc ? pA - pB : pB - pA; }
       if (sortField === 'change') { const cA = a.changePercent || 0; const cB = b.changePercent || 0; return sortAsc ? cA - cB : cB - cA; }
       return 0;
     });
   }
+
+  const symbolCount = rawItems.filter((i) => i.kind !== 'section').length;
 
   const handleSort = (field: 'symbol' | 'price' | 'change') => {
     if (sortField === field) {
@@ -230,16 +334,45 @@ export default function WatchlistPanel({
     }
   };
 
-
-
-  const formatPrice = (price?: number | null, provider?: string) => {
-    if (price === undefined || price === null) return '—';
-    if (provider === 'binance') {
-      return price >= 10
-        ? price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : price.toFixed(4);
+  const removeItemFromActiveList = (item: WatchlistItem) => {
+    // Türetilmiş piyasa listelerinde (BIST/NASDAQ/...) satır Favoriler'den
+    // gelir; oradan çıkarmak gerekir, yoksa liste bir sonraki türetmede geri gelir.
+    const isEditable = watchlistStore.editableLists().some((l) => l.id === state.activeListId);
+    if (isEditable) {
+      watchlistStore.removeSymbolFromList(state.activeListId, item.symbol, item.provider);
+    } else {
+      watchlistStore.removeSymbol(item.symbol, item.provider);
     }
-    return price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const submitSectionModal = () => {
+    const title = sectionDraft.trim();
+    if (!title || !sectionModal) return;
+    if (sectionModal.mode === 'create') {
+      watchlistStore.addSection(state.activeListId, title, sectionModal.afterItemId);
+    } else {
+      watchlistStore.renameSection(state.activeListId, sectionModal.sectionId, title);
+    }
+    setSectionModal(null);
+    setSectionDraft('');
+  };
+
+  const submitNewList = () => {
+    const name = newListName.trim();
+    if (!name) return;
+    const listId = watchlistStore.createList(name);
+    if (pendingListSymbol) {
+      watchlistStore.addSymbolToList(
+        listId,
+        pendingListSymbol.symbol,
+        pendingListSymbol.provider,
+        pendingListSymbol.name,
+        pendingListSymbol.exchange,
+      );
+    }
+    setNewListName('');
+    setPendingListSymbol(null);
+    setIsNewListModalOpen(false);
   };
 
   // Get the emoji/color for the active list header indicator
@@ -270,8 +403,8 @@ export default function WatchlistPanel({
             onClick={() => setIsListDropdownOpen(!isListDropdownOpen)}
             className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:border-emerald-500/40 text-xs font-medium text-zinc-100 transition-all select-none"
           >
-            <span 
-              style={{ color: getListHeaderColor() }} 
+            <span
+              style={{ color: getListHeaderColor() }}
               className="w-5 h-4 flex items-center justify-center shrink-0 text-xs font-bold leading-none select-none"
             >
               {getListHeaderEmoji()}
@@ -304,15 +437,17 @@ export default function WatchlistPanel({
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span 
-                      style={{ color: group.color }} 
+                    <span
+                      style={{ color: group.color }}
                       className="w-6 h-5 flex items-center justify-center shrink-0 text-xs font-bold leading-none text-center select-none"
                     >
                       {group.emoji}
                     </span>
                     <span className="truncate">{group.name}</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono ml-2 shrink-0">({group.items.length})</span>
+                  <span className="text-[10px] text-slate-500 font-mono ml-2 shrink-0">
+                    ({group.items.filter((i) => i.kind !== 'section').length})
+                  </span>
                 </button>
               ))}
 
@@ -320,6 +455,7 @@ export default function WatchlistPanel({
               <button
                 onClick={() => {
                   setIsListDropdownOpen(false);
+                  setPendingListSymbol(null);
                   setIsNewListModalOpen(true);
                 }}
                 className="w-full flex items-center gap-3 px-2.5 py-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded-lg font-bold transition-all"
@@ -386,8 +522,11 @@ export default function WatchlistPanel({
         </div>
       </div>
 
-      {/* Watchlist Item Rows */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-800/30 p-1 space-y-0.5">
+      {/* Watchlist Item Rows — boş alana sağ tık da menüyü açar (liste geneli maddeleri) */}
+      <div
+        className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-800/30 p-1 space-y-0.5"
+        onContextMenu={(e) => openContextMenu(e, null)}
+      >
         {items.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500 font-medium space-y-3">
             <Sparkles className="w-6 h-6 text-indigo-400/50 mx-auto" />
@@ -400,92 +539,35 @@ export default function WatchlistPanel({
             </button>
           </div>
         ) : sortField ? (
-          items.map((item) => {
-            const isCurrent =
-              currentSymbol.toUpperCase() === item.symbol.toUpperCase() &&
-              currentProvider.toLowerCase() === item.provider.toLowerCase();
-            const isPositive = (item.changePercent || 0) >= 0;
-
-            return (
-              <div
-                key={item.id}
-                onClick={() => onSelectSymbol(item.symbol, item.provider)}
-                className={`group flex items-center justify-between px-2 py-2 rounded-xl cursor-pointer transition-all ${
-                  isCurrent
-                    ? 'bg-indigo-600/20 border border-indigo-500/50 shadow-md shadow-indigo-500/10'
-                    : 'hover:bg-slate-800/50 border border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="p-0.5 shrink-0" title={`${(item.provider || '').toUpperCase()} Piyasası`}>
-                    <Flag className={`w-3.5 h-3.5 ${
-                      (item.provider || '').toLowerCase() === 'bist' || (item.exchange || '').toLowerCase().includes('bist')
-                        ? 'text-red-500 fill-red-500/20'
-                        : (item.provider || '').toLowerCase() === 'nasdaq' || (item.exchange || '').toLowerCase().includes('nasdaq')
-                        ? 'text-blue-400 fill-blue-400/20'
-                        : 'text-amber-400 fill-amber-400/20'
-                    }`} />
-                  </div>
-
-                  <div className="flex flex-col truncate">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-100 font-mono tracking-tight group-hover:text-indigo-300 transition">
-                        {item.symbol}
-                      </span>
-                      <span className="text-[9px] font-bold px-1 rounded bg-slate-900 border border-slate-800 text-slate-400 shrink-0">
-                        {item.exchange}
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-slate-500 truncate max-w-[100px]">
-                      {item.name}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <div className="flex flex-col items-end font-mono">
-                    <span className="text-xs font-bold text-slate-100">
-                      {formatPrice(item.lastPrice, item.provider)}
-                    </span>
-                    {item.changePercent !== undefined && item.changePercent !== null ? (
-                      <span className={`text-[10px] font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {isPositive ? '+' : ''}{item.changePercent.toFixed(2)}%
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-600">—</span>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      watchlistStore.removeSymbol(item.symbol, item.provider);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 hover:bg-red-950/40 rounded transition-all"
-                    title="Listeden Çıkar"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+          items.map((item) => (
+            <WatchlistRow
+              key={item.id}
+              item={item}
+              isCurrent={
+                currentSymbol.toUpperCase() === item.symbol.toUpperCase() &&
+                currentProvider.toLowerCase() === item.provider.toLowerCase()
+              }
+              onSelectSymbol={onSelectSymbol}
+              onContextMenu={openContextMenu}
+              onRemove={() => removeItemFromActiveList(item)}
+            />
+          ))
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-              {items.map((item) => {
-                const isCurrent =
-                  currentSymbol.toUpperCase() === item.symbol.toUpperCase() &&
-                  currentProvider.toLowerCase() === item.provider.toLowerCase();
-                return (
-                  <SortableWatchlistItem
-                    key={item.id}
-                    item={item}
-                    isCurrent={isCurrent}
-                    onSelectSymbol={onSelectSymbol}
-                  />
-                );
-              })}
+              {items.map((item) => (
+                <SortableWatchlistItem
+                  key={item.id}
+                  item={item}
+                  isCurrent={
+                    currentSymbol.toUpperCase() === item.symbol.toUpperCase() &&
+                    currentProvider.toLowerCase() === item.provider.toLowerCase()
+                  }
+                  onSelectSymbol={onSelectSymbol}
+                  onContextMenu={openContextMenu}
+                  onRemove={() => removeItemFromActiveList(item)}
+                />
+              ))}
             </SortableContext>
           </DndContext>
         )}
@@ -493,7 +575,7 @@ export default function WatchlistPanel({
 
       {/* Footer */}
       <div className="px-3 py-2 bg-[#070b13] border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-500 select-none">
-        <span>{items.length} Sembol</span>
+        <span>{symbolCount} Sembol</span>
         <button
           onClick={onOpenSearchModal}
           className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition"
@@ -502,41 +584,148 @@ export default function WatchlistPanel({
         </button>
       </div>
 
+      {/* Sağ Tık Menüsü */}
+      {menuTarget && (
+        <WatchlistContextMenu
+          target={menuTarget}
+          lists={watchlistStore.editableLists()}
+          onClose={() => setMenuTarget(null)}
+          onAddNote={(item) => {
+            setNoteTarget(item);
+            setNoteDraft(item.note || '');
+          }}
+          onAddSection={(afterItemId) => {
+            setSectionModal({ mode: 'create', afterItemId });
+            setSectionDraft('');
+          }}
+          onRenameSection={(item) => {
+            setSectionModal({ mode: 'rename', sectionId: item.id });
+            setSectionDraft(item.name);
+          }}
+          onAddSymbol={onOpenSearchModal}
+          onCreateList={(item) => {
+            setPendingListSymbol(item);
+            setNewListName('');
+            setIsNewListModalOpen(true);
+          }}
+        />
+      )}
+
+      {/* Not Ekleme / Düzenleme Modalı */}
+      {noteTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0d1321] border border-slate-800 rounded-2xl p-5 w-full max-w-sm space-y-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-slate-100">
+              {noteTarget.symbol} için not
+            </h3>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Bu sembolle ilgili notunuz (örn. 'destek 63.500, kırılırsa al')..."
+              autoFocus
+              rows={4}
+              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500 transition resize-none"
+            />
+            <div className="flex justify-between items-center gap-2">
+              <button
+                onClick={() => {
+                  watchlistStore.setNote(noteTarget.id, '');
+                  setNoteTarget(null);
+                }}
+                disabled={!noteTarget.note}
+                className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Notu Sil
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setNoteTarget(null)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-semibold"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={() => {
+                    watchlistStore.setNote(noteTarget.id, noteDraft);
+                    setNoteTarget(null);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-500 transition"
+                >
+                  Kaydet
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bölüm Ekleme / Yeniden Adlandırma Modalı */}
+      {sectionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0d1321] border border-slate-800 rounded-2xl p-5 w-full max-w-xs space-y-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-slate-100">
+              {sectionModal.mode === 'create' ? 'Yeni Bölüm' : 'Bölümü Yeniden Adlandır'}
+            </h3>
+            <input
+              type="text"
+              value={sectionDraft}
+              onChange={(e) => setSectionDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submitSectionModal()}
+              placeholder="Bölüm Adı (Örn: Bankalar)..."
+              autoFocus
+              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500 transition"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setSectionModal(null); setSectionDraft(''); }}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-semibold"
+              >
+                İptal
+              </button>
+              <button
+                onClick={submitSectionModal}
+                className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-500 transition"
+              >
+                {sectionModal.mode === 'create' ? 'Ekle' : 'Kaydet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New List Modal */}
       {isNewListModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#0d1321] border border-slate-800 rounded-2xl p-5 w-full max-w-xs space-y-4 shadow-2xl">
             <h3 className="text-sm font-bold text-slate-100">Yeni İzleme Listesi</h3>
+            {pendingListSymbol && (
+              <p className="text-[11px] text-slate-400">
+                <span className="font-mono font-bold text-indigo-300">{pendingListSymbol.symbol}</span>{' '}
+                oluşturulan listeye eklenecek.
+              </p>
+            )}
             <input
               type="text"
               value={newListName}
               onChange={(e) => setNewListName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newListName.trim()) {
-                  watchlistStore.createList(newListName.trim());
-                  setNewListName('');
-                  setIsNewListModalOpen(false);
-                }
-              }}
+              onKeyDown={(e) => e.key === 'Enter' && submitNewList()}
               placeholder="Liste Adı (Örn: Bankacılık)..."
               autoFocus
               className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500 transition"
             />
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => { setIsNewListModalOpen(false); setNewListName(''); }}
+                onClick={() => {
+                  setIsNewListModalOpen(false);
+                  setNewListName('');
+                  setPendingListSymbol(null);
+                }}
                 className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-semibold"
               >
                 İptal
               </button>
               <button
-                onClick={() => {
-                  if (newListName.trim()) {
-                    watchlistStore.createList(newListName.trim());
-                    setNewListName('');
-                    setIsNewListModalOpen(false);
-                  }
-                }}
+                onClick={submitNewList}
                 className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-500 transition"
               >
                 Oluştur

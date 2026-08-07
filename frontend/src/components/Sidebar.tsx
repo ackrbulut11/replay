@@ -41,7 +41,7 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
       {/* Brand Logo & Nav Items List */}
       <div className="w-full flex flex-col items-center">
         {/* Brand Logo Icon */}
-        <div className="w-10 h-10 mb-3.5 rounded-lg overflow-hidden border border-white/[0.1] shadow-xs flex items-center justify-center bg-white/[0.02] pointer-events-none select-none">
+        <div className="w-8 h-8 mb-3.5 rounded-lg overflow-hidden border border-white/[0.1] shadow-xs flex items-center justify-center bg-white/[0.02] pointer-events-none select-none">
           <img src={logoImg} alt="REPLAY Logo" className="w-full h-full object-cover opacity-90" />
         </div>
 
@@ -56,7 +56,7 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
                 <button
                   onClick={() => onSelectTab(item.id)}
                   title={item.label}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
                     isActive
                       ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-xs'
                       : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] border border-transparent'
@@ -79,7 +79,7 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
       <div className="flex flex-col items-center gap-2.5">
         <button
           onClick={() => logout()}
-          className="w-9 h-9 rounded-lg bg-red-500/[0.06] hover:bg-red-500/15 text-red-400/90 border border-red-500/20 flex items-center justify-center transition-all cursor-pointer group relative"
+          className="w-8 h-8 rounded-lg bg-red-500/[0.06] hover:bg-red-500/15 text-red-400/90 border border-red-500/20 flex items-center justify-center transition-all cursor-pointer group relative"
           title="Çıkış Yap / Giriş Ekranına Dön"
         >
           <LogOut className="w-3.5 h-3.5" />
@@ -89,7 +89,7 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
         </button>
 
         <div
-          className="w-9 h-9 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-center"
+          className="w-8 h-8 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-center"
           title="Engine Status: Online"
         >
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-xs shadow-emerald-400/50" />

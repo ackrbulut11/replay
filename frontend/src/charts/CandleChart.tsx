@@ -16,7 +16,7 @@ import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './d
 import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
-import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2, ChevronRight } from 'lucide-react';
+import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import ReplayTradePanel from '../replay/ReplayTradePanel';
@@ -163,6 +163,20 @@ export default function CandleChart({
   const indicatorSettings = chartSettings.indicators;
   const [editingIndicator, setEditingIndicator] = useState<keyof IndicatorSettingsMap | null>(null);
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
+  // Lejanttaki göz simgesiyle "geçici gizleme": gösterge listede kalır, yalnızca
+  // grafikteki çizgisi görünmez olur (tamamen kaldırmak için X kullanılır).
+  const [hiddenIndicators, setHiddenIndicators] = useState<Partial<Record<keyof IndicatorsState, boolean>>>({});
+
+  const toggleIndicatorVisibility = (key: keyof IndicatorsState) => {
+    setHiddenIndicators((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Gösterge tamamen kapatılırken gizleme bayrağı da sıfırlanır; yeniden
+  // açıldığında görünmez halde gelmesin.
+  const removeIndicator = (key: keyof IndicatorsState) => {
+    setHiddenIndicators((prev) => ({ ...prev, [key]: false }));
+    onToggleIndicator(key);
+  };
 
   const toolSettingsRef = useRef(toolSettings);
   toolSettingsRef.current = toolSettings;
@@ -2050,7 +2064,21 @@ export default function CandleChart({
       if (bbMiddleRef.current) { chart.removeSeries(bbMiddleRef.current); bbMiddleRef.current = null; }
       if (bbLowerRef.current) { chart.removeSeries(bbLowerRef.current); bbLowerRef.current = null; }
     }
-  }, [visibleData, indicators, indicatorSettings]);
+
+    // Göz simgesiyle gizlenen göstergeler: seri kaldırılmaz, yalnızca
+    // görünürlüğü kapatılır — ayarları ve lejanttaki yeri korunur.
+    const visibilityMap: [keyof IndicatorsState, (ISeriesApi<any> | null)[]][] = [
+      ['ema20', [ema20Ref.current]],
+      ['ema50', [ema50Ref.current]],
+      ['ema100', [ema100Ref.current]],
+      ['ema200', [ema200Ref.current]],
+      ['bb', [bbUpperRef.current, bbMiddleRef.current, bbLowerRef.current]],
+    ];
+    for (const [key, seriesList] of visibilityMap) {
+      const visible = !hiddenIndicators[key];
+      for (const s of seriesList) s?.applyOptions({ visible });
+    }
+  }, [visibleData, indicators, indicatorSettings, hiddenIndicators]);
 
 
 
@@ -2553,19 +2581,37 @@ export default function CandleChart({
                   const val = latestIndicatorValues[key];
                   const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
                   const color = key === 'bb' ? conf.upperColor : conf.color;
+                  const isHidden = !!hiddenIndicators[key];
 
                   return (
                     <div
                       key={key}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100"
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100 transition-opacity ${
+                        isHidden ? 'opacity-45' : ''
+                      }`}
                     >
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                      <span className="font-medium text-zinc-200">{label}</span>
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: isHidden ? 'transparent' : color, border: `1px solid ${color}` }}
+                      />
+                      <span className={`font-medium ${isHidden ? 'text-zinc-400 line-through decoration-zinc-500' : 'text-zinc-200'}`}>
+                        {label}
+                      </span>
                       {val !== undefined && val !== null && (
                         <span className="font-mono text-zinc-400 text-[10px]">
                           {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
                         </span>
                       )}
+                      <button
+                        type="button"
+                        title={isHidden ? `${label} Göster` : `${label} Gizle`}
+                        onClick={() => toggleIndicatorVisibility(key)}
+                        className={`p-0.5 transition-colors cursor-pointer ${
+                          isHidden ? 'text-zinc-500 hover:text-zinc-200' : 'text-zinc-400 hover:text-emerald-400'
+                        }`}
+                      >
+                        {isHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      </button>
                       <button
                         type="button"
                         title={`${label} Ayarları`}
@@ -2577,7 +2623,7 @@ export default function CandleChart({
                       <button
                         type="button"
                         title="Kapat"
-                        onClick={() => onToggleIndicator(key)}
+                        onClick={() => removeIndicator(key)}
                         className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
                       >
                         <X className="w-3 h-3" />

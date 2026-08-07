@@ -35,8 +35,9 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
     navItems.push({ id: 'admin', label: 'Admin Paneli', icon: ShieldCheck });
   }
 
+  // Genişlik buton boyutuna (40px) sabitlendi; yanlardaki boşluk kaldırıldı
   return (
-    <aside className="w-14 bg-[#0a0b0e] border-r border-white/[0.06] flex flex-col justify-between items-center py-3 px-1.5 select-none shrink-0 z-30">
+    <aside className="w-[41px] bg-[#0a0b0e] border-r border-white/[0.06] flex flex-col justify-between items-center py-3 px-0 select-none shrink-0 z-30">
       {/* Brand Logo & Nav Items List */}
       <div className="w-full flex flex-col items-center">
         {/* Brand Logo Icon */}

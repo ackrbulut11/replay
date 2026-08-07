@@ -20,8 +20,9 @@ export default function RightActionBar(_props: RightActionBarProps) {
   const isWatchlistActive = state.isOpen && state.activeRightTool === 'watchlist';
   const isAlertsActive = state.isOpen && state.activeRightTool === 'alerts';
 
+  // Genişlik sol menü ile aynı (41px); buton boyutları korundu
   return (
-    <div className="w-11 h-full bg-[#0a0b0e] border-l border-white/[0.06] flex flex-col items-center justify-between py-3 z-20 select-none shrink-0">
+    <div className="w-[41px] h-full bg-[#0a0b0e] border-l border-white/[0.06] flex flex-col items-center justify-between py-3 z-20 select-none shrink-0">
       {/* Top Action Tools */}
       <div className="flex flex-col items-center gap-2.5 w-full">
         {/* Toggle Collapse/Expand Button */}

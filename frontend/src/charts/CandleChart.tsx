@@ -937,18 +937,31 @@ export default function CandleChart({
       const firstCandle = candles[0];
       time = Math.round(firstCandle.time + step * logical);
     } else {
-      // In-range bar interpolation
-      const barIdx = Math.floor(logical);
-      const fraction = logical - barIdx;
-      const c1 = candles[barIdx];
-      const c2 = candles[Math.min(lastIdx, barIdx + 1)];
-
-      if (c1 && c2 && barIdx < lastIdx) {
-        time = Math.round(c1.time + (c2.time - c1.time) * fraction);
-      } else if (c1) {
-        time = Math.round(c1.time + step * fraction);
+      // In-range: grafiğin kendi coordinateToTime'ını kullan. Bu, iki mum
+      // arasındaki pikseli zaman damgalarının farkına göre lineer enterpole
+      // etmekten (aşağıdaki fallback) farklı olarak hafta sonu/tatil gibi
+      // işlem yapılmayan aralıkları da doğru hesaba katar — aksi halde ör.
+      // Cuma ile Pazartesi mumu arasına tıklanınca "Cumartesi" gibi hiçbir
+      // muma karşılık gelmeyen bir zaman damgası üretiliyor, bu da render
+      // sırasında timeToCoordinate'ın null dönüp cetvelin ekranın en soluna
+      // kaymasına yol açıyordu.
+      const nativeTime = chart.timeScale().coordinateToTime(x);
+      if (nativeTime !== null) {
+        time = typeof nativeTime === 'number' ? nativeTime : (nativeTime as any);
       } else {
-        time = lastCandle.time;
+        // In-range bar interpolation (fallback)
+        const barIdx = Math.floor(logical);
+        const fraction = logical - barIdx;
+        const c1 = candles[barIdx];
+        const c2 = candles[Math.min(lastIdx, barIdx + 1)];
+
+        if (c1 && c2 && barIdx < lastIdx) {
+          time = Math.round(c1.time + (c2.time - c1.time) * fraction);
+        } else if (c1) {
+          time = Math.round(c1.time + step * fraction);
+        } else {
+          time = lastCandle.time;
+        }
       }
     }
 

@@ -77,3 +77,31 @@ export async function getWindow(params: {
     signal: params.signal,
   });
 }
+
+/**
+ * Bir tarih aralığındaki mumları getirir.
+ *
+ * Kıyaslama serileri için kullanılır: ana grafikte görünen aralık neyse
+ * kıyaslanan sembol de aynı aralıkta çekilir.
+ */
+export async function getRange(params: {
+  provider: string;
+  symbol: string;
+  timeframe: string;
+  /** `YYYY-MM-DD` veya `YYYY-MM-DD HH:MM:SS`. */
+  start: string;
+  end: string;
+  signal?: AbortSignal;
+}): Promise<MarketCandle[]> {
+  const query = new URLSearchParams({
+    provider: params.provider,
+    symbol: params.symbol,
+    timeframe: params.timeframe,
+    start: params.start,
+    end: params.end,
+  });
+
+  return request<MarketCandle[]>(`${API_BASE}/data?${query.toString()}`, {
+    signal: params.signal,
+  });
+}

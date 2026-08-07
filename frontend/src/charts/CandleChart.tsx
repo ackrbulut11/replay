@@ -23,6 +23,8 @@ import ReplayTradePanel from '../replay/ReplayTradePanel';
 import ReplayHistoryPanel from '../replay/ReplayHistoryPanel';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
+import { useCompareStore, compareStore } from '../store/compareStore';
+import { getRange, type MarketCandle } from '../services/marketApi';
 import { useAlertStore, alertStore } from '../store/alertStore';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
@@ -126,6 +128,18 @@ export default function CandleChart({
   const mainLineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const primitiveRef = useRef<DrawingsPrimitive | null>(null);
+
+  // ─── Kıyaslama (karşılaştırma) serileri ───────────────────────────────────
+  // Sağ tık menüsünden eklenen semboller ana grafiğe çizgi olarak biner.
+  const compareState = useCompareStore();
+  /** Kıyas sembolünün ham mumları — `${id}|${timeframe}|${ilkZaman}` anahtarıyla. */
+  const compareCandlesRef = useRef<Map<string, MarketCandle[]>>(new Map());
+  const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  /** Ham veri geldiğinde çizim efektini tetiklemek için sayaç. */
+  const [compareDataVersion, setCompareDataVersion] = useState(0);
+  /** Lejantta gösterilen yüzdesel değişim (pencerenin ilk mumuna göre). */
+  const [compareStats, setCompareStats] = useState<Record<string, number>>({});
+  const [compareLoadingIds, setCompareLoadingIds] = useState<string[]>([]);
   // v5'te setMarkers seriden kaldirildi; isaretler ayri bir eklenti uzerinden yonetilir.
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
@@ -1627,6 +1641,9 @@ export default function CandleChart({
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       primitiveRef.current = null;
+      // Grafikle birlikte kıyaslama serileri de gitti; harita boşaltılmazsa
+      // yeni grafikte ölü seri referansları kullanılmaya çalışılır.
+      compareSeriesRef.current.clear();
     };
   }, []);
 
@@ -1789,6 +1806,141 @@ export default function CandleChart({
       volumeSeriesRef.current.setData([]);
     }
   }, [visibleData, replayState.isReplayActive]);
+
+  // ─── Kıyaslama Serileri ────────────────────────────────────────────────────
+  //
+  // Kıyaslanan sembol ana grafiğin fiyat ekseninde, pencerenin ilk mumuna
+  // ORANLANARAK çizilir: değer = anaSembolünİlkKapanışı × (kıyas / kıyasınİlkKapanışı).
+  // Böylece 4.300 dolarlık altınla 65.000 dolarlık bitcoin aynı grafikte
+  // yüzdesel olarak karşılaştırılabilir ve ana fiyat ekseni bozulmaz.
+
+  const compareIdsKey = compareState.items.map((i) => i.id).join(',');
+  // Kıyas verisinin önbellek anahtarı: sembol + zaman dilimi + yüklü aralık.
+  const compareRangeKey =
+    data.length > 0 ? `${timeframe}|${data[0].time}|${data[data.length - 1].time}` : '';
+
+  // 1) Veri çekme — ana grafiğin YÜKLÜ aralığı için bir kez. Replay adımlarında
+  //    (visibleData değiştiğinde) tekrar indirilmez.
+  useEffect(() => {
+    if (data.length === 0 || compareState.items.length === 0) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    // Backend tarihleri saat dilimsiz (naive) karşılaştırır; mum zaman damgaları
+    // da UTC saniye olarak geldiği için UTC biçimi doğru gidiş-dönüşü verir.
+    const toApiDate = (unixSeconds: number) =>
+      new Date(unixSeconds * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+    const start = toApiDate(data[0].time);
+    // Son mum da kapsansın diye bitiş bir gün ileri alınır.
+    const end = toApiDate(data[data.length - 1].time + 86400);
+
+    (async () => {
+      for (const item of compareState.items) {
+        const cacheKey = `${item.id}|${compareRangeKey}`;
+        if (compareCandlesRef.current.has(cacheKey)) continue;
+
+        setCompareLoadingIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
+        try {
+          const candles = await getRange({
+            provider: item.provider,
+            symbol: item.symbol,
+            timeframe,
+            start,
+            end,
+            signal: controller.signal,
+          });
+          if (cancelled) return;
+          compareCandlesRef.current.set(cacheKey, candles);
+          setCompareDataVersion((v) => v + 1);
+        } catch (e) {
+          // İptal edilen istekler normaldir (sembol/aralık değişti). Kalıcı bir
+          // hata ise seri boş kalır; kullanıcı lejanttan kaldırabilir.
+          if (!cancelled) console.warn('Kıyaslama verisi alınamadı:', item.id, e);
+        } finally {
+          if (!cancelled) setCompareLoadingIds((prev) => prev.filter((id) => id !== item.id));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compareIdsKey, compareRangeKey]);
+
+  // 2) Çizim — seri oluşturma/kaldırma ve veriyi ana zaman eksenine oturtma.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    // Kıyaslamadan çıkarılan semboller grafikten de silinir.
+    const activeIds = new Set(compareState.items.map((i) => i.id));
+    compareSeriesRef.current.forEach((series, id) => {
+      if (activeIds.has(id)) return;
+      try {
+        chart.removeSeries(series);
+      } catch (err) {
+        console.warn('Kıyaslama serisi kaldırılamadı:', err);
+      }
+      compareSeriesRef.current.delete(id);
+    });
+
+    if (!visibleData || visibleData.length === 0) return;
+
+    const mainBase = visibleData[0].close;
+    const stats: Record<string, number> = {};
+
+    compareState.items.forEach((item) => {
+      let series = compareSeriesRef.current.get(item.id);
+      if (!series) {
+        series = chart.addSeries(LineSeries, {
+          color: item.color,
+          lineWidth: 2,
+          // Değerler oranlanmış olduğu için eksende fiyat etiketi gösterilmez;
+          // gerçek değişim lejantta yüzde olarak yazar.
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        compareSeriesRef.current.set(item.id, series);
+      }
+      series.applyOptions({ color: item.color, visible: item.visible });
+
+      const raw = compareCandlesRef.current.get(`${item.id}|${compareRangeKey}`);
+      if (!raw || raw.length === 0) {
+        series.setData([]);
+        return;
+      }
+
+      // Her ana mum için kıyas sembolünün O ANA KADARKİ son kapanışı alınır.
+      // İleriye bakılmaz (RULES.md §19–23): replay'de kıyas çizgisi de
+      // oynatma konumunda durur.
+      const points: Array<{ time: Time; value: number }> = [];
+      let j = 0;
+      let last: number | null = null;
+      let base: number | null = null;
+
+      for (const bar of visibleData) {
+        while (j < raw.length && raw[j].time <= bar.time) {
+          last = raw[j].close;
+          j++;
+        }
+        if (last === null) continue;
+        if (base === null) base = last;
+        points.push({ time: bar.time as Time, value: mainBase * (last / base) });
+      }
+
+      series.setData(points);
+      if (points.length > 0) {
+        stats[item.id] = (points[points.length - 1].value / mainBase - 1) * 100;
+      }
+    });
+
+    setCompareStats(stats);
+  }, [compareState.items, visibleData, compareDataVersion, compareRangeKey]);
 
   // Gösterge Hesaplamaları ve Seri Güncellemeleri (serileri oluşturur/kaldırır, verileri ayarlar)
   useEffect(() => {
@@ -2634,6 +2786,70 @@ export default function CandleChart({
             </div>
           );
         })()}
+
+        {/* Kıyaslama Lejantı — sağ tık menüsünden eklenen semboller.
+            Yüzde, grafikte görünen pencerenin ilk mumuna göredir. */}
+        {compareState.items.length > 0 && (
+          <div className="flex flex-col gap-1.5 pointer-events-auto items-start">
+            {compareState.items.map((item) => {
+              const pct = compareStats[item.id];
+              const isLoading = compareLoadingIds.includes(item.id);
+
+              return (
+                <div
+                  key={item.id}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100 transition-opacity ${
+                    item.visible ? '' : 'opacity-45'
+                  }`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{
+                      backgroundColor: item.visible ? item.color : 'transparent',
+                      border: `1px solid ${item.color}`,
+                    }}
+                  />
+                  <span
+                    className={`font-medium font-mono ${
+                      item.visible ? 'text-zinc-200' : 'text-zinc-400 line-through decoration-zinc-500'
+                    }`}
+                  >
+                    {item.symbol}
+                  </span>
+                  {isLoading ? (
+                    <Loader2 className="w-3 h-3 text-zinc-400 animate-spin" />
+                  ) : pct !== undefined ? (
+                    <span
+                      className={`font-mono text-[10px] ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                    >
+                      {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[10px] text-zinc-500">veri yok</span>
+                  )}
+                  <button
+                    type="button"
+                    title={item.visible ? `${item.symbol} Gizle` : `${item.symbol} Göster`}
+                    onClick={() => compareStore.toggleVisible(item.id)}
+                    className={`p-0.5 transition-colors cursor-pointer ${
+                      item.visible ? 'text-zinc-400 hover:text-emerald-400' : 'text-zinc-500 hover:text-zinc-200'
+                    }`}
+                  >
+                    {item.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                  </button>
+                  <button
+                    type="button"
+                    title="Kıyaslamadan Kaldır"
+                    onClick={() => compareStore.remove(item.id)}
+                    className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Durum Gösterge Katmanları */}

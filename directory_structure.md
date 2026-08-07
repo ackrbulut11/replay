@@ -88,6 +88,7 @@ TradingResearchPlatform/
 │   │   │   ├── replayStore.ts
 │   │   │   ├── strategyStore.ts
 │   │   │   ├── watchlistStore.ts
+│   │   │   ├── compareStore.ts       # Grafiğe eklenen kıyaslama sembolleri
 │   │   │   ├── alertStore.ts
 │   │   │   ├── chartStore.ts         # STUB
 │   │   │   └── userStore.ts          # STUB

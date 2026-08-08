@@ -1,8 +1,10 @@
 import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check } from 'lucide-react';
 import logoImg from '../assets/logo.jpg';
 import { ReplayPreview } from '../components/ReplayPreview';
 import { joinWaitlist, WaitlistSource } from '../services/waitlistApi';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Herkese açık tanıtım sayfası.
@@ -61,16 +63,14 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string }> = ({
       setMessage(result.message);
     } catch (err: any) {
       setStatus('error');
-      setMessage(err?.message || 'Something went wrong. Please try again.');
+      setMessage(err.message || 'Failed to submit. Please try again.');
     }
   };
 
   if (status === 'done') {
     return (
-      <div className="flex items-center gap-2.5 text-[13px] text-zinc-300">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/10">
-          <Check size={11} className="text-emerald-400" />
-        </span>
+      <div className="flex items-center gap-2.5 rounded-md border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-[13px] text-emerald-400">
+        <Check size={16} className="shrink-0 text-emerald-400" />
         <span>{message}</span>
       </div>
     );
@@ -138,13 +138,13 @@ const STEPS = [
   },
   {
     no: '02',
-    title: 'Backtest it',
-    body: 'Entries, exits, win rate and PnL over past bars.',
+    title: 'Test single symbol',
+    body: 'Evaluate historical win rate, drawdown and return.',
   },
   {
     no: '03',
-    title: 'Scan your watchlist',
-    body: 'The same rule on every symbol, in a single scan.',
+    title: 'Scan the market',
+    body: 'Run the exact same rule across your entire watchlist.',
   },
   {
     no: '04',
@@ -172,14 +172,25 @@ const PLANNED = [
 
 // ─── Sayfa ───────────────────────────────────────────────────────────────────
 
-export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
+export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignInClick = () => {
+    if (onLogin) {
+      onLogin();
+    } else {
+      navigate('/login');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0b0e] text-zinc-100 antialiased">
       {/* Üst çubuk bilerek sticky değil: aşağı kaydırınca sayfayla birlikte
           kaybolur, boş yere ekranda yer kaplamaz. */}
       <header className="border-b border-white/[0.06]">
-        <Container className="flex h-16 items-center">
-          <div className="flex items-center gap-2.5">
+        <Container className="flex h-16 items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
             <img
               src={logoImg}
               alt=""
@@ -193,6 +204,25 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
             >
               REPLAY
             </span>
+          </Link>
+
+          <div>
+            {isAuthenticated ? (
+              <Link
+                to="/app"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 px-4 py-1.5 text-[12.5px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/30"
+              >
+                Go to App
+                <ArrowRight size={14} />
+              </Link>
+            ) : (
+              <button
+                onClick={handleSignInClick}
+                className="text-[12.5px] font-medium text-zinc-400 transition-colors hover:text-zinc-100"
+              >
+                Sign in
+              </button>
+            )}
           </div>
         </Container>
       </header>
@@ -499,12 +529,21 @@ export const LandingPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
             {/* Ürünün gerçek bir kısmı zaten çalışıyor (chart/replay/strateji);
                 bu yüzden mevcut kullanıcı için sessiz bir giriş yolu bırakıldı.
                 Sayfanın ana CTA'sı yine de waitlist formu. */}
-            <button
-              onClick={onLogin}
-              className="shrink-0 text-zinc-600 underline decoration-zinc-800 underline-offset-4 transition-colors hover:text-zinc-400"
-            >
-              Sign in
-            </button>
+            {isAuthenticated ? (
+              <Link
+                to="/app"
+                className="shrink-0 text-emerald-400 font-medium underline decoration-emerald-500/30 underline-offset-4 transition-colors hover:text-emerald-300"
+              >
+                Go to App →
+              </Link>
+            ) : (
+              <button
+                onClick={handleSignInClick}
+                className="shrink-0 text-zinc-600 underline decoration-zinc-800 underline-offset-4 transition-colors hover:text-zinc-400 cursor-pointer"
+              >
+                Sign in
+              </button>
+            )}
           </div>
         </Container>
       </footer>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import { BarChart2, Zap, ShieldCheck, TrendingUp, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -33,21 +34,22 @@ const DOWN = '#ef5f6b';
 /** Trend çizgisi ve altındaki dolgu için mavi-yeşil (teal) arası vurgu rengi. */
 const TREND = '#22b8a3';
 
-/**
- * `onBack` şimdilik kullanılmıyor — bu ekranın landing page ile bağlantısı
- * bilinçli olarak kesildi, App.tsx tarafı ayrıca ele alınacak. Prop yine de
- * tipte duruyor ki çağıran taraf değişmeden derlensin.
- */
 export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
-  const { loginWithGoogle } = useAuth();
+  const { isAuthenticated, loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
   const [error, setError] = React.useState<string | null>(null);
   const [animKey, setAnimKey] = React.useState(0);
+
+  if (isAuthenticated) {
+    return <Navigate to="/app" replace />;
+  }
 
   const handleSuccess = async (credentialResponse: any) => {
     if (credentialResponse.credential) {
       try {
         setError(null);
         await loginWithGoogle(credentialResponse.credential);
+        navigate('/app', { replace: true });
       } catch (err: any) {
         setError(err.message || 'Something went wrong while signing in.');
       }
@@ -60,25 +62,16 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
 
   return (
     <div className="flex min-h-screen items-center bg-[#0a0b0e] [background-image:radial-gradient(120%_100%_at_100%_0%,rgba(16,185,129,0.22),transparent_65%)] text-zinc-100 antialiased">
-      {/* Bilinçli olarak app bar ve alt bilgi yok: bu tek ekranlık bir
-          adım, sayfa tam viewport yüksekliğinde ortalanıyor — içerik
-          kısaysa altında boşluk kalmaması için dikey ortalama flex ile
-          yapılıyor (min-h-screen + top-align yerine).
-
-          Radial-gradient bilinçli olarak bu en dıştaki, tam viewport
-          yüksekliğindeki div'de — section içindeydi ama section içeriğin
-          doğal yüksekliği kadar (viewport'tan kısa), bu yüzden section'ın
-          üstünde/altında dikey ortalamadan doğan boşluk düz siyah kalıp
-          section sınırında sert bir çizgi oluşturuyordu. Burada gradient
-          tüm ekranı kapladığı için o sınır artık yok. */}
       <section className="relative w-full">
         <Container className="relative grid grid-cols-1 items-center gap-14 py-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] lg:gap-12">
           <div>
-            <img
-              src={logoImg}
-              alt="REPLAY"
-              className="h-9 w-9 rounded-md object-cover opacity-90"
-            />
+            <Link to="/" className="inline-block transition-opacity hover:opacity-80">
+              <img
+                src={logoImg}
+                alt="REPLAY"
+                className="h-9 w-9 rounded-md object-cover opacity-90"
+              />
+            </Link>
             <h1 className="mt-5 text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-zinc-100 sm:text-[36px]">
               Sign in to REPLAY.
             </h1>

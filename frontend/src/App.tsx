@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
 import { IndicatorsState } from './charts/IndicatorToolbar';
@@ -97,12 +99,28 @@ function formatBarTime(timeSec: number, timeframe: string): string {
   return `${day} ${time}`;
 }
 
-function App() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+function MainApp() {
+  const { isAuthenticated, user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<NavigationTab>('chart');
-  // Oturum yoksa tanıtım sayfası mı giriş ekranı mı görünecek.
-  const [showLogin, setShowLogin] = useState(false);
+  const getTabFromPath = useCallback((path: string): NavigationTab => {
+    const subPath = path.replace('/app', '').replace(/^\//, '');
+    if (['strategy', 'replay', 'scanner', 'backtest', 'journal', 'admin'].includes(subPath)) {
+      return subPath as NavigationTab;
+    }
+    return 'chart';
+  }, []);
+
+  const activeTab = getTabFromPath(location.pathname);
+
+  const handleSelectTab = useCallback((tab: NavigationTab) => {
+    if (tab === 'chart') {
+      navigate('/app');
+    } else {
+      navigate(`/app/${tab}`);
+    }
+  }, [navigate]);
 
   const [provider, setProvider] = useState('binance');
   const [symbol, setSymbol] = useState('BTCUSDT');
@@ -146,9 +164,9 @@ function App() {
   // başka hesapla girince) kullanıcıyı boş bir hata ekranında bırakma.
   useEffect(() => {
     if (activeTab === 'admin' && !user?.is_admin) {
-      setActiveTab('chart');
+      handleSelectTab('chart');
     }
-  }, [activeTab, user?.is_admin]);
+  }, [activeTab, user?.is_admin, handleSelectTab]);
 
   // Replay sekmesine geçildiğinde Replay modunu aktif et, Grafik Analiz sekmesine dönüldüğünde ise Replay modunu otomatik kapat
   useEffect(() => {
@@ -577,26 +595,7 @@ function App() {
     extendReplayForward,
   ]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#070b13] flex items-center justify-center text-slate-300">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-sm font-medium text-slate-400">Oturum doğrulanıyor...</span>
-        </div>
-      </div>
-    );
-  }
 
-  // Giriş yapılmadığında önce tanıtım sayfası açılır; giriş ekranı oradan
-  // istenince gösterilir. Router yok, bu yüzden tek bir state yeterli.
-  if (!isAuthenticated) {
-    return showLogin ? (
-      <LoginPage onBack={() => setShowLogin(false)} />
-    ) : (
-      <LandingPage onLogin={() => setShowLogin(true)} />
-    );
-  }
 
 
   // İstatistikleri hesaplamak için yardımcı fonksiyon
@@ -639,7 +638,7 @@ function App() {
   const stats = getStats();
 
   return (
-    <DashboardLayout activeTab={activeTab} onSelectTab={setActiveTab}>
+    <DashboardLayout activeTab={activeTab} onSelectTab={handleSelectTab}>
       {activeTab === 'admin' ? (
         <ErrorBoundary fallbackTitle="Admin Paneli Hatası">
           <AdminPage />
@@ -651,7 +650,7 @@ function App() {
       ) : activeTab === 'strategy' ? (
         <ErrorBoundary fallbackTitle="Strateji Ekranı Hatası">
           <StrategyPage
-            onSelectTab={setActiveTab}
+            onSelectTab={handleSelectTab}
             setSymbol={setSymbol}
             setProvider={setProvider}
             setTimeframe={setTimeframe}
@@ -687,7 +686,7 @@ function App() {
                 notice={notice}
                 onDismissNotice={() => setNotice(null)}
                 onOpenSearchModal={() => setIsSearchModalOpen(true)}
-                onSelectTab={setActiveTab}
+                onSelectTab={handleSelectTab}
               />
             </div>
 
@@ -888,6 +887,24 @@ function App() {
         </div>
       )}
     </DashboardLayout>
+  );
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/app/*"
+        element={
+          <ProtectedRoute>
+            <MainApp />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

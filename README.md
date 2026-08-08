@@ -1,45 +1,24 @@
-# Trading Research Platform
+# Replay Platform
 
-Market replay, manuel backtest, strateji araştırmaları ve teknik analiz odaklı modüler bir web platformu.
+Market replay, strateji araştırması ve teknik analiz odaklı web platformu.
 
-## Tech Stack
+## Öne Çıkan Özellikler
 
-- **Frontend:** React + TypeScript + TailwindCSS (Grafik kütüphanesi: `lightweight-charts`), Vercel'e deploy edilir
-- **Backend:** Python + FastAPI (REST API, `/api` altında), Render'a deploy edilir
-- **Veritabanı:** SQLite (`storage/database/app.db`)
+- **Market Replay:** Geçmiş mum verileri üzerinde zaman aralıklı simülasyon ve analiz.
+- **Strateji ve İndikatör Takibi:** Kural tabanlı strateji mimarisi ve teknik göstergeler.
+- **İnteraktif Grafik:** Gelişmiş teknik analiz araçları ve mum grafik arayüzü.
+
+## Teknoloji Yığını
+
+- **Frontend:** React, TypeScript, TailwindCSS, Lightweight Charts
+- **Backend:** Python, FastAPI
+- **Veri & Depolama:** PostgreSQL / SQLite, Parquet depolama
 
 ## Proje Yapısı
 
 ```text
-├── docs/               # Dokümantasyon
-├── frontend/           # React + TypeScript web arayüzü
-├── backend/            # Python FastAPI backend modülü
-├── storage/            # Mum verileri, stratejiler ve yerel veritabanı
-├── scripts/            # Veri indirme, güncelleme ve derleme betikleri
-└── .gitignore          
+├── frontend/           # Web arayüzü bileşenleri ve servisleri
+├── backend/            # REST API ve strateji değerlendirme motoru
+├── storage/            # Veri depolama alanı
+└── docs/               # Dokümantasyon
 ```
-
-## Kurulum ve Çalıştırma
-
-### 1. Frontend Kurulumu
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### 2. Backend Kurulumu
-
-```bash
-cd backend
-# Sanal ortamı aktifleştirin (Windows)
-.venv\Scripts\activate
-
-# Bağımlılıkları yükleyin 
-pip install -r requirements.txt
-
-# Çalıştırın
-python main.py
-```
-

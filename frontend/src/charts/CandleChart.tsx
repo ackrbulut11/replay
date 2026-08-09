@@ -31,6 +31,7 @@ import { useChartSettingsStore } from '../store/chartSettingsStore';
 import { journalStore, useJournalStore } from '../store/journalStore';
 import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
+import CompareSettingsModal from './CompareSettingsModal';
 
 
 
@@ -178,6 +179,7 @@ export default function CandleChart({
   const toolSettings = chartSettings.drawingDefaults;
   const indicatorSettings = chartSettings.indicators;
   const [editingIndicator, setEditingIndicator] = useState<keyof IndicatorSettingsMap | null>(null);
+  const [editingCompareId, setEditingCompareId] = useState<string | null>(null);
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   // Lejanttaki göz simgesiyle "geçici gizleme": gösterge listede kalır, yalnızca
   // grafikteki çizgisi görünmez olur (tamamen kaldırmak için X kullanılır).
@@ -193,6 +195,26 @@ export default function CandleChart({
     setHiddenIndicators((prev) => ({ ...prev, [key]: false }));
     onToggleIndicator(key);
   };
+
+  // Sol üstteki lejantta gösterilen göstergeler (EMA/BB) — kıyaslama sembolleri
+  // her zaman aynı lejantın altında, ayrı bir liste olarak eklenir (bkz. aşağıdaki JSX).
+  const legendIndicatorKeys = useMemo(
+    () => (['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).filter((key) => indicators[key]),
+    [indicators]
+  );
+
+  // Lejant kapalıyken yeni bir gösterge veya kıyaslama sembolü eklendiğinde
+  // otomatik açılır, böylece eklendiği fark edilir. İlk render'da (mount)
+  // yalnızca başlangıç sayısı kaydedilir; sayfa yüklendiğinde varsayılan
+  // olarak aktif bir gösterge varsa lejant zorla açılmaz.
+  const legendItemCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    const total = legendIndicatorKeys.length + compareState.items.length;
+    if (legendItemCountRef.current !== null && total > legendItemCountRef.current) {
+      setIsLegendExpanded(true);
+    }
+    legendItemCountRef.current = total;
+  }, [legendIndicatorKeys.length, compareState.items.length]);
 
   const toolSettingsRef = useRef(toolSettings);
   toolSettingsRef.current = toolSettings;
@@ -1913,7 +1935,7 @@ export default function CandleChart({
       if (!series) {
         series = chart.addSeries(LineSeries, {
           color: item.color,
-          lineWidth: 2,
+          lineWidth: item.lineWidth as any,
           // Değerler oranlanmış olduğu için eksende fiyat etiketi gösterilmez;
           // gerçek değişim lejantta yüzde olarak yazar.
           lastValueVisible: false,
@@ -1922,7 +1944,7 @@ export default function CandleChart({
         });
         compareSeriesRef.current.set(item.id, series);
       }
-      series.applyOptions({ color: item.color, visible: item.visible });
+      series.applyOptions({ color: item.color, lineWidth: item.lineWidth as any, visible: item.visible });
 
       const raw = compareCandlesRef.current.get(`${item.id}|${compareRangeKey}`);
       if (!raw || raw.length === 0) {
@@ -2738,10 +2760,11 @@ export default function CandleChart({
 
         {/* Göstergeler İçin Canlı Lejant ve Hızlı Ayarlar (TradingView Tarzı) — çizim
             araç çubuğunun altında, aynı sütunda; üst üste binmesin diye ayrı bir
-            absolute katman değil, bu sütunun bir parçası. */}
+            absolute katman değil, bu sütunun bir parçası. Kıyaslama sembolleri
+            (sağ tık menüsünden eklenenler) de aynı lejantın parçasıdır ve her
+            zaman listenin en altında yer alır. */}
         {(() => {
-          const activeLegendKeys = (['ema20', 'ema50', 'ema100', 'ema200', 'bb'] as const).filter((key) => indicators[key]);
-          const shouldCollapse = activeLegendKeys.length > 0;
+          const shouldCollapse = legendIndicatorKeys.length > 0 || compareState.items.length > 0;
           const showItems = shouldCollapse && isLegendExpanded;
 
           return (
@@ -2757,7 +2780,7 @@ export default function CandleChart({
                 </button>
               )}
               {showItems &&
-                activeLegendKeys.map((key) => {
+                legendIndicatorKeys.map((key) => {
                   const conf = indicatorSettings[key] as any;
                   const val = latestIndicatorValues[key];
                   const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
@@ -2812,73 +2835,75 @@ export default function CandleChart({
                     </div>
                   );
                 })}
+              {showItems &&
+                compareState.items.map((item) => {
+                  const pct = compareStats[item.id];
+                  const isLoading = compareLoadingIds.includes(item.id);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100 transition-opacity ${
+                        item.visible ? '' : 'opacity-45'
+                      }`}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{
+                          backgroundColor: item.visible ? item.color : 'transparent',
+                          border: `1px solid ${item.color}`,
+                        }}
+                      />
+                      <span
+                        className={`font-medium font-mono ${
+                          item.visible ? 'text-zinc-200' : 'text-zinc-400 line-through decoration-zinc-500'
+                        }`}
+                      >
+                        {item.symbol}
+                      </span>
+                      {isLoading ? (
+                        <Loader2 className="w-3 h-3 text-zinc-400 animate-spin" />
+                      ) : pct !== undefined ? (
+                        <span
+                          className={`font-mono text-[10px] ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                        >
+                          {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[10px] text-zinc-500">veri yok</span>
+                      )}
+                      <button
+                        type="button"
+                        title={item.visible ? `${item.symbol} Gizle` : `${item.symbol} Göster`}
+                        onClick={() => compareStore.toggleVisible(item.id)}
+                        className={`p-0.5 transition-colors cursor-pointer ${
+                          item.visible ? 'text-zinc-400 hover:text-emerald-400' : 'text-zinc-500 hover:text-zinc-200'
+                        }`}
+                      >
+                        {item.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                      </button>
+                      <button
+                        type="button"
+                        title={`${item.symbol} Ayarları`}
+                        onClick={() => setEditingCompareId(item.id)}
+                        className="p-0.5 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                      >
+                        <Settings2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Kıyaslamadan Kaldır"
+                        onClick={() => compareStore.remove(item.id)}
+                        className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
             </div>
           );
         })()}
-
-        {/* Kıyaslama Lejantı — sağ tık menüsünden eklenen semboller.
-            Yüzde, grafikte görünen pencerenin ilk mumuna göredir. */}
-        {compareState.items.length > 0 && (
-          <div className="flex flex-col gap-1.5 pointer-events-auto items-start">
-            {compareState.items.map((item) => {
-              const pct = compareStats[item.id];
-              const isLoading = compareLoadingIds.includes(item.id);
-
-              return (
-                <div
-                  key={item.id}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100 transition-opacity ${
-                    item.visible ? '' : 'opacity-45'
-                  }`}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{
-                      backgroundColor: item.visible ? item.color : 'transparent',
-                      border: `1px solid ${item.color}`,
-                    }}
-                  />
-                  <span
-                    className={`font-medium font-mono ${
-                      item.visible ? 'text-zinc-200' : 'text-zinc-400 line-through decoration-zinc-500'
-                    }`}
-                  >
-                    {item.symbol}
-                  </span>
-                  {isLoading ? (
-                    <Loader2 className="w-3 h-3 text-zinc-400 animate-spin" />
-                  ) : pct !== undefined ? (
-                    <span
-                      className={`font-mono text-[10px] ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
-                    >
-                      {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[10px] text-zinc-500">veri yok</span>
-                  )}
-                  <button
-                    type="button"
-                    title={item.visible ? `${item.symbol} Gizle` : `${item.symbol} Göster`}
-                    onClick={() => compareStore.toggleVisible(item.id)}
-                    className={`p-0.5 transition-colors cursor-pointer ${
-                      item.visible ? 'text-zinc-400 hover:text-emerald-400' : 'text-zinc-500 hover:text-zinc-200'
-                    }`}
-                  >
-                    {item.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    title="Kıyaslamadan Kaldır"
-                    onClick={() => compareStore.remove(item.id)}
-                    className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Durum Gösterge Katmanları */}
@@ -3165,6 +3190,13 @@ export default function CandleChart({
         isOpen={!!editingIndicator}
         indicatorKey={editingIndicator}
         onClose={() => setEditingIndicator(null)}
+      />
+
+      {/* Kıyaslama Sembolü Ayarları Modal Penceresi */}
+      <CompareSettingsModal
+        isOpen={!!editingCompareId}
+        compareId={editingCompareId}
+        onClose={() => setEditingCompareId(null)}
       />
 
       {/* Sembol Arama Modal Penceresi */}

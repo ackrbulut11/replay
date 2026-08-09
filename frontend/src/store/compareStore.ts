@@ -21,6 +21,8 @@ export interface CompareItem {
   provider: string;
   /** Grafikteki çizgi rengi. */
   color: string;
+  /** Çizgi kalınlığı (piksel). */
+  lineWidth: number;
   /** Lejanttaki göz düğmesi: seri kalır, yalnızca gizlenir. */
   visible: boolean;
 }
@@ -63,7 +65,7 @@ export const compareStore = {
     applyState({
       items: [
         ...currentState.items,
-        { id, symbol: symbol.toUpperCase(), provider: provider.toLowerCase(), color, visible: true },
+        { id, symbol: symbol.toUpperCase(), provider: provider.toLowerCase(), color, lineWidth: 2, visible: true },
       ],
     });
   },
@@ -75,6 +77,13 @@ export const compareStore = {
   toggleVisible: (id: string) => {
     applyState({
       items: currentState.items.map((i) => (i.id === id ? { ...i, visible: !i.visible } : i)),
+    });
+  },
+
+  /** Kıyaslama çizgisinin rengini ve/veya kalınlığını günceller. */
+  updateStyle: (id: string, style: Partial<Pick<CompareItem, 'color' | 'lineWidth'>>) => {
+    applyState({
+      items: currentState.items.map((i) => (i.id === id ? { ...i, ...style } : i)),
     });
   },
 

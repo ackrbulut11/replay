@@ -7,8 +7,8 @@ mümkün olduğunca küçük tutulmuştur: tek yazılabilir alan, katı doğrula
 IP başına basit hız sınırı ve varlık bilgisi sızdırmayan tek tip yanıt.
 
 Aynı adresin ikinci gönderimi yeni satır açmaz ve hata da döndürmez; fikir
-olarak idempotenttir. "Bu e-posta kayıtlı mı?" sorusunun cevabı dışarıya
-verilmez, çünkü bu tek başına bir bilgi sızıntısıdır.
+olarak idempotenttir. Kullanıcı deneyimi için "already_registered" bayrağı
+döner, böylece frontend zaten kayıtlı olduğunu küçük bir notla bildirebilir.
 """
 
 from __future__ import annotations
@@ -94,13 +94,14 @@ class WaitlistRequest(BaseModel):
 
 
 class WaitlistResponse(BaseModel):
-    """
-    Tek tip yanıt: adres yeni de olsa, zaten kayıtlı da olsa aynı gövde döner.
-    Aksi halde uç nokta bir e-posta doğrulama servisine dönüşür.
-    """
+    """`already_registered`, frontend'in "zaten kayıtlısınız" notunu göstermesi içindir."""
 
     ok: bool = True
+    already_registered: bool = False
     message: str = "You are on the list. We will email you when it is ready."
+
+
+_ALREADY_REGISTERED_MESSAGE = "You are already on the list."
 
 
 @router.post("", response_model=WaitlistResponse)
@@ -116,7 +117,7 @@ def join_waitlist(
         db.query(WaitlistSignup).filter(WaitlistSignup.email == payload.email).first()
     )
     if existing is not None:
-        return WaitlistResponse()
+        return WaitlistResponse(already_registered=True, message=_ALREADY_REGISTERED_MESSAGE)
 
     db.add(WaitlistSignup(email=payload.email, source=payload.source))
     try:
@@ -125,5 +126,6 @@ def join_waitlist(
         # İki istek aynı anda geldiğinde benzersiz kısıt devreye girer;
         # kullanıcı açısından sonuç yine "listedesiniz".
         db.rollback()
+        return WaitlistResponse(already_registered=True, message=_ALREADY_REGISTERED_MESSAGE)
 
     return WaitlistResponse()

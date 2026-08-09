@@ -12,6 +12,7 @@ const API_BASE_URL =
 
 export interface WaitlistResponse {
   ok: boolean;
+  already_registered: boolean;
   message: string;
 }
 

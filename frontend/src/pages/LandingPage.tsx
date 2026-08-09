@@ -37,13 +37,15 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * tamamlandığında birlikte kaybolur, aksi halde teşekkür mesajının hemen
  * altında aynı şeyi tekrar eden bir satır kalıyor.
  */
-const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string }> = ({
+const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitted?: () => void }> = ({
   source,
   note,
+  onSubmitted,
 }) => {
   const [email, setEmail] = React.useState('');
   const [status, setStatus] = React.useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const [message, setMessage] = React.useState('');
+  const [alreadyRegistered, setAlreadyRegistered] = React.useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -61,6 +63,8 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string }> = ({
       const result = await joinWaitlist(trimmed, source);
       setStatus('done');
       setMessage(result.message);
+      setAlreadyRegistered(result.already_registered);
+      onSubmitted?.();
     } catch (err: any) {
       setStatus('error');
       setMessage(err.message || 'Failed to submit. Please try again.');
@@ -69,8 +73,14 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string }> = ({
 
   if (status === 'done') {
     return (
-      <div className="flex items-center gap-2.5 rounded-md border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-[13px] text-emerald-400">
-        <Check size={16} className="shrink-0 text-emerald-400" />
+      <div
+        className={`flex items-center gap-2.5 rounded-md border px-4 py-3 text-[13px] ${
+          alreadyRegistered
+            ? 'border-zinc-600/30 bg-white/[0.03] text-zinc-400'
+            : 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400'
+        }`}
+      >
+        <Check size={16} className={`shrink-0 ${alreadyRegistered ? 'text-zinc-500' : 'text-emerald-400'}`} />
         <span>{message}</span>
       </div>
     );
@@ -175,6 +185,10 @@ const PLANNED = [
 export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  // Erken erişim formu gönderildiğinde (yeni kayıt ya da zaten kayıtlı fark
+  // etmez) üstteki "Sign in" yerine "Go to App" gösterilir — kullanıcı listeye
+  // katıldıktan hemen sonra uygulamayı denemeye yönlendirilir.
+  const [emailSubmitted, setEmailSubmitted] = React.useState(false);
 
   const handleSignInClick = () => {
     if (onLogin) {
@@ -208,12 +222,22 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
 
           {!isAuthenticated && (
             <div>
-              <button
-                onClick={handleSignInClick}
-                className="text-[12.5px] font-medium text-zinc-400 transition-colors hover:text-zinc-100"
-              >
-                Sign in
-              </button>
+              {emailSubmitted ? (
+                <button
+                  onClick={handleSignInClick}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 px-4 py-1.5 text-[12.5px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/30"
+                >
+                  Go to App
+                  <ArrowRight size={14} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleSignInClick}
+                  className="text-[12.5px] font-medium text-zinc-400 transition-colors hover:text-zinc-100"
+                >
+                  Sign in
+                </button>
+              )}
             </div>
           )}
         </Container>
@@ -254,6 +278,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               <WaitlistForm
                 source="hero"
                 note="One invite email when it is ready. Nothing else, ever."
+                onSubmitted={() => setEmailSubmitted(true)}
               />
             </div>
           </div>
@@ -496,7 +521,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
             email you when the rest is ready.
           </p>
           <div className="mt-8 flex justify-center">
-            <WaitlistForm source="footer" />
+            <WaitlistForm source="footer" onSubmitted={() => setEmailSubmitted(true)} />
           </div>
         </Container>
       </section>

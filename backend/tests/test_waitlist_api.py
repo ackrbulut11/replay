@@ -84,10 +84,9 @@ class TestWaitlistApi(unittest.TestCase):
         second = client.post("/api/waitlist", json=payload)
 
         self.assertEqual(first.status_code, 200)
-        # İkinci gönderim de başarılı görünür: "bu e-posta kayıtlı mı"
-        # bilgisi dışarıya verilmez.
         self.assertEqual(second.status_code, 200)
-        self.assertEqual(second.json(), first.json())
+        self.assertFalse(first.json()["already_registered"])
+        self.assertTrue(second.json()["already_registered"])
         self.assertEqual(_count("waitlist.test@example.com"), 1)
 
     def test_email_is_normalized(self):

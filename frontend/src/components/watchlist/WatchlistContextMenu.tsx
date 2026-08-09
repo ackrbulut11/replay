@@ -10,7 +10,7 @@
  * dışına taşacaksa sola/yukarı çevrilir.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, memo } from 'react';
 import {
   ListPlus, PlusCircle, SquarePen, Rows3, Plus, ChevronRight, Check, Trash2, Type,
 } from 'lucide-react';
@@ -43,7 +43,7 @@ interface WatchlistContextMenuProps {
   onCreateList: (item: WatchlistItem | null) => void;
 }
 
-export default function WatchlistContextMenu({
+function WatchlistContextMenu({
   target,
   lists,
   onClose,
@@ -55,7 +55,6 @@ export default function WatchlistContextMenu({
 }: WatchlistContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: target.x, top: target.y });
-  const [isListSubmenuOpen, setIsListSubmenuOpen] = useState(false);
 
   const { item, listId } = target;
   const isSection = item?.kind === 'section';
@@ -116,7 +115,7 @@ export default function WatchlistContextMenu({
     <div
       ref={menuRef}
       style={{ left: pos.left, top: pos.top, width: MENU_WIDTH }}
-      className="fixed z-[100] bg-[#0d1117] border border-white/[0.1] rounded-xl shadow-2xl p-1.5 backdrop-blur-md select-none animate-fadeIn"
+      className="fixed z-[100] bg-[#0d1117] border border-white/[0.1] rounded-xl shadow-2xl p-1.5 select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
       {symbolItem && (
@@ -173,71 +172,69 @@ export default function WatchlistContextMenu({
 
           <div className="h-px bg-white/[0.08] my-1.5" />
 
-          {/* İzleme listesine ekle — alt menüde listeler */}
-          <div
-            className="relative"
-            onMouseEnter={() => setIsListSubmenuOpen(true)}
-            onMouseLeave={() => setIsListSubmenuOpen(false)}
-          >
+          {/* İzleme listesine ekle — alt menüde listeler.
+              Açılma tetiği saf CSS `group-hover` ile yapılıyor: React state
+              üzerinden mouseenter/mouseleave'de yeniden render beklemek,
+              backdrop-blur'lu bir menüde fare hareketine göze çarpan bir
+              gecikmeyle tepki verilmesine yol açıyordu. */}
+          <div className="relative group">
             <button type="button" className={itemClass}>
               <ListPlus className="w-4 h-4 text-zinc-400 shrink-0" />
               <span className="flex-1">{label} İzleme Listesine Ekle</span>
               <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />
             </button>
 
-            {isListSubmenuOpen && (
-              <div
-                className="absolute left-[calc(100%-6px)] -top-1 w-56 bg-[#0d1117] border border-white/[0.1] rounded-xl shadow-2xl p-1.5 z-10"
-                style={
-                  // Alt menü sağa sığmıyorsa sola aç.
-                  pos.left + MENU_WIDTH + 224 > window.innerWidth
-                    ? { left: 'auto', right: 'calc(100% - 6px)' }
-                    : undefined
-                }
-              >
-                {lists.map((list) => {
-                  const checked = containingListIds.includes(list.id);
-                  return (
-                    <button
-                      key={list.id}
-                      type="button"
-                      className={itemClass}
-                      onClick={() => {
-                        watchlistStore.toggleSymbolInList(
-                          list.id,
-                          symbolItem.symbol,
-                          symbolItem.provider,
-                          symbolItem.name,
-                          symbolItem.exchange,
-                        );
-                        onClose();
-                      }}
+            <div
+              className="absolute left-[calc(100%-6px)] -top-1 hidden w-56 bg-[#0d1117] border border-white/[0.1] rounded-xl shadow-2xl p-1.5 z-10 group-hover:block"
+              style={
+                // Alt menü sağa sığmıyorsa sola aç.
+                pos.left + MENU_WIDTH + 224 > window.innerWidth
+                  ? { left: 'auto', right: 'calc(100% - 6px)' }
+                  : undefined
+              }
+            >
+              {lists.map((list) => {
+                const checked = containingListIds.includes(list.id);
+                return (
+                  <button
+                    key={list.id}
+                    type="button"
+                    className={itemClass}
+                    onClick={() => {
+                      watchlistStore.toggleSymbolInList(
+                        list.id,
+                        symbolItem.symbol,
+                        symbolItem.provider,
+                        symbolItem.name,
+                        symbolItem.exchange,
+                      );
+                      onClose();
+                    }}
+                  >
+                    <span
+                      className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
+                        checked ? 'bg-indigo-500 border-indigo-500' : 'border-zinc-600'
+                      }`}
                     >
-                      <span
-                        className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                          checked ? 'bg-indigo-500 border-indigo-500' : 'border-zinc-600'
-                        }`}
-                      >
-                        {checked && <Check className="w-3 h-3 text-white" />}
-                      </span>
-                      <span className="truncate">{list.name}</span>
-                    </button>
-                  );
-                })}
+                      {checked && <Check className="w-3 h-3 text-white" />}
+                    </span>
+                    <span className="truncate">{list.name}</span>
+                  </button>
+                );
+              })}
 
-                <div className="h-px bg-white/[0.08] my-1.5" />
-                <button
-                  type="button"
-                  className={itemClass}
-                  onClick={() => {
-                    onCreateList(symbolItem);
-                    onClose();
-                  }}
-                >
-                  <span>Yeni Liste Oluştur...</span>
-                </button>
-              </div>
-            )}
+              <div className="h-px bg-white/[0.08] my-1.5" />
+              <button
+                type="button"
+                className={itemClass}
+                onClick={() => {
+                  onCreateList(symbolItem);
+                  onClose();
+                }}
+              >
+                <span>Yeni Liste Oluştur...</span>
+              </button>
+            </div>
           </div>
 
           {/* Kıyaslama serisi */}
@@ -360,3 +357,5 @@ export default function WatchlistContextMenu({
     </div>
   );
 }
+
+export default memo(WatchlistContextMenu);

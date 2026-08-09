@@ -206,24 +206,16 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
             </span>
           </Link>
 
-          <div>
-            {isAuthenticated ? (
-              <Link
-                to="/app"
-                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 px-4 py-1.5 text-[12.5px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/30"
-              >
-                Go to App
-                <ArrowRight size={14} />
-              </Link>
-            ) : (
+          {!isAuthenticated && (
+            <div>
               <button
                 onClick={handleSignInClick}
                 className="text-[12.5px] font-medium text-zinc-400 transition-colors hover:text-zinc-100"
               >
                 Sign in
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </Container>
       </header>
 

@@ -143,6 +143,10 @@ export default function CandleChart({
   /** Lejantta gösterilen yüzdesel değişim (pencerenin ilk mumuna göre). */
   const [compareStats, setCompareStats] = useState<Record<string, number>>({});
   const [compareLoadingIds, setCompareLoadingIds] = useState<string[]>([]);
+  /** Görünür aralık kaydırıldığında/yakınlaştırıldığında kıyas çizgilerini
+   *  yeniden hesaplayan fonksiyona en güncel referans (chart kurulumunda bir
+   *  kez abone olunan subscribeVisibleLogicalRangeChange için). */
+  const drawCompareSeriesRef = useRef<() => void>(() => {});
   // v5'te setMarkers seriden kaldirildi; isaretler ayri bir eklenti uzerinden yonetilir.
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
@@ -1456,6 +1460,7 @@ export default function CandleChart({
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       updateAlarmOverlaysRef.current?.();
+      drawCompareSeriesRef.current?.();
     });
 
     chart.subscribeCrosshairMove((param) => {
@@ -1846,10 +1851,12 @@ export default function CandleChart({
 
   // ─── Kıyaslama Serileri ────────────────────────────────────────────────────
   //
-  // Kıyaslanan sembol ana grafiğin fiyat ekseninde, pencerenin ilk mumuna
-  // ORANLANARAK çizilir: değer = anaSembolünİlkKapanışı × (kıyas / kıyasınİlkKapanışı).
+  // Kıyaslanan sembol ana grafiğin fiyat ekseninde, ekranda O AN görünen ilk
+  // muma ORANLANARAK çizilir: değer = anaSembolünGörünenİlkKapanışı × (kıyas / kıyasınGörünenİlkKapanışı).
   // Böylece 4.300 dolarlık altınla 65.000 dolarlık bitcoin aynı grafikte
-  // yüzdesel olarak karşılaştırılabilir ve ana fiyat ekseni bozulmaz.
+  // yüzdesel olarak karşılaştırılabilir ve ana fiyat ekseni bozulmaz. Kullanıcı
+  // grafiği kaydırdıkça/yakınlaştırdıkça taban da güncellenir (bkz. aşağıdaki
+  // subscribeVisibleLogicalRangeChange çağrısı).
 
   const compareIdsKey = compareState.items.map((i) => i.id).join(',');
   // Kıyas verisinin önbellek anahtarı: sembol + zaman dilimi + yüklü aralık.
@@ -1925,58 +1932,72 @@ export default function CandleChart({
       compareSeriesRef.current.delete(id);
     });
 
-    if (!visibleData || visibleData.length === 0) return;
+    const redraw = () => {
+      if (!visibleData || visibleData.length === 0) return;
 
-    const mainBase = visibleData[0].close;
-    const stats: Record<string, number> = {};
+      // Kıyas çizgisinin başlangıcı grafikte O AN görünen ilk muma eşlenir
+      // (sabit olarak yüklü verinin en başı değil): kullanıcı kaydırdıkça/
+      // yakınlaştırdıkça taban da güncellenir ve performans karşılaştırması
+      // ekrandaki güncel görünüme göre yeniden hesaplanır.
+      const logicalRange = chart.timeScale().getVisibleLogicalRange();
+      const startIndex = logicalRange
+        ? Math.min(Math.max(Math.ceil(logicalRange.from), 0), visibleData.length - 1)
+        : 0;
+      const mainBase = visibleData[startIndex].close;
+      const stats: Record<string, number> = {};
 
-    compareState.items.forEach((item) => {
-      let series = compareSeriesRef.current.get(item.id);
-      if (!series) {
-        series = chart.addSeries(LineSeries, {
-          color: item.color,
-          lineWidth: item.lineWidth as any,
-          // Değerler oranlanmış olduğu için eksende fiyat etiketi gösterilmez;
-          // gerçek değişim lejantta yüzde olarak yazar.
-          lastValueVisible: false,
-          priceLineVisible: false,
-          crosshairMarkerVisible: false,
-        });
-        compareSeriesRef.current.set(item.id, series);
-      }
-      series.applyOptions({ color: item.color, lineWidth: item.lineWidth as any, visible: item.visible });
-
-      const raw = compareCandlesRef.current.get(`${item.id}|${compareRangeKey}`);
-      if (!raw || raw.length === 0) {
-        series.setData([]);
-        return;
-      }
-
-      // Her ana mum için kıyas sembolünün O ANA KADARKİ son kapanışı alınır.
-      // İleriye bakılmaz (RULES.md §19–23): replay'de kıyas çizgisi de
-      // oynatma konumunda durur.
-      const points: Array<{ time: Time; value: number }> = [];
-      let j = 0;
-      let last: number | null = null;
-      let base: number | null = null;
-
-      for (const bar of visibleData) {
-        while (j < raw.length && raw[j].time <= bar.time) {
-          last = raw[j].close;
-          j++;
+      compareState.items.forEach((item) => {
+        let series = compareSeriesRef.current.get(item.id);
+        if (!series) {
+          series = chart.addSeries(LineSeries, {
+            color: item.color,
+            lineWidth: item.lineWidth as any,
+            // Değerler oranlanmış olduğu için eksende fiyat etiketi gösterilmez;
+            // gerçek değişim lejantta yüzde olarak yazar.
+            lastValueVisible: false,
+            priceLineVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          compareSeriesRef.current.set(item.id, series);
         }
-        if (last === null) continue;
-        if (base === null) base = last;
-        points.push({ time: bar.time as Time, value: mainBase * (last / base) });
-      }
+        series.applyOptions({ color: item.color, lineWidth: item.lineWidth as any, visible: item.visible });
 
-      series.setData(points);
-      if (points.length > 0) {
-        stats[item.id] = (points[points.length - 1].value / mainBase - 1) * 100;
-      }
-    });
+        const raw = compareCandlesRef.current.get(`${item.id}|${compareRangeKey}`);
+        if (!raw || raw.length === 0) {
+          series.setData([]);
+          return;
+        }
 
-    setCompareStats(stats);
+        // Her ana mum için kıyas sembolünün O ANA KADARKİ son kapanışı alınır.
+        // İleriye bakılmaz (RULES.md §19–23): replay'de kıyas çizgisi de
+        // oynatma konumunda durur. Görünür pencerenin öncesi çizilmez.
+        const points: Array<{ time: Time; value: number }> = [];
+        let j = 0;
+        let last: number | null = null;
+        let base: number | null = null;
+
+        for (let idx = startIndex; idx < visibleData.length; idx++) {
+          const bar = visibleData[idx];
+          while (j < raw.length && raw[j].time <= bar.time) {
+            last = raw[j].close;
+            j++;
+          }
+          if (last === null) continue;
+          if (base === null) base = last;
+          points.push({ time: bar.time as Time, value: mainBase * (last / base) });
+        }
+
+        series.setData(points);
+        if (points.length > 0) {
+          stats[item.id] = (points[points.length - 1].value / mainBase - 1) * 100;
+        }
+      });
+
+      setCompareStats(stats);
+    };
+
+    redraw();
+    drawCompareSeriesRef.current = redraw;
   }, [compareState.items, visibleData, compareDataVersion, compareRangeKey]);
 
   // Gösterge Hesaplamaları ve Seri Güncellemeleri (serileri oluşturur/kaldırır, verileri ayarlar)

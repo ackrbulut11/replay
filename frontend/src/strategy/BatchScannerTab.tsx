@@ -219,6 +219,19 @@ export default function BatchScannerTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'profitable' | 'signals_only'>('all');
   const [sortBy, setSortBy] = useState<'pnl' | 'win_rate' | 'trades' | 'symbol'>('pnl');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Tablo başlığına tıklanınca sıralama alanını değiştirir; aynı başlığa tekrar
+  // tıklanırsa yönü (büyükten küçüğe / küçükten büyüğe) tersine çevirir.
+  // İlk tıklama her zaman büyükten küçüğe başlar.
+  const handleHeaderSort = (field: 'pnl' | 'win_rate' | 'trades' | 'symbol') => {
+    if (sortBy === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDir('desc');
+    }
+  };
 
   // Üst Panel Yüksekliği State & Sürükleme Mantığı (Tutacak yukarı çekildikçe üst panel küçülür, tablo büyür)
   const [topHeight, setTopHeight] = useState<number>(310);
@@ -497,20 +510,21 @@ export default function BatchScannerTab({
 
     // Sıralama
     list.sort((a, b) => {
+      let cmp = 0;
       if (sortBy === 'pnl') {
-        return b.total_pnl_percent - a.total_pnl_percent;
+        cmp = a.total_pnl_percent - b.total_pnl_percent;
+      } else if (sortBy === 'win_rate') {
+        cmp = a.win_rate - b.win_rate;
+      } else if (sortBy === 'trades') {
+        cmp = a.total_trades - b.total_trades;
+      } else {
+        cmp = a.symbol.localeCompare(b.symbol);
       }
-      if (sortBy === 'win_rate') {
-        return b.win_rate - a.win_rate;
-      }
-      if (sortBy === 'trades') {
-        return b.total_trades - a.total_trades;
-      }
-      return a.symbol.localeCompare(b.symbol);
+      return sortDir === 'asc' ? cmp : -cmp;
     });
 
     return list;
-  }, [results, searchQuery, filterMode, sortBy]);
+  }, [results, searchQuery, filterMode, sortBy, sortDir]);
 
   // Özet İstatistikler
   const summaryStats = useMemo(() => {
@@ -800,7 +814,10 @@ export default function BatchScannerTab({
             <span>Sırala:</span>
             <select
               value={sortBy}
-              onChange={(e: any) => setSortBy(e.target.value)}
+              onChange={(e: any) => {
+                setSortBy(e.target.value);
+                setSortDir('desc');
+              }}
               className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 outline-none font-medium"
             >
               <option value="pnl">En Yüksek Net Kar (% PnL)</option>
@@ -817,10 +834,28 @@ export default function BatchScannerTab({
             <thead className="sticky top-0 z-10 bg-slate-900 border-b border-slate-800">
               <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                 <th className="py-3 px-4">SEMBOL</th>
-                <th className="py-3 px-4 text-center">TAMAMLANA İŞLEM</th>
-                <th className="py-3 px-4 text-center">BAŞARI ORANI (WIN RATE)</th>
+                <th
+                  onClick={() => handleHeaderSort('trades')}
+                  className="py-3 px-4 text-center cursor-pointer select-none hover:text-slate-200 transition-colors"
+                  title="Tamamlanan işlem sayısına göre sırala"
+                >
+                  TAMAMLANA İŞLEM{sortBy === 'trades' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('win_rate')}
+                  className="py-3 px-4 text-center cursor-pointer select-none hover:text-slate-200 transition-colors"
+                  title="Başarı oranına (Win Rate) göre sırala"
+                >
+                  BAŞARI ORANI (WIN RATE){sortBy === 'win_rate' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                </th>
                 <th className="py-3 px-4 text-center">KAZANAN / KAYBEDEN</th>
-                <th className="py-3 px-4 text-center">TOPLAM NET KAR/ZARAR</th>
+                <th
+                  onClick={() => handleHeaderSort('pnl')}
+                  className="py-3 px-4 text-center cursor-pointer select-none hover:text-slate-200 transition-colors"
+                  title="Toplam net kar/zarara göre sırala"
+                >
+                  TOPLAM NET KAR/ZARAR{sortBy === 'pnl' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                </th>
                 <th className="py-3 px-4 text-right">AKSİYON</th>
               </tr>
             </thead>

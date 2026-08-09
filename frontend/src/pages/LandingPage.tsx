@@ -547,12 +547,17 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
                 bu yüzden mevcut kullanıcı için sessiz bir giriş yolu bırakıldı.
                 Sayfanın ana CTA'sı yine de waitlist formu. */}
             {isAuthenticated ? (
-              <Link
-                to="/app"
-                className="shrink-0 text-emerald-400 font-medium underline decoration-emerald-500/30 underline-offset-4 transition-colors hover:text-emerald-300"
+              // Doğrudan /app'e değil /login'e yönlendirir: zaten girişliyse
+              // LoginPage kendi isAuthenticated kontrolüyle anında /app'e
+              // atıyor, ama token sessizce geçersiz düşmüşse burada login
+              // ekranı görünür — /app'e doğrudan atlamak o durumda kırık bir
+              // sayfada bırakırdı.
+              <button
+                onClick={handleSignInClick}
+                className="shrink-0 text-emerald-400 font-medium underline decoration-emerald-500/30 underline-offset-4 transition-colors hover:text-emerald-300 cursor-pointer"
               >
                 Go to App →
-              </Link>
+              </button>
             ) : (
               <button
                 onClick={handleSignInClick}

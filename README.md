@@ -1,9 +1,6 @@
 # 📈 REPLAY — Trading Research Platform
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-replay--nine--gold.vercel.app-00C853?style=for-the-badge&logo=vercel)](https://replay-nine-gold.vercel.app/)
-[![Frontend](https://img.shields.io/badge/Frontend-React_%7C_TypeScript_%7C_Vite-61DAFB?style=flat-square&logo=react)](https://replay-nine-gold.vercel.app/)
-[![Backend](https://img.shields.io/badge/Backend-FastAPI_%7C_Python-009688?style=flat-square&logo=fastapi)](https://replay-xj3e.onrender.com)
-[![Database](https://img.shields.io/badge/Database-PostgreSQL_%2F_SQLite-336791?style=flat-square&logo=postgresql)](https://replay-nine-gold.vercel.app/)
 
 > **REPLAY**, geçmiş piyasa verileri üzerinde zaman aralıklı mum simülasyonu (*Market Replay*), kural tabanlı strateji geliştirme (DSL), teknik analiz indikatörleri ve grafik inceleme odaklı modüler bir finansal araştırma ve backtest platformudur.
 

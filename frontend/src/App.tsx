@@ -115,12 +115,16 @@ function MainApp() {
   const activeTab = getTabFromPath(location.pathname);
 
   const handleSelectTab = useCallback((tab: NavigationTab) => {
-    if (tab === 'chart') {
-      navigate('/app');
-    } else {
-      navigate(`/app/${tab}`);
-    }
+    navigate(`/app/${tab}`);
   }, [navigate]);
+
+  // "/app" kısayolu grafik sekmesine karşılık gelir; URL'i her zaman
+  // "/app/chart" olarak normalize et.
+  useEffect(() => {
+    if (location.pathname === '/app' || location.pathname === '/app/') {
+      navigate('/app/chart', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   const [provider, setProvider] = useState('binance');
   const [symbol, setSymbol] = useState('BTCUSDT');

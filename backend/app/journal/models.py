@@ -70,6 +70,7 @@ class ReplaySessionCreateRequest(BaseModel):
 
     symbol: str
     timeframe: str = "1h"
+    starting_balance: float = Field(default=10000.0, gt=0, description="Oturum başlangıç bakiyesi")
 
 
 class ReplaySessionResponse(BaseModel):
@@ -78,6 +79,10 @@ class ReplaySessionResponse(BaseModel):
     id: str
     symbol: str
     timeframe: str
+    # Bakiye oturum boyunca kapanan her işlemle güncellenir; arayüz "kasan
+    # ne durumda" sorusunu buradan cevaplar.
+    starting_balance: float = 10000.0
+    current_balance: float = 10000.0
 
     class Config:
         from_attributes = True

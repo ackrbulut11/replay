@@ -50,6 +50,10 @@ class TradeJournal:
             user_id=user_id,
             symbol=request.symbol.upper(),
             timeframe=request.timeframe,
+            starting_balance=request.starting_balance,
+            # Oturum başlangıcında iki bakiye eşittir; kapanan her işlem
+            # `current_balance`'ı günceller (bkz. close_trade).
+            current_balance=request.starting_balance,
         )
         db.add(session)
         db.commit()
@@ -57,14 +61,18 @@ class TradeJournal:
         return session
 
     @staticmethod
-    def owns_session(db: Session, session_id: str, user_id: str) -> bool:
-        """Verilen replay oturumu bu kullanıcıya mı ait?"""
+    def get_session(db: Session, session_id: str, user_id: str) -> Optional[ReplaySession]:
+        """Oturumu döndürür — yalnızca sahibi için."""
         return (
             db.query(ReplaySession)
             .filter(ReplaySession.id == session_id, ReplaySession.user_id == user_id)
             .first()
-            is not None
         )
+
+    @staticmethod
+    def owns_session(db: Session, session_id: str, user_id: str) -> bool:
+        """Verilen replay oturumu bu kullanıcıya mı ait?"""
+        return TradeJournal.get_session(db, session_id, user_id) is not None
 
     @staticmethod
     def open_trade(db: Session, request: TradeOpenRequest, user_id: str) -> JournalTrade:
@@ -247,6 +255,18 @@ class TradeJournal:
         trade.exit_time = request.exit_time
         trade.closed_at = datetime.utcnow()
 
+        # Oturum bakiyesini işle. `replay_sessions.current_balance` migration'da
+        # ve modelde vardı ama hiçbir yerde okunmuyor/yazılmıyordu — ölü bir
+        # kolondu. Artık replay bir "işaret koyma" alıştırması değil, bakiyesi
+        # olan bir hesap simülasyonu.
+        if trade.session_id:
+            session = db.query(ReplaySession).filter(ReplaySession.id == trade.session_id).first()
+            if session is not None:
+                base = session.current_balance
+                if base is None:
+                    base = session.starting_balance or 0.0
+                session.current_balance = base + (trade.pnl or 0.0)
+
         db.commit()
         db.refresh(trade)
         return trade
@@ -304,7 +324,21 @@ class TradeJournal:
 
         Açık pozisyonlar rapora girmez: henüz gerçekleşmemiş kâr/zararı
         istatistiğe katmak win rate ve drawdown'ı yanıltırdı.
+
+        `session_id` verilmişse başlangıç bakiyesi O OTURUMUN kendi değerinden
+        alınır; çağıranın gönderdiği varsayılan yalnızca oturum yokken geçerli
+        olur. Aksi halde 50.000 ile başlatılmış bir oturumun raporu 10.000
+        üzerinden hesaplanır ve drawdown yüzdeleri anlamsız çıkardı.
         """
+        if session_id:
+            session = (
+                db.query(ReplaySession)
+                .filter(ReplaySession.id == session_id, ReplaySession.user_id == user_id)
+                .first()
+            )
+            if session is not None and session.starting_balance:
+                starting_balance = session.starting_balance
+
         trades = TradeJournal.list_trades(
             db,
             user_id,

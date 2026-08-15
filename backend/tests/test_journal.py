@@ -364,5 +364,77 @@ class TestSessionOwnership(JournalTestCase):
         self.assertIsNone(trade.session_id)
 
 
+class TestSessionBalance(JournalTestCase):
+    """replay_sessions.current_balance olu kolondu; artik isliyor."""
+
+    def _session(self, balance=10000.0, user_id=None):
+        return self.journal.start_session(
+            self.db,
+            ReplaySessionCreateRequest(symbol="BTCUSDT", timeframe="1h", starting_balance=balance),
+            user_id=user_id or self.alice.id,
+        )
+
+    def test_new_session_starts_with_given_balance(self):
+        session = self._session(balance=50_000)
+        self.assertEqual(session.starting_balance, 50_000)
+        self.assertEqual(session.current_balance, 50_000)
+
+    def test_winning_trade_increases_balance(self):
+        session = self._session(balance=10_000)
+        trade = self.journal.open_trade(
+            self.db, _open_request(session_id=session.id), user_id=self.alice.id
+        )
+        # entry 100, quantity 2 -> cikis 110 => +20
+        self.journal.close_trade(self.db, trade, TradeCloseRequest(exit_price=110.0))
+        self.db.refresh(session)
+        self.assertAlmostEqual(session.current_balance, 10_020.0, places=6)
+
+    def test_losing_trade_decreases_balance(self):
+        session = self._session(balance=10_000)
+        trade = self.journal.open_trade(
+            self.db, _open_request(session_id=session.id), user_id=self.alice.id
+        )
+        self.journal.close_trade(self.db, trade, TradeCloseRequest(exit_price=96.0))
+        self.db.refresh(session)
+        self.assertAlmostEqual(session.current_balance, 9_992.0, places=6)
+
+    def test_balance_accumulates_over_trades(self):
+        session = self._session(balance=10_000)
+        for exit_price in (110.0, 105.0):
+            trade = self.journal.open_trade(
+                self.db, _open_request(session_id=session.id), user_id=self.alice.id
+            )
+            self.journal.close_trade(self.db, trade, TradeCloseRequest(exit_price=exit_price))
+        self.db.refresh(session)
+        # +20 ve +10
+        self.assertAlmostEqual(session.current_balance, 10_030.0, places=6)
+
+    def test_open_trade_does_not_move_balance(self):
+        session = self._session(balance=10_000)
+        self.journal.open_trade(
+            self.db, _open_request(session_id=session.id), user_id=self.alice.id
+        )
+        self.db.refresh(session)
+        self.assertAlmostEqual(session.current_balance, 10_000.0, places=6)
+
+    def test_performance_uses_session_starting_balance(self):
+        """Oturumun kendi bakiyesi, cagiranin varsayilanini ezmeli."""
+        session = self._session(balance=50_000)
+        trade = self.journal.open_trade(
+            self.db, _open_request(session_id=session.id), user_id=self.alice.id
+        )
+        self.journal.close_trade(self.db, trade, TradeCloseRequest(exit_price=110.0))
+
+        report = self.journal.performance(
+            self.db, self.alice.id, session_id=session.id, starting_balance=10_000.0
+        )
+        self.assertEqual(report["starting_balance"], 50_000)
+
+    def test_get_session_is_owner_scoped(self):
+        session = self._session(user_id=self.alice.id)
+        self.assertIsNotNone(self.journal.get_session(self.db, session.id, self.alice.id))
+        self.assertIsNone(self.journal.get_session(self.db, session.id, self.bob.id))
+
+
 if __name__ == "__main__":
     unittest.main()

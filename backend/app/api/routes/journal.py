@@ -113,6 +113,22 @@ def start_session(
     return _journal.start_session(db, request, user_id=current_user.id)
 
 
+@router.get("/sessions/{session_id}", response_model=ReplaySessionResponse)
+def get_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Oturumun güncel durumunu (bakiye dahil) döndürür — yalnızca sahibi.
+
+    Sahibi olmayan istek 403 değil 404 alır (strateji/alarm ile aynı desen).
+    """
+    session = _journal.get_session(db, session_id, user_id=current_user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"Oturum bulunamadı: {session_id}")
+    return session
+
+
 @router.post("/sessions/{session_id}/save")
 def save_session(
     session_id: str,

@@ -74,6 +74,11 @@ export default function StrategyBuilder({
   const [allowShort, setAllowShort] = useState(false);
   const [takeProfitPct, setTakeProfitPct] = useState<number | null>(null);
   const [stopLossPct, setStopLossPct] = useState<number | null>(null);
+  // Gerçekleşme ayarları. Varsayılanlar backend ile aynı: 1 bar gecikme
+  // (RULES.md §22) ve sıfır maliyet (eski kayıtların anlamı değişmesin).
+  const [barDelay, setBarDelay] = useState(1);
+  const [commissionBps, setCommissionBps] = useState(0);
+  const [slippageBps, setSlippageBps] = useState(0);
   const [parameters, setParameters] = useState<StrategyParameter[]>([]);
   const [entryRules, setEntryRules] = useState<ConditionGroup>(createEmptyConditionGroup());
   const [exitRules, setExitRules] = useState<ConditionGroup>(createEmptyConditionGroup());
@@ -95,6 +100,9 @@ export default function StrategyBuilder({
       setAllowShort(Boolean(strategy.allow_short));
       setTakeProfitPct(strategy.take_profit_pct ?? null);
       setStopLossPct(strategy.stop_loss_pct ?? null);
+      setBarDelay(strategy.bar_delay ?? 1);
+      setCommissionBps(strategy.commission_bps ?? 0);
+      setSlippageBps(strategy.slippage_bps ?? 0);
       setParameters(strategy.parameters || []);
       setEntryRules(strategy.entry_rules || createEmptyConditionGroup());
       setExitRules(strategy.exit_rules || createEmptyConditionGroup());
@@ -105,6 +113,9 @@ export default function StrategyBuilder({
       setAllowShort(false);
       setTakeProfitPct(null);
       setStopLossPct(null);
+      setBarDelay(1);
+      setCommissionBps(0);
+      setSlippageBps(0);
       setParameters([]);
       setEntryRules(createEmptyConditionGroup());
       setExitRules(createEmptyConditionGroup());
@@ -183,6 +194,9 @@ export default function StrategyBuilder({
           allow_short: allowShort,
           take_profit_pct: takeProfitPct,
           stop_loss_pct: stopLossPct,
+          bar_delay: barDelay,
+          commission_bps: commissionBps,
+          slippage_bps: slippageBps,
           parameters,
           entry_rules: entryRules,
           exit_rules: exitRules,
@@ -196,6 +210,9 @@ export default function StrategyBuilder({
           allow_short: allowShort,
           take_profit_pct: takeProfitPct,
           stop_loss_pct: stopLossPct,
+          bar_delay: barDelay,
+          commission_bps: commissionBps,
+          slippage_bps: slippageBps,
           parameters,
           entry_rules: entryRules,
           exit_rules: exitRules,
@@ -513,6 +530,56 @@ export default function StrategyBuilder({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Gerçekleşme ayarları — sonucun gerçekçiliğini belirleyen kısım */}
+          <div className="flex items-center gap-6 flex-wrap mt-3 pt-3 border-t border-slate-800/60">
+            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-slate-700/50 rounded-lg px-3.5 py-2">
+              <span className="text-xs font-bold text-slate-300">Emir Gecikmesi:</span>
+              <select
+                value={barDelay}
+                onChange={(e) => setBarDelay(parseInt(e.target.value, 10))}
+                title="Sinyal kapanan mumdan üretilir. 1 bar gecikme gerçekçidir; 0 (intrabar) sonuçları iyimserleştirir."
+                className="bg-slate-950 border border-slate-700/80 rounded-md px-2 py-1.5 text-sm text-slate-100 font-semibold outline-none cursor-pointer"
+              >
+                <option value={1}>1 bar sonra (gerçekçi)</option>
+                <option value={0}>Aynı mumda (intrabar)</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-amber-500/30 rounded-lg px-3.5 py-2">
+              <span className="text-xs font-bold text-amber-400">Komisyon (bps):</span>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                value={commissionBps}
+                onChange={(e) => setCommissionBps(e.target.value ? parseFloat(e.target.value) : 0)}
+                placeholder="Örn: 10"
+                title="Her bacak için komisyon. 1 bps = %0,01. Binance spot taker ≈ 10 bps."
+                className="w-24 bg-slate-950 border border-slate-700/80 rounded-md px-2 py-1.5 text-slate-100 font-mono text-sm font-semibold outline-none"
+              />
+            </div>
+
+            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-amber-500/30 rounded-lg px-3.5 py-2">
+              <span className="text-xs font-bold text-amber-400">Slipaj (bps):</span>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                value={slippageBps}
+                onChange={(e) => setSlippageBps(e.target.value ? parseFloat(e.target.value) : 0)}
+                placeholder="Örn: 5"
+                title="Emrin istenen fiyattan ne kadar kötü dolduğu. Alışta yukarı, satışta aşağı."
+                className="w-24 bg-slate-950 border border-slate-700/80 rounded-md px-2 py-1.5 text-slate-100 font-mono text-sm font-semibold outline-none"
+              />
+            </div>
+
+            {commissionBps === 0 && slippageBps === 0 && (
+              <span className="text-[11px] text-amber-400/80 italic">
+                Maliyet sıfır: sonuçlar gerçekte alınabilecekten iyimser çıkar.
+              </span>
+            )}
           </div>
         </div>
 

@@ -14,7 +14,7 @@ import type {
   OperatorType,
   IndicatorInfo,
 } from '../types/strategy';
-import { OPERATORS, PRICE_FIELDS, TIMEFRAMES } from '../types/strategy';
+import { OPERATORS, PRICE_FIELDS, TIMEFRAMES, isConditionGroup } from '../types/strategy';
 
 // ─── Operand Editörü ─────────────────────────────────────────────────────────
 
@@ -348,12 +348,20 @@ function ConditionRow({
 
 // ─── Ana ConditionEditor ─────────────────────────────────────────────────────
 
+// Arayüzde izin verilen azami iç içe grup derinliği. Backend 10 seviyeye
+// kadar değerlendirir; ekranda 2 seviyeden fazlası okunamaz hale geliyor.
+const MAX_UI_GROUP_DEPTH = 2;
+
 interface ConditionEditorProps {
   group: ConditionGroup;
   onChange: (group: ConditionGroup) => void;
   indicators: IndicatorInfo[];
   title: string;
   accentColor?: string;
+  /** İç içe grup seviyesi; 0 = en üst. Kendi kendini çağırırken artar. */
+  depth?: number;
+  /** Alt grup olarak render edilirken üst grup silme düğmesi sağlar. */
+  onDeleteGroup?: () => void;
 }
 
 export default function ConditionEditor({
@@ -362,6 +370,8 @@ export default function ConditionEditor({
   indicators,
   title,
   accentColor = 'indigo',
+  depth = 0,
+  onDeleteGroup,
 }: ConditionEditorProps) {
   const isSellGroup = accentColor === 'red';
 
@@ -389,6 +399,27 @@ export default function ConditionEditor({
     onChange({
       ...group,
       conditions: [defaultNewCond, ...group.conditions],
+    });
+  };
+
+  // Alt grup ekler: "(A VE B) VEYA (C VE D)" ifadesinin UI karşılığı.
+  // Üst grup VEYA, alt gruplar VE olacak şekilde başlatılır — en sık kurulan
+  // kalıp bu ve kullanıcı mantık düğmesiyle her ikisini de değiştirebilir.
+  const handleAddGroup = () => {
+    const newGroup: ConditionGroup = {
+      logic: 'AND',
+      conditions: [
+        {
+          left: { type: 'indicator', name: 'RSI', period: 14 },
+          operator: isSellGroup ? 'cross_below' : 'cross_above',
+          right: { type: 'value', value: isSellGroup ? 70 : 30 },
+        },
+      ],
+    };
+    onChange({
+      ...group,
+      logic: group.conditions.length > 0 ? 'OR' : group.logic,
+      conditions: [...group.conditions, newGroup],
     });
   };
 
@@ -486,7 +517,7 @@ export default function ConditionEditor({
     }
   };
 
-  const handleUpdateCondition = (index: number, condition: Condition) => {
+  const handleUpdateCondition = (index: number, condition: Condition | ConditionGroup) => {
     const newConditions = [...group.conditions];
     newConditions[index] = condition;
     onChange({ ...group, conditions: newConditions });
@@ -585,6 +616,28 @@ export default function ConditionEditor({
             <Plus className="w-3.5 h-3.5" />
             + Özel Koşul
           </button>
+
+          {/* Alt grup: (A VE B) VEYA (C VE D) kurmayı mümkün kılar */}
+          {depth < MAX_UI_GROUP_DEPTH && (
+            <button
+              onClick={handleAddGroup}
+              title="Parantezli kural: (A VE B) VEYA (C VE D)"
+              className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              + Alt Grup
+            </button>
+          )}
+
+          {onDeleteGroup && (
+            <button
+              onClick={onDeleteGroup}
+              title="Bu alt grubu sil"
+              className="p-1 text-red-400/60 hover:text-red-400 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -610,14 +663,26 @@ export default function ConditionEditor({
                   </span>
                 </div>
               )}
-              <ConditionRow
-                condition={condition}
-                onChange={(c) => handleUpdateCondition(index, c)}
-                onDelete={() => handleDeleteCondition(index)}
-                indicators={indicators}
-                index={index}
-                isSellGroup={isSellGroup}
-              />
+              {isConditionGroup(condition) ? (
+                <ConditionEditor
+                  group={condition}
+                  onChange={(g) => handleUpdateCondition(index, g)}
+                  onDeleteGroup={() => handleDeleteCondition(index)}
+                  indicators={indicators}
+                  title={`Alt Grup ${index + 1}`}
+                  accentColor={accentColor}
+                  depth={depth + 1}
+                />
+              ) : (
+                <ConditionRow
+                  condition={condition}
+                  onChange={(c) => handleUpdateCondition(index, c)}
+                  onDelete={() => handleDeleteCondition(index)}
+                  indicators={indicators}
+                  index={index}
+                  isSellGroup={isSellGroup}
+                />
+              )}
             </div>
           ))
         )}

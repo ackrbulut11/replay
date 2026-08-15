@@ -15,13 +15,19 @@ export type OperatorType =
   | '!='
   | 'cross_above'
   | 'cross_below'
-  | 'between';
+  | 'between'
+  // Sağ operand eşik değil, "kaç bar öncesine göre" anlamındadır.
+  | 'rising'
+  | 'falling';
 
 export type LogicType = 'AND' | 'OR';
 
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
 
-export type OperandType = 'indicator' | 'price' | 'value' | 'pnl';
+export type OperandType = 'indicator' | 'price' | 'value' | 'pnl' | 'expr';
+
+/** Aritmetik operandın desteklediği işlemler. */
+export type ArithmeticOp = '+' | '-' | '*' | '/';
 
 export type ParameterType = 'int' | 'float';
 
@@ -33,12 +39,16 @@ export interface IndicatorOperand {
   period: number | string; // sayı veya parametre referansı "$fast_ema"
   field?: string;
   timeframe?: string;
+  /** Kaç bar GERİDEKİ değer okunsun (0 = mevcut bar). Negatif yasak (lookahead). */
+  offset?: number;
 }
 
 export interface PriceOperand {
   type: 'price';
   field: string; // open, high, low, close, volume
   timeframe?: string;
+  /** Kaç bar GERİDEKİ değer okunsun (0 = mevcut bar). */
+  offset?: number;
 }
 
 export interface ValueOperand {
@@ -50,7 +60,20 @@ export interface PnlOperand {
   type: 'pnl';
 }
 
-export type Operand = IndicatorOperand | PriceOperand | ValueOperand | PnlOperand;
+/** Aritmetik ifade: `left <op> right`. "close - 2*ATR(14)" gibi. */
+export interface ExprOperand {
+  type: 'expr';
+  op: ArithmeticOp;
+  left: Operand;
+  right: Operand;
+}
+
+export type Operand =
+  | IndicatorOperand
+  | PriceOperand
+  | ValueOperand
+  | PnlOperand
+  | ExprOperand;
 
 
 // ─── Koşul Tipleri ───────────────────────────────────────────────────────────
@@ -62,9 +85,20 @@ export interface Condition {
   right2?: Operand; // 'between' operatörü için
 }
 
+/**
+ * Koşul grubu.
+ *
+ * `conditions` hem düz koşul hem ALT GRUP içerebilir; böylece
+ * `(A VE B) VEYA (C VE D)` ifade edilebilir.
+ */
 export interface ConditionGroup {
   logic: LogicType;
-  conditions: Condition[];
+  conditions: Array<Condition | ConditionGroup>;
+}
+
+/** Bir öğe alt grup mu, düz koşul mu? (backend `is_condition_group` ile aynı ölçüt) */
+export function isConditionGroup(item: Condition | ConditionGroup): item is ConditionGroup {
+  return (item as ConditionGroup).conditions !== undefined;
 }
 
 // ─── Parametre Tipi ──────────────────────────────────────────────────────────
@@ -83,7 +117,7 @@ export interface StrategyParameter {
 export interface TimeframeFilter {
   timeframe: string;
   logic: LogicType;
-  conditions: Condition[];
+  conditions: Array<Condition | ConditionGroup>;
 }
 
 // ─── Strateji Modeli ─────────────────────────────────────────────────────────
@@ -102,6 +136,12 @@ export interface Strategy {
   allow_short?: boolean;
   take_profit_pct?: number | null;
   stop_loss_pct?: number | null;
+  /** Sinyal ile emrin gerçekleşmesi arasındaki mum sayısı. 1 = kural uyumlu, 0 = intrabar. */
+  bar_delay?: number;
+  /** Her bacak için komisyon, baz puan (1 bps = %0,01). */
+  commission_bps?: number;
+  /** Emrin istenen fiyattan ne kadar kötü dolduğu (bps). */
+  slippage_bps?: number;
 }
 
 // ─── API İstek/Yanıt Tipleri ─────────────────────────────────────────────────
@@ -116,6 +156,12 @@ export interface StrategyCreateRequest {
   allow_short?: boolean;
   take_profit_pct?: number | null;
   stop_loss_pct?: number | null;
+  /** Sinyal ile emrin gerçekleşmesi arasındaki mum sayısı. 1 = kural uyumlu, 0 = intrabar. */
+  bar_delay?: number;
+  /** Her bacak için komisyon, baz puan (1 bps = %0,01). */
+  commission_bps?: number;
+  /** Emrin istenen fiyattan ne kadar kötü dolduğu (bps). */
+  slippage_bps?: number;
 }
 
 export interface StrategyUpdateRequest {
@@ -128,8 +174,22 @@ export interface StrategyUpdateRequest {
   allow_short?: boolean;
   take_profit_pct?: number | null;
   stop_loss_pct?: number | null;
+  /** Sinyal ile emrin gerçekleşmesi arasındaki mum sayısı. 1 = kural uyumlu, 0 = intrabar. */
+  bar_delay?: number;
+  /** Her bacak için komisyon, baz puan (1 bps = %0,01). */
+  commission_bps?: number;
+  /** Emrin istenen fiyattan ne kadar kötü dolduğu (bps). */
+  slippage_bps?: number;
 }
 
+/** Pozisyon boyutlandırma kuralı. */
+export type SizingMode = 'fixed_units' | 'fixed_cash' | 'percent_equity' | 'risk_percent';
+
+export interface PositionSizing {
+  mode: SizingMode;
+  /** Anlamı moda göre değişir: adet / tutar / bakiye yüzdesi / risk yüzdesi. */
+  value: number;
+}
 
 export interface EvaluateRequest {
   symbol: string;
@@ -140,15 +200,54 @@ export interface EvaluateRequest {
   limit_bars?: number;
   allow_short?: boolean;
   param_overrides?: Record<string, number>;
+  /** Nakit simülasyonu için başlangıç bakiyesi. */
+  starting_balance?: number;
+  sizing?: PositionSizing;
 }
 
 export interface SignalResult {
+  /** Emrin GERÇEKLEŞTİĞİ mumun zamanı. */
   timestamp: number;
   signal: SignalType;
   price?: number;
   conditions_met: string[];
   entry_price?: number;
   pnl_percent?: number;
+  /** Sinyali ÜRETEN kapanmış mumun zamanı; bar_delay=0 iken timestamp ile aynı. */
+  signal_timestamp?: number;
+}
+
+/** `reports/performance_report.py` çıktısı. Tanımsız metrikler null döner. */
+export interface PerformanceReport {
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  breakeven_trades: number;
+  win_rate: number | null;
+  loss_rate: number | null;
+  net_profit: number;
+  net_profit_pct: number | null;
+  weighted_return_pct: number | null;
+  gross_profit: number;
+  gross_loss: number;
+  profit_factor: number | null;
+  average_win: number | null;
+  average_loss: number | null;
+  expectancy: number | null;
+  largest_win: number | null;
+  largest_loss: number | null;
+  max_drawdown: number;
+  max_drawdown_pct: number | null;
+  sharpe_ratio: number | null;
+  starting_balance: number;
+  ending_balance: number;
+  equity_curve: number[];
+}
+
+export interface BuyAndHoldResult {
+  return_pct: number | null;
+  entry_price: number | null;
+  exit_price: number | null;
 }
 
 export interface EvaluateResponse {
@@ -166,6 +265,12 @@ export interface EvaluateResponse {
   losing_trades?: number;
   win_rate?: number;
   total_pnl_percent?: number;
+  /** Sharpe, drawdown, profit factor, bakiye eğrisi. */
+  performance?: PerformanceReport | null;
+  /** Aynı dönemde al-tut getirisi. */
+  buy_and_hold?: BuyAndHoldResult | null;
+  /** Stratejinin al-tut'a göre farkı. Pozitifse strateji öndedir. */
+  outperformance_pct?: number | null;
 }
 
 export interface SingleEvaluationLogItem {

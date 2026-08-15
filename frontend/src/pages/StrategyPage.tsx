@@ -33,6 +33,18 @@ interface StrategyPageProps {
   currentTimeframe?: string;
 }
 
+/**
+ * Tanımsız metrikleri "—" olarak gösterir.
+ *
+ * `performance_report.py` tanımsız oranları (ör. hiç zarar eden işlem yokken
+ * Profit Factor) bilinçli olarak `null` döndürüyor — 0 yazmak "kötü" gibi
+ * okunurdu.
+ */
+function formatMetric(value: number | null | undefined, suffix = ''): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `${value.toFixed(2)}${suffix}`;
+}
+
 export default function StrategyPage({
   onSelectTab,
   setSymbol,
@@ -563,6 +575,87 @@ export default function StrategyPage({
                             </span>
                           </div>
                         </div>
+
+                        {/*
+                          Risk metrikleri ve al-tut kıyası.
+
+                          Getiriyi tek başına göstermek yanıltıcıydı: aynı getiriyi
+                          %60 düşüşle alan bir strateji aynı strateji değildir ve
+                          sembol zaten %60 yükseldiyse strateji kaybettirmiştir.
+                        */}
+                        {evaluateResult.performance && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
+                              <span className="text-[9px] text-slate-400/80 uppercase block">
+                                Max Düşüş (Drawdown)
+                              </span>
+                              <span className="text-sm font-bold text-red-400 font-mono">
+                                {formatMetric(evaluateResult.performance.max_drawdown_pct, '%')}
+                              </span>
+                            </div>
+                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
+                              <span
+                                className="text-[9px] text-slate-400/80 uppercase block"
+                                title="Brüt kâr / brüt zarar. 1'in üstü kârlı."
+                              >
+                                Profit Factor
+                              </span>
+                              <span className="text-sm font-bold text-slate-200 font-mono">
+                                {formatMetric(evaluateResult.performance.profit_factor)}
+                              </span>
+                            </div>
+                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
+                              <span
+                                className="text-[9px] text-slate-400/80 uppercase block"
+                                title="Getirinin oynaklığa oranı; işlem bazlı, yıllıklandırılmamış."
+                              >
+                                Sharpe
+                              </span>
+                              <span className="text-sm font-bold text-slate-200 font-mono">
+                                {formatMetric(evaluateResult.performance.sharpe_ratio)}
+                              </span>
+                            </div>
+                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
+                              <span className="text-[9px] text-slate-400/80 uppercase block">
+                                Son Bakiye
+                              </span>
+                              <span className="text-sm font-bold text-slate-200 font-mono">
+                                {evaluateResult.performance.ending_balance.toLocaleString('tr-TR', {
+                                  maximumFractionDigits: 0,
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {evaluateResult.buy_and_hold?.return_pct != null && (
+                          <div
+                            className={`flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-lg border text-xs ${
+                              (evaluateResult.outperformance_pct ?? 0) >= 0
+                                ? 'bg-emerald-950/30 border-emerald-800/40'
+                                : 'bg-amber-950/30 border-amber-800/40'
+                            }`}
+                          >
+                            <span className="text-slate-300 font-semibold">
+                              Al-Tut Karşılaştırması
+                            </span>
+                            <span className="font-mono text-slate-400">
+                              Al-tut: {evaluateResult.buy_and_hold.return_pct >= 0 ? '+' : ''}
+                              {evaluateResult.buy_and_hold.return_pct.toFixed(2)}%
+                            </span>
+                            <span
+                              className={`font-mono font-bold ${
+                                (evaluateResult.outperformance_pct ?? 0) >= 0
+                                  ? 'text-emerald-400'
+                                  : 'text-amber-400'
+                              }`}
+                            >
+                              {(evaluateResult.outperformance_pct ?? 0) >= 0
+                                ? `Strateji ${(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% önde`
+                                : `Strateji ${Math.abs(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% geride`}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Sinyal Listesi Tablosu */}
                         {Array.isArray(evaluateResult.signals) && evaluateResult.signals.length > 0 && (

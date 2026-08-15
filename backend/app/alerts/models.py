@@ -85,9 +85,17 @@ class AlertModel(BaseModel):
 
 
 class AlertCheckRequest(BaseModel):
+    """Alarm değerlendirme isteği.
+
+    Yalnızca hangi sembolün alarmlarının kontrol edileceğini söyler. Fiyat ve
+    gösterge değerleri sunucuda hesaplanır; istemciden gelen sayılara
+    güvenilmez (bkz. AlertEngine.check_alerts).
+    """
+
     symbol: str
     provider: str = "binance"
-    current_price: float
+    # Eski istemcilerle uyum için kabul edilir, KULLANILMAZ.
+    current_price: Optional[float] = None
     indicator_values: Optional[Dict[str, float]] = None
 
 

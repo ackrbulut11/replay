@@ -7,6 +7,8 @@ geçici, bellek içi bir SQLite veritabanı kullanır.
 
 import unittest
 
+import pandas as pd
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -21,6 +23,38 @@ from app.alerts.models import (
 )
 from app.database.models import User
 from app.database.postgres import Base
+
+
+class FakeLoader:
+    """Sabit bir OHLCV serisi donduren sahte loader.
+
+    Alarm motoru artik gosterge degerlerini kendisi hesapliyor; testler bunun
+    icin gercek saglayiciya cikmadan kontrollu bir seri veriyor.
+    """
+
+    def __init__(self, closes, timeframes=("1d",)):
+        self.closes = list(closes)
+        self.timeframes = set(timeframes)
+        self.calls = []
+
+    def load_data(self, provider_name, symbol, timeframe, start_time, end_time):
+        self.calls.append((provider_name, symbol.upper(), timeframe))
+        if timeframe not in self.timeframes:
+            return pd.DataFrame()
+        n = len(self.closes)
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="1D"),
+            "open": self.closes,
+            "high": [c + 1 for c in self.closes],
+            "low": [c - 1 for c in self.closes],
+            "close": self.closes,
+            "volume": [1000] * n,
+        })
+
+
+def flat_then(value, n=300):
+    """n bar sabit `value`; gosterge isinmasini doldurmak icin."""
+    return [float(value)] * n
 
 
 def _price_alert(threshold: float = 70000.0) -> AlertCreateRequest:
@@ -97,13 +131,14 @@ class TestAlerts(unittest.TestCase):
         self.engine.create_alert(self.db, _price_alert(65000.0), user_id=self.alice.id)
 
         # Bob ayni sembolu kontrol ediyor; Alice'in alarmi tetiklenmemeli
+        loader = FakeLoader(flat_then(66000.0))
         triggered_for_bob = self.engine.check_alerts(
-            self.db, symbol="BTCUSDT", provider="binance", current_price=66000.0, user_id=self.bob.id
+            self.db, symbol="BTCUSDT", provider="binance", user_id=self.bob.id, loader=loader
         )
         self.assertEqual(triggered_for_bob, [])
 
         triggered_for_alice = self.engine.check_alerts(
-            self.db, symbol="BTCUSDT", provider="binance", current_price=66000.0, user_id=self.alice.id
+            self.db, symbol="BTCUSDT", provider="binance", user_id=self.alice.id, loader=loader
         )
         self.assertEqual(len(triggered_for_alice), 1)
         self.assertEqual(triggered_for_alice[0]["status"], "TRIGGERED")
@@ -123,13 +158,14 @@ class TestAlerts(unittest.TestCase):
             user_id=self.alice.id,
         )
 
+        # Uzun sureli dusus: RSI 30'un altina iner, fiyat da 65000 esigini asar.
+        closes = [80000.0] * 200 + [80000.0 - i * 100 for i in range(1, 60)]
         triggered = self.engine.check_alerts(
             self.db,
             symbol="BTCUSDT",
             provider="binance",
-            current_price=66000.0,
             user_id=self.alice.id,
-            indicator_values={"RSI_14": 25.0},
+            loader=FakeLoader(closes),
         )
 
         self.assertEqual(len(triggered), 2)
@@ -149,7 +185,8 @@ class TestAlerts(unittest.TestCase):
         self.engine.create_alert(self.db, _price_alert(99999.0), user_id=self.alice.id)
 
         triggered = self.engine.check_alerts(
-            self.db, symbol="BTCUSDT", provider="binance", current_price=66000.0, user_id=self.alice.id
+            self.db, symbol="BTCUSDT", provider="binance", user_id=self.alice.id,
+            loader=FakeLoader(flat_then(66000.0)),
         )
 
         self.assertEqual(len(triggered), 1, "yalnizca esigi asan alarm tetiklenmeli")
@@ -159,6 +196,137 @@ class TestAlerts(unittest.TestCase):
         active = self.engine.list_alerts(self.db, self.alice.id, status="ACTIVE")
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0]["threshold_value"], 99999.0)
+
+
+class _AlertTestBase(unittest.TestCase):
+    def setUp(self):
+        self.db_engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
+        Base.metadata.create_all(bind=self.db_engine)
+        self.db = sessionmaker(bind=self.db_engine)()
+        self.db.add(User(id="u1", email="u1@example.com", name="U1"))
+        self.db.commit()
+        self.engine = AlertEngine()
+
+    def tearDown(self):
+        self.db.close()
+        Base.metadata.drop_all(bind=self.db_engine)
+
+    def check(self, closes, timeframes=("1d",)):
+        return self.engine.check_alerts(
+            self.db, symbol="BTCUSDT", provider="binance", user_id="u1",
+            loader=FakeLoader(closes, timeframes),
+        )
+
+
+class TestIndicatorAlerts(_AlertTestBase):
+    """Gosterge alarmlari sunucuda hesaplanip gercekten tetiklenmeli."""
+
+    def create(self, **kwargs):
+        payload = dict(
+            symbol="BTCUSDT", provider="binance", timeframe="1d",
+            condition=AlertCondition.RISES_ABOVE, threshold_value=0.0,
+        )
+        payload.update(kwargs)
+        return self.engine.create_alert(self.db, AlertCreateRequest(**payload), user_id="u1")
+
+    def test_rsi_alert_triggers_without_client_supplied_values(self):
+        """Onceki surumde istemci deger gondermedigi icin bu alarm HIC tetiklenmiyordu."""
+        self.create(
+            target_type=AlertTargetType.RSI, indicator_period=14,
+            condition=AlertCondition.RISES_ABOVE, threshold_value=60.0,
+        )
+        rising = [100.0] * 100 + [100.0 + i for i in range(1, 60)]
+        triggered = self.check(rising)
+        self.assertEqual(len(triggered), 1)
+        self.assertGreater(triggered[0]["last_value"], 60.0)
+
+    def test_ema_alert_triggers(self):
+        self.create(
+            target_type=AlertTargetType.EMA, indicator_period=20,
+            condition=AlertCondition.RISES_ABOVE, threshold_value=50.0,
+        )
+        self.assertEqual(len(self.check(flat_then(100.0))), 1)
+
+    def test_percent_change_fall_alert(self):
+        self.create(
+            target_type=AlertTargetType.PERCENT_CHANGE,
+            condition=AlertCondition.FALLS_BELOW, threshold_value=5.0,
+        )
+        self.assertEqual(len(self.check([100.0] * 50 + [90.0])), 1)
+
+    def test_percent_change_below_threshold_does_not_trigger(self):
+        self.create(
+            target_type=AlertTargetType.PERCENT_CHANGE,
+            condition=AlertCondition.FALLS_BELOW, threshold_value=5.0,
+        )
+        self.assertEqual(self.check([100.0] * 50 + [99.0]), [])
+
+    def test_alert_is_skipped_when_data_unavailable(self):
+        """Veri yoksa alarm tetiklenmez; istemcinin gonderdigi fiyata dusulmez."""
+        self.create(
+            target_type=AlertTargetType.PRICE,
+            condition=AlertCondition.RISES_ABOVE, threshold_value=1.0,
+        )
+        self.assertEqual(self.check(flat_then(100.0), timeframes=("1h",)), [])
+
+    def test_data_is_loaded_once_per_timeframe(self):
+        self.create(target_type=AlertTargetType.PRICE, timeframe="1d", threshold_value=999999.0)
+        self.create(target_type=AlertTargetType.PRICE, timeframe="1d", threshold_value=999998.0)
+        self.create(target_type=AlertTargetType.PRICE, timeframe="1h", threshold_value=999997.0)
+
+        loader = FakeLoader(flat_then(100.0), timeframes=("1d", "1h"))
+        self.engine.check_alerts(
+            self.db, symbol="BTCUSDT", provider="binance", user_id="u1", loader=loader
+        )
+        self.assertEqual(len(loader.calls), 2, f"dilim basina bir yukleme beklenirdi: {loader.calls}")
+
+    def test_other_providers_alerts_are_not_checked(self):
+        self.create(target_type=AlertTargetType.PRICE, provider="bist", threshold_value=1.0)
+        self.assertEqual(self.check(flat_then(100.0)), [])
+
+
+class TestEmaCross(_AlertTestBase):
+    """EMA kesisimi bir DURUM degil, gercek bir kesisim olmali."""
+
+    def create_cross(self, condition=AlertCondition.RISES_ABOVE):
+        return self.engine.create_alert(self.db, AlertCreateRequest(
+            symbol="BTCUSDT", provider="binance", timeframe="1d",
+            target_type=AlertTargetType.EMA_CROSS,
+            indicator_period_fast=5, indicator_period_slow=20,
+            condition=condition, threshold_value=0.0,
+        ), user_id="u1")
+
+    def test_already_above_does_not_trigger(self):
+        """Kesisim coktan olmus: alarm kurulur kurulmaz tetiklenmemeli."""
+        self.create_cross()
+        rising = [100.0 + i for i in range(200)]
+        self.assertEqual(self.check(rising), [])
+
+    def test_actual_golden_cross_triggers(self):
+        """Son barda fast, slow'un uzerine gecerse tetiklenmeli."""
+        self.create_cross()
+        # Dusus boyunca fast < slow; son bardaki siçrama kesisimi tam orada yapar.
+        falling = [400.0 - i for i in range(150)]
+        triggered = self.check(falling + [falling[-1] + 60.0])
+        self.assertEqual(len(triggered), 1)
+        self.assertGreater(triggered[0]["last_value"], 0.0)
+
+    def test_death_cross_direction(self):
+        self.create_cross(condition=AlertCondition.FALLS_BELOW)
+        rising = [100.0 + i for i in range(150)]
+        triggered = self.check(rising + [rising[-1] - 60.0])
+        self.assertEqual(len(triggered), 1)
+        self.assertLess(triggered[0]["last_value"], 0.0)
+
+    def test_cross_one_bar_later_does_not_retrigger(self):
+        """Kesisim gecmiste kaldiysa (son barda degil) tetiklenmez."""
+        self.create_cross()
+        falling = [400.0 - i for i in range(150)]
+        crossed = falling + [falling[-1] + 60.0]
+        # Kesisimden SONRAKI bir bar: fast zaten slow'un ustunde, kesisim yok.
+        self.assertEqual(self.check(crossed + [crossed[-1] + 1.0]), [])
 
 
 if __name__ == "__main__":

@@ -20,11 +20,15 @@ from app.alerts.models import (
     AlertUpdateRequest,
 )
 from app.auth.dependencies import get_current_user
+from app.data.loader import DataLoader
 from app.database.models import User
 from app.database.postgres import get_db
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 _engine = AlertEngine()
+# Alarm değerlendirmesi gösterge hesabı için piyasa verisine ihtiyaç duyar;
+# loader'ın kendi önbelleği olduğu için tekil örnek paylaşılır.
+_loader = DataLoader()
 
 
 def get_owned_alert(
@@ -110,15 +114,19 @@ def check_alerts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Kullanıcının etkin alarmlarını güncel fiyat/gösterge değerlerine göre değerlendirir."""
+    """Kullanıcının etkin alarmlarını değerlendirir.
+
+    Fiyat ve gösterge değerleri sunucuda, alarmın kendi zaman diliminde
+    yüklenen veriden hesaplanır (istekteki `current_price`/`indicator_values`
+    yalnızca eski istemcilerle uyum için kabul edilir, kullanılmaz).
+    """
     try:
         triggered = _engine.check_alerts(
             db=db,
             symbol=request.symbol,
             provider=request.provider,
-            current_price=request.current_price,
             user_id=current_user.id,
-            indicator_values=request.indicator_values,
+            loader=_loader,
         )
     except Exception as e:
         db.rollback()

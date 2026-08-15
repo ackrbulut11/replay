@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.database.postgres import get_db, SessionLocal
 from app.database.models import User
 from app.auth.dependencies import get_current_user
-from app.data.loader import DataLoader
+from app.data.loader import DataLoader, lookback_start_for_bars
 from app.engines.scanner_engine import ScannerEngine
 from app.engines.strategy_engine import MultiTimeframeDataError, StrategyEngine
 from app.indicators.registry import IndicatorRegistry
@@ -32,32 +32,6 @@ from app.rules.strategy_models import (
 )
 
 MAX_LIMIT_BARS = 10000  # Strateji testinde (tekli/toplu) izin verilen azami mum sayısı
-
-# Zaman dilimi başına yaklaşık dakika (mum sayısından gereken takvim aralığını hesaplamak için).
-_TF_MINUTES = {
-    "1m": 1, "5m": 5, "15m": 15, "1h": 60, "4h": 240,
-    "1d": 1440, "1w": 1440 * 7, "1mo": 1440 * 30,
-}
-
-
-def _lookback_start_for_bars(end_dt: datetime, timeframe: str, limit_bars: int) -> datetime:
-    """`limit_bars` kadar mumu güvenle kapsayacak başlangıç tarihini hesaplar.
-
-    Sabit bir tabloya (ör. "1h için her zaman 3 yıl") göre değil, istenen mum
-    sayısına göre ölçeklenir. Aksi halde `limit_bars=200` gibi küçük bir istek
-    bile yıllarca veri çekip Binance klines gibi sayfa başına 1000 mum dönen
-    API'lerde onlarca sayfalı isteğe (ve dakikalarca süren taramalara) neden
-    olabiliyordu — bkz. "1h taraması dakikalarca bitmiyor" hatası.
-    Piyasa kapalı saatleri/hafta sonları için pay bırakılır: gün-içi zaman
-    dilimlerinde x3, günlük ve üzerinde x1.6, artı sabit bir tampon.
-    """
-    minutes_per_bar = _TF_MINUTES.get(timeframe, 1440)
-    raw_days = (minutes_per_bar * limit_bars) / 1440
-    if timeframe in ("1m", "5m", "15m", "1h", "4h"):
-        padded_days = raw_days * 3 + 5
-    else:
-        padded_days = raw_days * 1.6 + 10
-    return end_dt - timedelta(days=padded_days)
 
 
 class ImportEvaluationsRequest(BaseModel):
@@ -276,7 +250,7 @@ def evaluate_strategy(
         else:
             start_dt = datetime(2010, 1, 1)
     else:
-        start_dt = _lookback_start_for_bars(end_dt, request.timeframe, limit_bars)
+        start_dt = lookback_start_for_bars(end_dt, request.timeframe, limit_bars)
 
     # Ana zaman dilimi verisini yükle
     try:
@@ -504,7 +478,7 @@ def batch_evaluate_strategy(
         else:
             start_dt = end_dt - timedelta(days=10 * 365)
     else:
-        start_dt = _lookback_start_for_bars(end_dt, request.timeframe, limit_bars)
+        start_dt = lookback_start_for_bars(end_dt, request.timeframe, limit_bars)
 
     scan = _scanner.create_running_scan(
         db=db,

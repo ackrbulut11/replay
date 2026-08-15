@@ -97,6 +97,26 @@ def timeframe_delta(timeframe: str) -> timedelta:
     return delta
 
 
+def lookback_start_for_bars(end_dt: datetime, timeframe: str, bars: int) -> datetime:
+    """`bars` kadar mumu güvenle kapsayacak başlangıç tarihini hesaplar.
+
+    Sabit bir tabloya (ör. "1h için her zaman 3 yıl") göre değil, istenen mum
+    sayısına göre ölçeklenir. Aksi halde 200 mumluk küçük bir istek bile
+    yıllarca veri çekip sayfa başına 1000 mum dönen API'lerde onlarca sayfalık
+    isteğe (ve dakikalarca süren taramalara) neden olabiliyordu.
+
+    Piyasa kapalı saatleri/hafta sonları için pay bırakılır: gün-içi zaman
+    dilimlerinde x3, günlük ve üzerinde x1.6, artı sabit bir tampon.
+    """
+    delta = TIMEFRAME_DELTAS.get(timeframe, timedelta(days=1))
+    raw_days = (delta.total_seconds() / 60.0 * max(bars, 1)) / 1440.0
+    if timeframe in _INTRADAY_TIMEFRAMES:
+        padded_days = raw_days * 3 + 5
+    else:
+        padded_days = raw_days * 1.6 + 10
+    return end_dt - timedelta(days=padded_days)
+
+
 # Mum sayısını tarihe çevirirken piyasanın KAPALI olduğu zamanı telafi eden pay.
 #
 # `anchor - delta * bars` yalnızca 7/24 çalışan bir piyasada doğru: Binance'te

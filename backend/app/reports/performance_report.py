@@ -242,6 +242,33 @@ def weighted_return_pct(trades: Sequence[Trade]) -> Optional[float]:
     return total_pnl / total_capital * 100.0
 
 
+def compound_return_pct(percents: Sequence[float]) -> float:
+    """
+    Ardışık yüzdesel getirilerin BİLEŞİK toplamı.
+
+    Yüzdeleri düz toplamak yanlış sonuç verir: +%50 ardından -%50 gerçekte
+    -%25 ederken düz toplamda %0 görünür. Sapma işlem sayısıyla büyür, yani
+    50 işlemli bir taramada sıralamayı bile bozabilir.
+
+    Sermayenin tamamen erimesi (-%100) mutlak bir tabandır: sonraki işlemler
+    bunu telafi edemez, sonuç -%100'de kalır.
+    """
+    growth = 1.0
+    for pct in percents:
+        try:
+            value = float(pct)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(value):
+            continue
+
+        growth *= 1.0 + value / 100.0
+        if growth <= 0:
+            return -100.0
+
+    return (growth - 1.0) * 100.0
+
+
 def calculate_performance(
     trades: Sequence[Trade],
     starting_balance: float = 10000.0,

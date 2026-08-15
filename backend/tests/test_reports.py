@@ -5,6 +5,7 @@ Performans raporu motoru unit testleri (unittest, pytest değil).
 import unittest
 
 from app.reports.performance_report import (
+    compound_return_pct,
     build_equity_curve,
     calculate_performance,
     expectancy,
@@ -202,6 +203,35 @@ class TestCalculatePerformance(unittest.TestCase):
                 self.assertFalse(math.isinf(value), f"{key} sonsuz")
                 self.assertFalse(math.isnan(value), f"{key} NaN")
         json.dumps(report)  # patlamamalı
+
+
+class TestCompoundReturn(unittest.TestCase):
+    """Yuzdesel getiriler bilesik toplanmali (duz toplam degil)."""
+
+    def test_gain_then_equal_loss_is_negative(self):
+        # +%50 sonra -%50 -> 1.5 * 0.5 = 0.75 -> -%25 (duz toplamda %0 gorunurdu)
+        self.assertAlmostEqual(compound_return_pct([50.0, -50.0]), -25.0, places=9)
+
+    def test_empty_is_zero(self):
+        self.assertEqual(compound_return_pct([]), 0.0)
+
+    def test_single_value_passes_through(self):
+        self.assertAlmostEqual(compound_return_pct([12.5]), 12.5, places=9)
+
+    def test_sequence_compounds(self):
+        # 1.10 * 1.10 = 1.21 -> %21 (duz toplam %20 derdi)
+        self.assertAlmostEqual(compound_return_pct([10.0, 10.0]), 21.0, places=9)
+
+    def test_total_wipeout_floors_at_minus_100(self):
+        # Sermaye tamamen eridiginde sonraki kazanc telafi edemez.
+        self.assertEqual(compound_return_pct([-100.0, 500.0]), -100.0)
+
+    def test_repeated_losses_shrink_but_do_not_wipe_out(self):
+        # 0.4^3 = 0.064 -> -%93,6. Duz toplam -%180 gibi imkansiz bir sayi verirdi.
+        self.assertAlmostEqual(compound_return_pct([-60.0, -60.0, -60.0]), -93.6, places=9)
+
+    def test_invalid_values_are_skipped(self):
+        self.assertAlmostEqual(compound_return_pct([10.0, None, float("nan"), 10.0]), 21.0, places=9)
 
 
 if __name__ == "__main__":

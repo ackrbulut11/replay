@@ -21,6 +21,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.database.models import Strategy, StrategyEvaluation
+from app.reports.performance_report import compound_return_pct
 from app.rules.engine import DEFAULT_BAR_DELAY, RuleEngine
 from app.rules.strategy_models import (
     StrategyCreateRequest,
@@ -388,7 +389,8 @@ class StrategyEngine:
         winning_trades = sum(1 for s in trades if s["pnl_percent"] > 0)
         losing_trades = sum(1 for s in trades if s["pnl_percent"] < 0)
         win_rate = round((winning_trades / total_trades) * 100.0, 2) if total_trades > 0 else 0.0
-        total_pnl_percent = round(sum(s["pnl_percent"] for s in trades), 2)
+        # Bileşik getiri (düz toplam değil): +%50 ardından -%50 gerçekte -%25'tir.
+        total_pnl_percent = round(compound_return_pct([s["pnl_percent"] for s in trades]), 2)
 
         return {
             "strategy_id": strategy.get("id", ""),

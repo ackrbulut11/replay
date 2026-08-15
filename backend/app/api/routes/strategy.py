@@ -323,6 +323,10 @@ def evaluate_strategy(
             multi_tf_data=multi_tf_data if multi_tf_data else None,
             allow_short=request.allow_short,
         )
+    except ValueError as e:
+        # Geçersiz parametre override'ı gibi istemci hataları (bkz.
+        # RuleEngine._resolve_params) sunucu hatası değildir.
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Değerlendirme hatası: {e}")
 

@@ -517,5 +517,34 @@ class TestStopLossDoesNotReverse(unittest.TestCase):
                     self.fail("Stop sonrasi acilan ters pozisyon yeniden stop olmus")
 
 
+class TestParameterOverrides(unittest.TestCase):
+    STRATEGY = {
+        "id": "p", "name": "P",
+        "parameters": [{"name": "fast_ema", "type": "int", "default": 10, "min": 5, "max": 50}],
+        "entry_rules": {"logic": "AND", "conditions": []},
+        "exit_rules": {"logic": "AND", "conditions": []},
+    }
+
+    def test_default_is_used_when_no_override(self):
+        self.assertEqual(RuleEngine._resolve_params(self.STRATEGY, {})["fast_ema"], 10)
+
+    def test_override_is_clamped_to_declared_limits(self):
+        self.assertEqual(RuleEngine._resolve_params(self.STRATEGY, {"fast_ema": 999})["fast_ema"], 50)
+        self.assertEqual(RuleEngine._resolve_params(self.STRATEGY, {"fast_ema": 1})["fast_ema"], 5)
+
+    def test_unknown_override_raises_instead_of_being_accepted(self):
+        with self.assertRaises(ValueError) as ctx:
+            RuleEngine._resolve_params(self.STRATEGY, {"fastEma": 20})
+        self.assertIn("fastEma", str(ctx.exception))
+
+    def test_engine_level_keys_are_allowed(self):
+        params = RuleEngine._resolve_params(
+            self.STRATEGY,
+            {"allow_short": True, "take_profit_pct": 3.0, "stop_loss_pct": 2.0, "bar_delay": 0},
+        )
+        self.assertTrue(params["allow_short"])
+        self.assertEqual(params["bar_delay"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

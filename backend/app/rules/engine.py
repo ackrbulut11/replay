@@ -32,6 +32,10 @@ from app.rules.strategy_models import SignalType
 # bunun "intrabar test ediyorum" beyanı olduğu kabul edilir.
 DEFAULT_BAR_DELAY = 1
 
+# Strateji parametresi olmayan, ama değerlendirme çağrısıyla geçilebilen motor
+# ayarları. `_resolve_params` bunları bilinmeyen override saymaz.
+ENGINE_OVERRIDE_KEYS = frozenset({"allow_short", "take_profit_pct", "stop_loss_pct", "bar_delay"})
+
 # TP/SL bu gecikmeye TABİ DEĞİLDİR: bunlar mum içinde piyasada duran koşullu
 # emirlerdir, kapanışı görüp karar verilen bir sinyal değil. Seviyeye
 # dokunulduğu anda ve tam o seviyeden gerçekleşirler (bkz. engines/replay_engine
@@ -470,28 +474,48 @@ class RuleEngine:
         strategy: dict,
         overrides: dict[str, Union[int, float]],
     ) -> dict[str, Union[int, float]]:
-        """Strateji parametrelerinin varsayılan ve override değerlerini birleştirir."""
+        """Strateji parametrelerinin varsayılan ve override değerlerini birleştirir.
+
+        Bilinmeyen bir override adı sessizce kabul EDİLMEZ. Eskiden min/max
+        kontrolü `if name in params` bloğunun içindeydi ama atama dışındaydı;
+        stratejide tanımlı olmayan her ad params'a ekleniyordu. İki sonucu
+        vardı: (1) yazım hatası içeren bir override hiçbir uyarı vermeden
+        etkisiz kalıyordu, (2) tanımsız bir ad üzerinden min/max sınırları
+        atlanabiliyordu.
+        """
         params: dict[str, Union[int, float]] = {}
+        limits: dict[str, tuple] = {}
 
         for param_def in strategy.get("parameters", []):
             name = param_def.get("name", "")
-            default = param_def.get("default", 0)
-            params[name] = default
+            params[name] = param_def.get("default", 0)
+            limits[name] = (param_def.get("min"), param_def.get("max"))
 
-        # Override'ları uygula (min/max sınırlarına dikkat et)
+        unknown: list[str] = []
         for name, value in overrides.items():
-            if name in params:
-                # Sınır kontrolü
-                for param_def in strategy.get("parameters", []):
-                    if param_def.get("name") == name:
-                        min_val = param_def.get("min")
-                        max_val = param_def.get("max")
-                        if min_val is not None:
-                            value = max(value, min_val)
-                        if max_val is not None:
-                            value = min(value, max_val)
-                        break
+            if name in ENGINE_OVERRIDE_KEYS:
+                # Motor seviyesi ayarlar: strateji parametresi değiller ama
+                # değerlendirme çağrısıyla geçilebilirler (bkz. StrategyEngine.evaluate).
+                params[name] = value
+                continue
+
+            if name not in params:
+                unknown.append(name)
+                continue
+
+            min_val, max_val = limits[name]
+            if min_val is not None:
+                value = max(value, min_val)
+            if max_val is not None:
+                value = min(value, max_val)
             params[name] = value
+
+        if unknown:
+            raise ValueError(
+                "Stratejide tanımlı olmayan parametre override'ı: "
+                + ", ".join(sorted(unknown))
+                + f". Tanımlı parametreler: {sorted(k for k in params if k not in ENGINE_OVERRIDE_KEYS)}"
+            )
 
         return params
 

@@ -7,6 +7,7 @@ import threading
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from ..core.config import settings
+from app.utils.time import utc_now
 from .providers.binance import BinanceProvider
 from .providers.nasdaq import NasdaqProvider
 from .providers.bist import BistProvider
@@ -526,7 +527,7 @@ class DataLoader:
             return empty
 
         stretch = calendar_stretch(provider_name, timeframe)
-        now = datetime.now()
+        now = utc_now()
         probe_start = max(
             now - delta * int(EARLIEST_PROBE_BARS * stretch), WINDOW_MIN_START
         )

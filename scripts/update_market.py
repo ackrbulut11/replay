@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.join(_PROJECT_ROOT, "backend"))
 
 from app.data.loader import DataLoader
 from app.data.symbols import get_symbols
+from app.utils.time import utc_now
 
 DEFAULT_PROVIDERS = ["binance", "nasdaq", "bist", "forex"]
 # 4h çekilmez; DataLoader mevcut 1h verisinden isteğe bağlı olarak türetir.
@@ -55,7 +56,7 @@ def run_market_update(
     timeframes = timeframes or DEFAULT_TIMEFRAMES
 
     loader = DataLoader()
-    now = datetime.now()
+    now = utc_now()
 
     success_count = 0
     error_count = 0

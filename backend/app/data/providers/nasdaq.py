@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 from .base import IDataProvider
 from . import twelvedata
+from app.utils.time import utc_now
 
 SYMBOL_ALIASES = {
     "NVIDIA": "NVDA",
@@ -73,7 +74,7 @@ class NasdaqProvider(IDataProvider):
             
         # Yahoo Finance zaman dilimi sınırlarını otomatik ayarla (HTTP 422 engellemek için)
         from datetime import timedelta
-        now = datetime.now()
+        now = utc_now()
         requested_start = start_time
         max_start = None
         if interval == "1m":

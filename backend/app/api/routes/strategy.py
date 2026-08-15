@@ -18,6 +18,7 @@ from app.database.postgres import get_db, SessionLocal
 from app.database.models import User
 from app.auth.dependencies import get_current_user
 from app.data.loader import DataLoader, lookback_start_for_bars
+from app.utils.time import utc_now
 from app.engines.scanner_engine import ScannerEngine
 from app.engines.strategy_engine import MultiTimeframeDataError, StrategyEngine
 from app.indicators.registry import IndicatorRegistry
@@ -229,7 +230,7 @@ def evaluate_strategy(
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz bitiş tarihi formatı (YYYY-MM-DD)")
     else:
-        end_dt = datetime.now()
+        end_dt = utc_now()
 
     limit_bars = request.limit_bars if request.limit_bars is not None else 1000
     if limit_bars > MAX_LIMIT_BARS:
@@ -457,7 +458,7 @@ def batch_evaluate_strategy(
         except ValueError:
             raise HTTPException(status_code=400, detail="Geçersiz bitiş tarihi formatı (YYYY-MM-DD)")
     else:
-        end_dt = datetime.now()
+        end_dt = utc_now()
 
     limit_bars = request.limit_bars if request.limit_bars is not None else 1000
     if limit_bars > MAX_LIMIT_BARS:

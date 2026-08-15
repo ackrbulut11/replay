@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from .base import IDataProvider
 from . import twelvedata
+from app.utils.time import utc_now
 
 
 class ForexProvider(IDataProvider):
@@ -37,7 +38,7 @@ class ForexProvider(IDataProvider):
             raise ValueError(f"Unsupported timeframe: {timeframe} for Forex provider.")
             
         # Yahoo Finance zaman dilimi sınırlarını otomatik ayarla (HTTP 422 engellemek için)
-        now = datetime.now()
+        now = utc_now()
         requested_start = start_time
         max_start = None
         if interval == "1m":

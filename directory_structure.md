@@ -196,6 +196,7 @@ TradingResearchPlatform/
 │   │   │   └── analyzer.py
 │   │   │
 │   │   └── utils/
+│   │       └── time.py               # utc_now() — piyasa verisi UTC, datetime.now() yerel saat verir
 │   │
 │   └── tests/                        # unittest tabanlı (pytest değil) — bkz. CLAUDE.md Commands
 │       ├── test_rules.py

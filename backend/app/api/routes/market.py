@@ -25,6 +25,7 @@ from app.data.loader import (
     WINDOW_BARS_BEFORE,
 )
 from app.data.symbols import get_symbols, search_symbols
+from app.utils.time import utc_now
 from app.database.models import User
 
 # Kullanıcı başına dakikalık istek sınırı. Gerçek kullanımın belirgin şekilde
@@ -73,7 +74,7 @@ def get_market_quotes(
 ) -> List[Dict]:
     """Returns latest price and daily change percentage for a list of symbols concurrently."""
     from datetime import timedelta
-    end_dt = datetime.now()
+    end_dt = utc_now()
     start_dt = end_dt - timedelta(days=14)
 
     item_pairs = [i.strip() for i in items.split(",") if i.strip()]
@@ -245,7 +246,7 @@ def get_market_data(
                     detail="Invalid end date format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS."
                 )
     else:
-        end_dt = datetime.now()
+        end_dt = utc_now()
 
     if start:
         try:

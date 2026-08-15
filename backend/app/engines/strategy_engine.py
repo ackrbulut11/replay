@@ -21,7 +21,8 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.database.models import Strategy, StrategyEvaluation
-from app.reports.performance_report import compound_return_pct
+from app.engines.execution import PositionSizing, simulate_account
+from app.reports.performance_report import calculate_performance, compound_return_pct
 from app.rules.engine import DEFAULT_BAR_DELAY, RuleEngine
 from app.rules.strategy_models import (
     StrategyCreateRequest,
@@ -32,6 +33,11 @@ from app.rules.strategy_models import (
 
 # Kullanıcı başına saklanacak azami tekli test sayısı; aşan en eski kayıtlar silinir.
 MAX_EVALUATIONS_PER_USER = 30
+
+# Nakit simülasyonunun varsayılan başlangıç bakiyesi. Manuel işlem günlüğü de
+# aynı varsayılanı kullanıyor (journal/trade_journal.performance), böylece iki
+# tarafın sonucu doğrudan karşılaştırılabilir.
+DEFAULT_STARTING_BALANCE = 10_000.0
 
 
 class MultiTimeframeDataError(RuntimeError):
@@ -379,8 +385,16 @@ class StrategyEngine:
         param_overrides: dict[str, Union[int, float]] | None = None,
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
         allow_short: bool | None = None,
+        starting_balance: float = DEFAULT_STARTING_BALANCE,
+        sizing: PositionSizing | None = None,
     ) -> dict:
-        """Stratejiyi verilen veri üzerinde değerlendirir."""
+        """Stratejiyi verilen veri üzerinde değerlendirir.
+
+        Yüzdesel sonuçların yanında NAKİT simülasyonu da yapılır: verilen
+        başlangıç bakiyesi ve boyutlandırma kuralıyla işlemler sırayla
+        uygulanır ve `performance` altında tam metrik seti döner (Sharpe,
+        max drawdown, profit factor, expectancy, bakiye eğrisi).
+        """
         if param_overrides is None:
             param_overrides = {}
         else:
@@ -407,6 +421,23 @@ class StrategyEngine:
         # Bileşik getiri (düz toplam değil): +%50 ardından -%50 gerçekte -%25'tir.
         total_pnl_percent = round(compound_return_pct([s["pnl_percent"] for s in trades]), 2)
 
+        # ─── Nakit simülasyonu ve tam performans raporu ────────────────────
+        #
+        # `performance_report.py` Sharpe, max drawdown, profit factor,
+        # expectancy ve bakiye eğrisini zaten hesaplıyordu ama YALNIZCA manuel
+        # işlem günlüğü kullanıyordu; strateji testi kendi içinde win rate ve
+        # toplam PnL hesaplayıp orada kalıyordu. İkisi artık aynı rapordan
+        # geçiyor — böylece "elle şu sonucu aldım, strateji şunu alırdı"
+        # karşılaştırması aynı ölçüyle yapılabiliyor (RULES.md #8).
+        account = simulate_account(
+            self._closed_positions(signals),
+            starting_balance=starting_balance,
+            sizing=sizing or PositionSizing(),
+        )
+        performance = calculate_performance(
+            account["trades"], starting_balance=starting_balance
+        )
+
         return {
             "strategy_id": strategy.get("id", ""),
             "strategy_name": strategy.get("name", ""),
@@ -419,7 +450,30 @@ class StrategyEngine:
             "losing_trades": losing_trades,
             "win_rate": win_rate,
             "total_pnl_percent": total_pnl_percent,
+            "performance": performance,
         }
+
+    @staticmethod
+    def _closed_positions(signals: list[dict]) -> list[dict]:
+        """Sinyal listesinden KAPANMIŞ pozisyonları (giriş+çıkış) çıkarır.
+
+        Rule engine sinyalleri tek tek yazar; kapanışı taşıyan kayıt hem
+        `entry_price` hem `pnl_percent` içerir. Nakit simülasyonu için
+        pozisyonun yönü de gerekir: `position_closed` alanı bunu söyler.
+        """
+        positions: list[dict] = []
+        for signal in signals:
+            if signal.get("pnl_percent") is None:
+                continue
+            positions.append({
+                "side": str(signal.get("position_closed", "LONG")).lower(),
+                "entry_price": signal.get("entry_price"),
+                "exit_price": signal.get("price"),
+                # Maliyetler zaten düşülmüş; yeniden hesaplanmasın.
+                "pnl_percent": signal.get("pnl_percent"),
+                "exit_timestamp": signal.get("timestamp"),
+            })
+        return positions
 
     @staticmethod
     def required_timeframes(strategy: dict) -> list[str]:
@@ -511,6 +565,8 @@ class StrategyEngine:
         limit_bars: int = 1000,
         param_overrides: dict | None = None,
         allow_short: bool | None = None,
+        starting_balance: float = DEFAULT_STARTING_BALANCE,
+        sizing: PositionSizing | None = None,
     ) -> dict:
         """Tek bir sembolü yükler ve değerlendirir (batch yardımcı fonksiyonu)."""
         try:
@@ -545,6 +601,8 @@ class StrategyEngine:
                 param_overrides=param_overrides,
                 multi_tf_data=multi_tf_data if multi_tf_data else None,
                 allow_short=allow_short,
+                starting_balance=starting_balance,
+                sizing=sizing,
             )
 
             last_sig = res["signals"][-1] if res["signals"] else None
@@ -561,6 +619,11 @@ class StrategyEngine:
                 "total_pnl_percent": res["total_pnl_percent"],
                 "last_signal": last_sig["signal"] if last_sig else None,
                 "last_signal_time": last_sig["timestamp"] if last_sig else None,
+                # Taramada getiriyi tek basina gostermek yaniltici: ayni getiriyi
+                # %60 dususle alan bir strateji ayni strateji degildir.
+                "max_drawdown_pct": res["performance"].get("max_drawdown_pct"),
+                "profit_factor": res["performance"].get("profit_factor"),
+                "sharpe_ratio": res["performance"].get("sharpe_ratio"),
                 "error": None,
             }
         except Exception as e:
@@ -581,6 +644,8 @@ class StrategyEngine:
         limit_bars: int = 1000,
         param_overrides: dict | None = None,
         allow_short: bool | None = None,
+        starting_balance: float = DEFAULT_STARTING_BALANCE,
+        sizing: PositionSizing | None = None,
         max_workers: int = 10,
     ) -> list[dict]:
         """Tüm sembol grubunu paralel olarak değerlendirir."""
@@ -601,6 +666,8 @@ class StrategyEngine:
                     limit_bars=limit_bars,
                     param_overrides=param_overrides,
                     allow_short=allow_short,
+                    starting_balance=starting_balance,
+                    sizing=sizing,
                 )
                 for sym in symbols
             ]

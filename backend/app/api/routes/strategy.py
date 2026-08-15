@@ -20,6 +20,7 @@ from app.auth.dependencies import get_current_user
 from app.data.loader import DataLoader, lookback_start_for_bars
 from app.utils.time import utc_now
 from app.engines.scanner_engine import ScannerEngine
+from app.engines.execution import PositionSizing
 from app.engines.strategy_engine import MultiTimeframeDataError, StrategyEngine
 from app.indicators.registry import IndicatorRegistry
 from app.rules.strategy_models import (
@@ -297,6 +298,8 @@ def evaluate_strategy(
             param_overrides=request.param_overrides,
             multi_tf_data=multi_tf_data if multi_tf_data else None,
             allow_short=request.allow_short,
+            starting_balance=request.starting_balance,
+            sizing=PositionSizing.from_dict(request.sizing),
         )
     except ValueError as e:
         # Geçersiz parametre override'ı gibi istemci hataları (bkz.
@@ -346,6 +349,7 @@ def evaluate_strategy(
         losing_trades=result.get("losing_trades", 0),
         win_rate=result.get("win_rate", 0.0),
         total_pnl_percent=result.get("total_pnl_percent", 0.0),
+        performance=result.get("performance"),
     )
 
 
@@ -360,6 +364,8 @@ def _run_batch_scan_job(
     limit_bars: int,
     param_overrides: Optional[Dict[str, Any]],
     allow_short: Optional[bool],
+    starting_balance: float,
+    sizing: Optional[Dict[str, Any]],
 ) -> None:
     """Toplu taramayı arka planda (BackgroundTasks) çalıştırır.
 
@@ -399,6 +405,8 @@ def _run_batch_scan_job(
                 limit_bars=limit_bars,
                 param_overrides=param_overrides,
                 allow_short=allow_short,
+                starting_balance=starting_balance,
+                sizing=PositionSizing.from_dict(sizing),
             ): sym
             for sym in symbols
         }
@@ -503,6 +511,8 @@ def batch_evaluate_strategy(
         limit_bars=limit_bars,
         param_overrides=request.param_overrides,
         allow_short=request.allow_short,
+        starting_balance=request.starting_balance,
+        sizing=request.sizing,
     )
 
     return scan

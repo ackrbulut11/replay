@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Union, Optional, List, Dict
+from typing import Any, Union, Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
@@ -266,6 +266,17 @@ class EvaluateRequest(BaseModel):
     param_overrides: Dict[str, Union[int, float]] = Field(
         default_factory=dict, description="Parametre override'ları"
     )
+    starting_balance: float = Field(
+        10000.0, gt=0, description="Nakit simulasyonu icin baslangic bakiyesi"
+    )
+    sizing: Optional[Dict[str, Union[str, float]]] = Field(
+        None,
+        description=(
+            "Pozisyon boyutlandirma: {mode, value}. mode = fixed_units | fixed_cash | "
+            "percent_equity | risk_percent. Verilmezse bakiyenin tamami kullanilir."
+        ),
+    )
+
 
 
 class SignalResult(BaseModel):
@@ -300,6 +311,9 @@ class EvaluateResponse(BaseModel):
     losing_trades: int = 0
     win_rate: float = 0.0
     total_pnl_percent: float = 0.0
+    # Tam metrik seti: Sharpe, max drawdown, profit factor, expectancy,
+    # bakiye egrisi (reports/performance_report.py).
+    performance: Optional[Dict[str, Any]] = None
 
 
 class IndicatorInfo(BaseModel):
@@ -325,6 +339,16 @@ class BatchEvaluateRequest(BaseModel):
     limit_bars: Optional[int] = Field(1000, description="Maksimum mum sayısı (azami: 10000)")
     allow_short: Optional[bool] = Field(None, description="Short pozisyon izni")
     param_overrides: Dict[str, Union[int, float]] = Field(default_factory=dict)
+    starting_balance: float = Field(
+        10000.0, gt=0, description="Nakit simulasyonu icin baslangic bakiyesi"
+    )
+    sizing: Optional[Dict[str, Union[str, float]]] = Field(
+        None,
+        description=(
+            "Pozisyon boyutlandirma: {mode, value}. mode = fixed_units | fixed_cash | "
+            "percent_equity | risk_percent. Verilmezse bakiyenin tamami kullanilir."
+        ),
+    )
 
 
 class BatchEvaluateResultItem(BaseModel):
@@ -341,6 +365,11 @@ class BatchEvaluateResultItem(BaseModel):
     total_pnl_percent: float = 0.0
     last_signal: Optional[str] = None
     last_signal_time: Optional[int] = None
+    # Getiriyi tek basina gostermek yaniltici: ayni getiriyi buyuk dususle
+    # alan bir strateji ayni degildir.
+    max_drawdown_pct: Optional[float] = None
+    profit_factor: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
     error: Optional[str] = None
 
 

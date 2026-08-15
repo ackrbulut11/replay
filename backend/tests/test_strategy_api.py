@@ -8,12 +8,15 @@ veritabanına dokunulmaz.
 
 import unittest
 
+import pandas as pd
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.models import User
 from app.database.postgres import Base
+from app.engines.execution import PositionSizing, SizingMode
 from app.engines.strategy_engine import StrategyEngine
 from app.indicators.registry import IndicatorRegistry
 from app.rules.strategy_models import (
@@ -141,6 +144,75 @@ class TestStrategyAPI(unittest.TestCase):
 
         self.assertEqual(created["user_id"], self.alice.id)
         self.assertEqual(self.engine.list_strategies(self.db, self.bob.id), [])
+
+
+class TestEvaluationPerformance(unittest.TestCase):
+    """Strateji testi tam metrik seti ve nakit simulasyonu dondurmeli."""
+
+    @staticmethod
+    def _df():
+        closes = [10.0] * 30 + [11.0 + i * 0.6 for i in range(40)]
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=len(closes), freq="1D"),
+            "open": closes, "high": [c + 1 for c in closes], "low": [c - 1 for c in closes],
+            "close": closes, "volume": [1000] * len(closes),
+        })
+
+    @staticmethod
+    def _strategy(**overrides):
+        strategy = {
+            "id": "perf", "name": "Perf", "parameters": [],
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "indicator", "name": "EMA", "period": 5},
+                "operator": ">",
+                "right": {"type": "indicator", "name": "EMA", "period": 20},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+            "take_profit_pct": 2.0,
+        }
+        strategy.update(overrides)
+        return strategy
+
+    def test_performance_block_is_present(self):
+        result = StrategyEngine().evaluate(self._strategy(), self._df())
+        perf = result["performance"]
+        for key in (
+            "sharpe_ratio", "max_drawdown_pct", "profit_factor",
+            "expectancy", "equity_curve", "ending_balance",
+        ):
+            self.assertIn(key, perf, f"{key} metrigi eksik")
+
+    def test_starting_balance_is_respected(self):
+        result = StrategyEngine().evaluate(
+            self._strategy(), self._df(), starting_balance=50_000
+        )
+        self.assertEqual(result["performance"]["starting_balance"], 50_000)
+
+    def test_percent_equity_compounds_the_balance(self):
+        result = StrategyEngine().evaluate(
+            self._strategy(), self._df(),
+            starting_balance=1_000,
+            sizing=PositionSizing(SizingMode.PERCENT_EQUITY, 100),
+        )
+        # Kazanan islemler bakiyeyi buyutmeli
+        self.assertGreater(result["performance"]["ending_balance"], 1_000)
+
+    def test_fixed_cash_sizing_limits_exposure(self):
+        big = StrategyEngine().evaluate(
+            self._strategy(), self._df(), starting_balance=10_000,
+            sizing=PositionSizing(SizingMode.PERCENT_EQUITY, 100),
+        )
+        small = StrategyEngine().evaluate(
+            self._strategy(), self._df(), starting_balance=10_000,
+            sizing=PositionSizing(SizingMode.FIXED_CASH, 100),
+        )
+        self.assertGreater(
+            big["performance"]["net_profit"], small["performance"]["net_profit"]
+        )
+
+    def test_equity_curve_starts_at_starting_balance(self):
+        result = StrategyEngine().evaluate(self._strategy(), self._df(), starting_balance=7_500)
+        self.assertAlmostEqual(result["performance"]["equity_curve"][0], 7_500, places=6)
 
 
 if __name__ == "__main__":

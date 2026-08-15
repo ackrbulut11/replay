@@ -35,18 +35,78 @@ def resolve_parameter(
     return value
 
 
-def _get_multi_tf_bar_index(df: pd.DataFrame, bar_index: int, target_df: pd.DataFrame) -> int:
-    """Çoklu zaman diliminde zaman damgasına göre uygun mum indeksini bulur."""
+def _bar_duration(df: pd.DataFrame, cache: dict | None = None):
+    """Bir serinin mum süresini zaman damgalarından çıkarır.
+
+    Medyan kullanılır: hafta sonu/tatil boşlukları (BIST'te 1g serisinde 3
+    günlük atlamalar) ortalamayı bozarken medyanı bozmaz. Süre çıkarılamazsa
+    (tek satırlık seri) None döner.
+    """
+    if cache is not None:
+        key = ("__bar_duration__", id(df))
+        if key in cache:
+            return cache[key]
+
+    duration = None
+    if "timestamp" in df.columns and len(df) >= 2:
+        diffs = pd.to_datetime(df["timestamp"]).diff().dropna()
+        if not diffs.empty:
+            median = diffs.median()
+            if pd.notna(median) and median > pd.Timedelta(0):
+                duration = median
+
+    if cache is not None:
+        cache[key] = duration
+    return duration
+
+
+def _get_multi_tf_bar_index(
+    df: pd.DataFrame,
+    bar_index: int,
+    target_df: pd.DataFrame,
+    cache: dict | None = None,
+) -> int:
+    """Üst zaman diliminde KULLANILABİLİR (kapanmış) mumun indeksini bulur.
+
+    Lookahead koruması (RULES.md #19-21): `timestamp` mumun AÇILIŞ zamanıdır.
+    Yalnızca "açılışı geçilmiş" mumu seçmek geleceğe bakmaktır — 15dk grafikte
+    saat 10:15'teyken 08:00'de başlayan 4S mumu henüz 12:00'de kapanacaktır ve
+    kapanışı/yükseği/düşüğü o an bilinemez.
+
+    Ölçüt: değerlendirme, grafik mumunun KAPANIŞINDA yapılır. Üst dilim mumu
+    ancak kendi kapanışı bu ana kadar gerçekleşmişse kullanılabilir:
+
+        hedef_açılış + hedef_süre <= mevcut_açılış + grafik_süresi
+
+    Aynı zaman dilimi verildiğinde eşitlik sağlanır ve mumun kendisi seçilir
+    (doğru: o mum kapanmıştır). Süreler çıkarılamazsa muhafazakâr davranılır
+    ve açılışı geçilmiş SON mum atlanır — o mum her zaman hâlâ oluşmaktadır.
+    """
     if bar_index < 0 or bar_index >= len(df) or target_df.empty:
         return -1
     if "timestamp" not in df.columns or "timestamp" not in target_df.columns:
-        return min(bar_index, len(target_df) - 1)
-    
+        # Hizalama yapılamıyor: eskiden bar_index doğrudan kullanılıyordu, bu
+        # da tamamen keyfi (ve büyük olasılıkla ileriye bakan) bir eşleme
+        # üretiyordu. Değer yok saymak, yanlış değer üretmekten iyidir.
+        return -1
+
     current_ts = df.iloc[bar_index]["timestamp"]
     valid = target_df[target_df["timestamp"] <= current_ts]
     if valid.empty:
         return -1
-    return len(valid) - 1
+
+    target_duration = _bar_duration(target_df, cache)
+    source_duration = _bar_duration(df, cache)
+
+    if target_duration is None or source_duration is None:
+        # Muhafazakâr geri çekilme: açılışı geçilmiş son mum hâlâ oluşuyor.
+        return len(valid) - 2 if len(valid) >= 2 else -1
+
+    evaluated_at = current_ts + source_duration
+    closed = valid[valid["timestamp"] + target_duration <= evaluated_at]
+    if closed.empty:
+        return -1
+    return len(closed) - 1
 
 
 def resolve_operand(
@@ -78,7 +138,7 @@ def resolve_operand(
 
         if timeframe and multi_tf_data and timeframe in multi_tf_data:
             target_df = multi_tf_data[timeframe]
-            idx = _get_multi_tf_bar_index(df, bar_index, target_df)
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache)
             if idx < 0:
                 return float("nan")
             return float(target_df[field].iloc[idx])
@@ -99,7 +159,7 @@ def resolve_operand(
 
         if timeframe and multi_tf_data and timeframe in multi_tf_data:
             target_df = multi_tf_data[timeframe]
-            idx = _get_multi_tf_bar_index(df, bar_index, target_df)
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache)
             if idx < 0:
                 return float("nan")
             return IndicatorRegistry.get_value(name, target_df, period, idx, field, cache=cache)

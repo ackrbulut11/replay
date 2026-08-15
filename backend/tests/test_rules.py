@@ -11,6 +11,7 @@ from app.rules.conditions import (
 )
 from app.indicators.registry import IndicatorRegistry
 from app.rules.engine import RuleEngine, SignalType
+from app.rules.evaluator import _get_multi_tf_bar_index
 
 
 class TestRules(unittest.TestCase):
@@ -233,6 +234,58 @@ class TestBarDelay(unittest.TestCase):
         stops = [s for s in signals if s["signal_bar_index"] == s["bar_index"] and "Zarar Durdur" in " ".join(s["conditions_met"])]
         for stop in stops:
             self.assertEqual(stop["bar_index"], stop["signal_bar_index"])
+
+
+class TestMultiTimeframeAlignment(unittest.TestCase):
+    """Ust zaman diliminden yalnizca KAPANMIS mum okunmali (RULES.md #19-21)."""
+
+    @staticmethod
+    def _frames():
+        # 15dk grafik: 08:00'dan itibaren 32 mum (08:00 -> 15:45)
+        fine_ts = pd.date_range(start="2024-01-01 08:00", periods=32, freq="15min")
+        fine = pd.DataFrame({
+            "timestamp": fine_ts,
+            "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000,
+        })
+        # 4s ust dilim: 00:00, 04:00, 08:00, 12:00
+        coarse_ts = pd.date_range(start="2024-01-01 00:00", periods=4, freq="4h")
+        coarse = pd.DataFrame({
+            "timestamp": coarse_ts,
+            "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1000,
+        })
+        return fine, coarse
+
+    def test_forming_coarse_bar_is_not_used(self):
+        fine, coarse = self._frames()
+        # 10:15'teki 15dk mumu (index 9); kapanisi 10:30.
+        # 08:00 baslayan 4s mumu 12:00'de kapanacak -> KULLANILAMAZ.
+        # Kullanilabilecek en son mum 04:00 (08:00'de kapandi) = index 1.
+        idx = _get_multi_tf_bar_index(fine, 9, coarse)
+        self.assertEqual(idx, 1)
+
+    def test_coarse_bar_becomes_available_exactly_at_its_close(self):
+        fine, coarse = self._frames()
+        # 11:45'teki 15dk mumu (index 15) 12:00'de kapanir; 08:00 4s mumu da
+        # tam 12:00'de kapanir -> artik kullanilabilir (index 2).
+        idx = _get_multi_tf_bar_index(fine, 15, coarse)
+        self.assertEqual(idx, 2)
+        # Bir onceki 15dk mumu (11:30, kapanis 11:45) icin henuz kullanilamaz.
+        self.assertEqual(_get_multi_tf_bar_index(fine, 14, coarse), 1)
+
+    def test_same_timeframe_uses_the_bar_itself(self):
+        """Ayni dilim verilirse mumun kendisi kapanmistir; geri kaydirilmaz."""
+        fine, _ = self._frames()
+        self.assertEqual(_get_multi_tf_bar_index(fine, 9, fine), 9)
+
+    def test_no_closed_coarse_bar_returns_minus_one(self):
+        fine, coarse = self._frames()
+        # Ilk 15dk mumu (08:00, kapanis 08:15): 04:00 mumu 08:00'de kapandi,
+        # yani kullanilabilir; 00:00 da oyle. Index 1 beklenir.
+        self.assertEqual(_get_multi_tf_bar_index(fine, 0, coarse), 1)
+        # Ust dilim tamamen ileride ise -1.
+        future = coarse.copy()
+        future["timestamp"] = future["timestamp"] + pd.Timedelta(days=5)
+        self.assertEqual(_get_multi_tf_bar_index(fine, 0, future), -1)
 
 
 if __name__ == "__main__":

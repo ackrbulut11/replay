@@ -59,12 +59,12 @@ class TestWaitlistApi(unittest.TestCase):
     def setUp(self) -> None:
         # Hız sınırı süreç belleğinde; testler arasında sıfırlanmazsa
         # birbirini 429'a düşürür.
-        waitlist_route._rate_state.clear()
+        waitlist_route._rate_limiter.reset()
         _cleanup()
 
     def tearDown(self) -> None:
         _cleanup()
-        waitlist_route._rate_state.clear()
+        waitlist_route._rate_limiter.reset()
 
     def test_join_creates_single_row(self):
         response = client.post(
@@ -112,7 +112,7 @@ class TestWaitlistApi(unittest.TestCase):
                 self.assertEqual(response.status_code, 422, f"kabul edildi: {bad}")
 
     def test_rate_limit_blocks_flood(self):
-        limit = waitlist_route.RATE_LIMIT_MAX_REQUESTS
+        limit = waitlist_route._rate_limiter._max_requests
         for i in range(limit):
             response = client.post(
                 "/api/waitlist", json={"email": f"waitlist.rate+{i}@example.com"}

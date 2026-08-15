@@ -14,14 +14,14 @@ döner, böylece frontend zaten kayıtlı olduğunu küçük bir notla bildirebi
 from __future__ import annotations
 
 import re
-import time
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.security import RateLimiter
 from app.database.models import WaitlistSignup
 from app.database.postgres import get_db
 
@@ -36,15 +36,16 @@ MAX_EMAIL_LENGTH = 254
 ALLOWED_SOURCES = {"hero", "footer"}
 
 # IP başına hız sınırı: aynı adresten kısa sürede çok sayıda kayıt açılmasın.
-RATE_LIMIT_WINDOW_SECONDS = 3600
-RATE_LIMIT_MAX_REQUESTS = 10
+# Kullanıcıya görünen metinler İngilizce: bu ucun tek istemcisi İngilizce olan
+# landing page'dir.
+_rate_limiter = RateLimiter(
+    max_requests=10,
+    window_seconds=3600,
+    detail="Too many attempts. Please try again later.",
+)
 
-# (istek sayısı, pencere başlangıcı) — süreç belleğinde tutulur. Render'da tek
-# instance çalıştığı için yeterli; kalıcı bir çözüm gerekirse Redis'e taşınır.
-_rate_state: Dict[str, Tuple[int, float]] = {}
 
-
-def _client_ip(request: Request) -> str:
+def client_ip(request: Request) -> str:
     """
     İstemci IP'si. Render arkasında olduğumuz için X-Forwarded-For'un ilk
     değeri gerçek istemcidir; başlık yoksa doğrudan bağlantıya düşer.
@@ -53,25 +54,6 @@ def _client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
-
-
-def _check_rate_limit(ip: str) -> None:
-    """Pencere içindeki istek sayısı sınırı aşarsa 429 fırlatır."""
-    now = time.monotonic()
-    count, window_start = _rate_state.get(ip, (0, now))
-
-    if now - window_start > RATE_LIMIT_WINDOW_SECONDS:
-        count, window_start = 0, now
-
-    if count >= RATE_LIMIT_MAX_REQUESTS:
-        # Kullanıcıya görünen metinler İngilizce: bu ucun tek istemcisi
-        # İngilizce olan landing page'dir.
-        raise HTTPException(
-            status_code=429,
-            detail="Too many attempts. Please try again later.",
-        )
-
-    _rate_state[ip] = (count + 1, window_start)
 
 
 class WaitlistRequest(BaseModel):
@@ -111,7 +93,7 @@ def join_waitlist(
     db: Session = Depends(get_db),
 ):
     """E-postayı erken erişim listesine ekler (zaten varsa hiçbir şey yapmaz)."""
-    _check_rate_limit(_client_ip(request))
+    _rate_limiter.check(client_ip(request))
 
     existing = (
         db.query(WaitlistSignup).filter(WaitlistSignup.email == payload.email).first()

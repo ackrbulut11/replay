@@ -23,6 +23,7 @@ from app.engines.scanner_engine import ScannerEngine
 from app.engines.execution import PositionSizing
 from app.engines.strategy_engine import MultiTimeframeDataError, StrategyEngine
 from app.indicators.registry import IndicatorRegistry
+from app.rules.templates import list_templates
 from app.rules.validation import StrategyValidationError
 from app.rules.strategy_models import (
     BatchEvaluateRequest,
@@ -84,6 +85,20 @@ def get_available_indicators():
     """Kullanılabilir indikatör listesini döndürür."""
     indicators = IndicatorRegistry.list_indicators()
     return {"indicators": indicators}
+
+
+@router.get("/templates")
+def get_strategy_templates():
+    """Hazır strateji şablonlarını döndürür.
+
+    Boş bir editörden başlamak, kullanıcıyı hem DSL'i hem hangi kuralın
+    anlamlı olduğunu aynı anda çözmeye zorluyordu. Şablonlar kopyalanıp
+    düzenlenecek çalışır başlangıç noktalarıdır.
+
+    Not: `/{strategy_id}` yolundan ÖNCE tanımlı olmalı, yoksa yol parametresi
+    "templates" kelimesini strateji kimliği sanar.
+    """
+    return {"templates": list_templates()}
 
 
 # ─── Tekli Test Geçmişi ──────────────────────────────────────────────────────

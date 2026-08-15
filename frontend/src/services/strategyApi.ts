@@ -158,3 +158,18 @@ export const strategyApi = {
   getAvailableIndicators,
 };
 
+
+
+/** Hazır strateji şablonu — kopyalanıp düzenlenecek çalışır bir başlangıç. */
+export interface StrategyTemplate {
+  key: string;
+  name: string;
+  description: string;
+  strategy: StrategyCreateRequest;
+}
+
+/** Hazır şablonları getirir (boş editörden başlamamak için). */
+export async function getTemplates(): Promise<StrategyTemplate[]> {
+  const data = await request<{ templates: StrategyTemplate[] }>(`${API_BASE}/templates`);
+  return data.templates || [];
+}

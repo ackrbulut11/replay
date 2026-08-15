@@ -314,6 +314,9 @@ class EvaluateResponse(BaseModel):
     # Tam metrik seti: Sharpe, max drawdown, profit factor, expectancy,
     # bakiye egrisi (reports/performance_report.py).
     performance: Optional[Dict[str, Any]] = None
+    # Ayni donemde al-tut getirisi ve stratejinin ona gore farki.
+    buy_and_hold: Optional[Dict[str, Any]] = None
+    outperformance_pct: Optional[float] = None
 
 
 class IndicatorInfo(BaseModel):
@@ -370,6 +373,8 @@ class BatchEvaluateResultItem(BaseModel):
     max_drawdown_pct: Optional[float] = None
     profit_factor: Optional[float] = None
     sharpe_ratio: Optional[float] = None
+    buy_and_hold_pct: Optional[float] = None
+    outperformance_pct: Optional[float] = None
     error: Optional[str] = None
 
 

@@ -350,6 +350,8 @@ def evaluate_strategy(
         win_rate=result.get("win_rate", 0.0),
         total_pnl_percent=result.get("total_pnl_percent", 0.0),
         performance=result.get("performance"),
+        buy_and_hold=result.get("buy_and_hold"),
+        outperformance_pct=result.get("outperformance_pct"),
     )
 
 

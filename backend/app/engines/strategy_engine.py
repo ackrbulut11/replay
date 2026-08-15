@@ -21,7 +21,13 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.database.models import Strategy, StrategyEvaluation
-from app.engines.execution import PositionSizing, simulate_account
+from app.engines.execution import (
+    ExecutionCosts,
+    PositionSizing,
+    fill_price,
+    net_pnl_percent,
+    simulate_account,
+)
 from app.reports.performance_report import calculate_performance, compound_return_pct
 from app.rules.engine import DEFAULT_BAR_DELAY, RuleEngine
 from app.rules.strategy_models import (
@@ -438,6 +444,16 @@ class StrategyEngine:
             account["trades"], starting_balance=starting_balance
         )
 
+        # Al-tut kiyasi: strateji bu donemde "hicbir sey yapmamaya" gore
+        # deger uretti mi? Ayni maliyetler uygulanir ki karsilastirma adil olsun.
+        costs = ExecutionCosts.from_strategy(strategy, param_overrides)
+        benchmark = self.buy_and_hold(df, costs)
+        outperformance = (
+            round(total_pnl_percent - benchmark["return_pct"], 2)
+            if benchmark["return_pct"] is not None
+            else None
+        )
+
         return {
             "strategy_id": strategy.get("id", ""),
             "strategy_name": strategy.get("name", ""),
@@ -451,6 +467,46 @@ class StrategyEngine:
             "win_rate": win_rate,
             "total_pnl_percent": total_pnl_percent,
             "performance": performance,
+            "buy_and_hold": benchmark,
+            # Pozitifse strateji al-tut'u yendi.
+            "outperformance_pct": outperformance,
+        }
+
+    @staticmethod
+    def buy_and_hold(df: pd.DataFrame, costs: ExecutionCosts | None = None) -> dict:
+        """Aynı dönemde "al ve tut" getirisi.
+
+        Strateji sonucunu tek başına okumak yanıltıcıdır: aynı dönemde sembol
+        %60 yükseldiyse %40 getiren bir strateji aslında kaybettirmiştir.
+        Karşılaştırma, kullanıcıya "bu stratejiyi kurmaya değdi mi" sorusunun
+        cevabını verir.
+
+        Değerlendirilen aralığın ilk barının AÇILIŞINDAN alınıp son barın
+        kapanışında satıldığı varsayılır; strateji tarafıyla aynı komisyon ve
+        slipaj uygulanır ki karşılaştırma adil olsun.
+        """
+        empty = {"return_pct": None, "entry_price": None, "exit_price": None}
+        if df is None or df.empty:
+            return empty
+
+        costs = costs or ExecutionCosts()
+        open_col = next((c for c in df.columns if str(c).lower() == "open"), None)
+        close_col = next((c for c in df.columns if str(c).lower() == "close"), None)
+        if close_col is None:
+            return empty
+
+        raw_entry = float(df.iloc[0][open_col if open_col else close_col])
+        raw_exit = float(df.iloc[-1][close_col])
+        if raw_entry <= 0:
+            return empty
+
+        entry = fill_price(raw_entry, is_buy=True, costs=costs)
+        exit_price = fill_price(raw_exit, is_buy=False, costs=costs)
+
+        return {
+            "return_pct": round(net_pnl_percent("long", entry, exit_price, costs), 2),
+            "entry_price": round(entry, 4),
+            "exit_price": round(exit_price, 4),
         }
 
     @staticmethod
@@ -624,6 +680,8 @@ class StrategyEngine:
                 "max_drawdown_pct": res["performance"].get("max_drawdown_pct"),
                 "profit_factor": res["performance"].get("profit_factor"),
                 "sharpe_ratio": res["performance"].get("sharpe_ratio"),
+                "buy_and_hold_pct": res["buy_and_hold"].get("return_pct"),
+                "outperformance_pct": res.get("outperformance_pct"),
                 "error": None,
             }
         except Exception as e:

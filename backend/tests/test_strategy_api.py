@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.models import User
 from app.database.postgres import Base
-from app.engines.execution import PositionSizing, SizingMode
+from app.engines.execution import ExecutionCosts, PositionSizing, SizingMode
 from app.engines.strategy_engine import StrategyEngine
 from app.indicators.registry import IndicatorRegistry
 from app.rules.strategy_models import (
@@ -213,6 +213,72 @@ class TestEvaluationPerformance(unittest.TestCase):
     def test_equity_curve_starts_at_starting_balance(self):
         result = StrategyEngine().evaluate(self._strategy(), self._df(), starting_balance=7_500)
         self.assertAlmostEqual(result["performance"]["equity_curve"][0], 7_500, places=6)
+
+
+class TestBuyAndHold(unittest.TestCase):
+    """Strateji sonucu al-tut ile kiyaslanabilmeli."""
+
+    @staticmethod
+    def _rising(n=60, step=1.0):
+        closes = [100.0 + i * step for i in range(n)]
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="1D"),
+            "open": closes, "high": [c + 1 for c in closes], "low": [c - 1 for c in closes],
+            "close": closes, "volume": [1000] * n,
+        })
+
+    def test_return_matches_first_open_to_last_close(self):
+        df = self._rising(n=11, step=10.0)  # 100 -> 200
+        result = StrategyEngine.buy_and_hold(df)
+        self.assertAlmostEqual(result["return_pct"], 100.0, places=2)
+
+    def test_costs_are_applied_to_benchmark_too(self):
+        """Kiyas adil olmali: strateji maliyet oduyorsa al-tut da oder."""
+        df = self._rising(n=11, step=10.0)
+        free = StrategyEngine.buy_and_hold(df)
+        costly = StrategyEngine.buy_and_hold(df, ExecutionCosts(commission_bps=50, slippage_bps=10))
+        self.assertLess(costly["return_pct"], free["return_pct"])
+
+    def test_empty_frame_returns_none(self):
+        self.assertIsNone(StrategyEngine.buy_and_hold(pd.DataFrame())["return_pct"])
+
+    def test_evaluate_reports_outperformance(self):
+        strategy = {
+            "id": "bh", "name": "BH", "parameters": [],
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "indicator", "name": "EMA", "period": 5},
+                "operator": ">",
+                "right": {"type": "indicator", "name": "EMA", "period": 20},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+            "take_profit_pct": 2.0,
+        }
+        df = self._rising(n=80, step=2.0)
+        result = StrategyEngine().evaluate(strategy, df)
+
+        self.assertIsNotNone(result["buy_and_hold"]["return_pct"])
+        self.assertIsNotNone(result["outperformance_pct"])
+        # Fark = strateji getirisi - al-tut getirisi
+        self.assertAlmostEqual(
+            result["outperformance_pct"],
+            round(result["total_pnl_percent"] - result["buy_and_hold"]["return_pct"], 2),
+            places=2,
+        )
+
+    def test_tp_strategy_underperforms_a_strong_trend(self):
+        """%2'de kar alan bir strateji kesintisiz yukselisi yenemez -- gorunur olmali."""
+        strategy = {
+            "id": "bh2", "name": "BH2", "parameters": [],
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "indicator", "name": "EMA", "period": 5},
+                "operator": ">",
+                "right": {"type": "indicator", "name": "EMA", "period": 20},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+            "take_profit_pct": 2.0,
+        }
+        result = StrategyEngine().evaluate(strategy, self._rising(n=80, step=3.0))
+        self.assertLess(result["outperformance_pct"], 0.0)
 
 
 if __name__ == "__main__":

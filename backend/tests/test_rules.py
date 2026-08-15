@@ -352,5 +352,72 @@ class TestRequiredTimeframes(unittest.TestCase):
         self.assertEqual(StrategyEngine.required_timeframes(strategy), ["1d", "4h"])
 
 
+class TestWilderSmoothing(unittest.TestCase):
+    """ATR/ADX Wilder yumusatmasi kullanmali (alpha = 1/period)."""
+
+    @staticmethod
+    def _df(n=200):
+        np.random.seed(11)
+        close = 100 + np.random.randn(n).cumsum()
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="1D"),
+            "open": close,
+            "high": close + np.abs(np.random.randn(n)),
+            "low": close - np.abs(np.random.randn(n)),
+            "close": close,
+            "volume": [1000] * n,
+        })
+
+    def test_atr_matches_wilder_reference(self):
+        df = self._df()
+        period = 14
+        prev_close = df["close"].shift()
+        tr = pd.concat([
+            df["high"] - df["low"],
+            (df["high"] - prev_close).abs(),
+            (df["low"] - prev_close).abs(),
+        ], axis=1).max(axis=1)
+        expected = tr.ewm(alpha=1.0 / period, adjust=False).mean()
+
+        got = IndicatorRegistry.get_value("ATR", df, period, 150)
+        self.assertAlmostEqual(got, float(expected.iloc[150]), places=9)
+
+        # ...ve span tabanli (yanlis) surumden farkli olmali
+        wrong = tr.ewm(span=period, adjust=False).mean()
+        self.assertNotAlmostEqual(got, float(wrong.iloc[150]), places=4)
+
+    def test_adx_stays_in_range(self):
+        df = self._df()
+        for idx in (60, 120, 199):
+            adx = IndicatorRegistry.get_value("ADX", df, 14, idx, field="ADX")
+            self.assertFalse(np.isnan(adx))
+            self.assertTrue(0 <= adx <= 100, f"ADX 0-100 disinda: {adx}")
+
+    def test_adx_on_flat_series_is_directionless_not_nan(self):
+        """Tamamen yatay seri: +DI = -DI = 0, DX sifira bolme uretmemeli."""
+        n = 80
+        flat = pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="1D"),
+            "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1000,
+        })
+        adx = IndicatorRegistry.get_value("ADX", flat, 14, 60, field="ADX")
+        self.assertFalse(np.isnan(adx), "Yatay seride ADX NaN olmamali")
+        self.assertAlmostEqual(adx, 0.0, places=6)
+
+    def test_rsi_still_matches_wilder(self):
+        """RSI zaten dogruydu; yardimciya tasinirken degismedigini dogrula."""
+        df = self._df()
+        delta = df["close"].diff()
+        gain = delta.where(delta > 0, 0.0)
+        loss = (-delta).where(delta < 0, 0.0)
+        avg_gain = gain.ewm(alpha=1.0 / 14, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1.0 / 14, adjust=False).mean()
+        rs = avg_gain / avg_loss.replace(0.0, float("nan"))
+        expected = 100 - (100 / (1 + rs))
+        self.assertAlmostEqual(
+            IndicatorRegistry.get_value("RSI", df, 14, 150), float(expected.iloc[150]), places=9
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,32 @@ from __future__ import annotations
 import pandas as pd
 
 
+# ─── Ortak Yardımcılar ────────────────────────────────────────────────────────
+
+
+def _wilder(series: pd.Series, period: int) -> pd.Series:
+    """Wilder yumuşatması (RMA) — RSI, ATR ve ADX'in kullandığı ortalama.
+
+    `alpha = 1/period`. Pandas'ın `ewm(span=period)` biçimi `alpha = 2/(period+1)`
+    demektir; ATR(14) için 0,0714 yerine 0,1333, yani yaklaşık iki kat tepkisel
+    bir seri üretir. Wilder'ın tanımladığı ATR/ADX bu değildir ve diğer
+    platformlarla (TradingView vb.) karşılaştırıldığında görünür şekilde sapar.
+    """
+    return series.ewm(alpha=1.0 / period, adjust=False).mean()
+
+
+def _true_range(df: pd.DataFrame) -> pd.Series:
+    """Gerçek Aralık (True Range) — ATR ve ADX'in ortak girdisi (RULES.md #8)."""
+    high = df["high"]
+    low = df["low"]
+    prev_close = df["close"].shift()
+
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
+    return pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+
 # ─── İndikatör Hesaplama Fonksiyonları ─────────────────────────────────────────
 
 
@@ -28,8 +54,8 @@ def calc_rsi(df: pd.DataFrame, period: int) -> pd.Series:
     delta = df["close"].diff()
     gain = delta.where(delta > 0, 0.0)
     loss = (-delta).where(delta < 0, 0.0)
-    avg_gain = gain.ewm(alpha=1.0 / period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1.0 / period, adjust=False).mean()
+    avg_gain = _wilder(gain, period)
+    avg_loss = _wilder(loss, period)
 
     # Sıfıra bölmeyi NaN'a çevirip uç durumları aşağıda açıkça ele alıyoruz.
     rs = avg_gain / avg_loss.replace(0.0, float("nan"))
@@ -70,17 +96,8 @@ def calc_macd(df: pd.DataFrame, period: int = 12) -> dict[str, pd.Series]:
 
 
 def calc_atr(df: pd.DataFrame, period: int) -> pd.Series:
-    """Average True Range (ATR)."""
-    high = df["high"]
-    low = df["low"]
-    close = df["close"]
-
-    tr1 = high - low
-    tr2 = (high - close.shift()).abs()
-    tr3 = (low - close.shift()).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-
-    return tr.ewm(span=period, adjust=False).mean()
+    """Average True Range (ATR) — Wilder yumuşatması."""
+    return _wilder(_true_range(df), period)
 
 
 def calc_bollinger(df: pd.DataFrame, period: int) -> dict[str, pd.Series]:
@@ -116,28 +133,29 @@ def calc_stochastic(df: pd.DataFrame, period: int) -> dict[str, pd.Series]:
 
 
 def calc_adx(df: pd.DataFrame, period: int) -> dict[str, pd.Series]:
-    """Average Directional Index (ADX)."""
+    """Average Directional Index (ADX) — Wilder yumuşatması."""
     high = df["high"]
     low = df["low"]
-    close = df["close"]
 
-    plus_dm = high.diff()
-    minus_dm = -low.diff()
+    up_move = high.diff()
+    down_move = -low.diff()
 
-    plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0.0)
-    minus_dm = minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0.0)
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
 
-    tr1 = high - low
-    tr2 = (high - close.shift()).abs()
-    tr3 = (low - close.shift()).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = _wilder(_true_range(df), period)
+    # Tamamen hareketsiz seride ATR = 0 ve bölme tanımsız kalır. Böyle bir
+    # seride hareket de yön de yoktur: DI sıfırdır (NaN değil), aksi halde
+    # yatay bir sembolde ADX koşulları sessizce hiç değerlendirilemezdi.
+    safe_atr = atr.replace(0.0, float("nan"))
+    plus_di = (100 * (_wilder(plus_dm, period) / safe_atr)).mask(atr == 0, 0.0)
+    minus_di = (100 * (_wilder(minus_dm, period) / safe_atr)).mask(atr == 0, 0.0)
 
-    atr = tr.ewm(span=period, adjust=False).mean()
-    plus_di = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr)
-    minus_di = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr)
-
-    dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
-    adx = dx.ewm(span=period, adjust=False).mean()
+    di_sum = (plus_di + minus_di).replace(0.0, float("nan"))
+    dx = 100 * ((plus_di - minus_di).abs() / di_sum)
+    # +DI ve -DI'nın ikisi de sıfırsa yön yoktur; DX tanımsız değil, sıfırdır.
+    dx = dx.mask((plus_di == 0) & (minus_di == 0), 0.0)
+    adx = _wilder(dx, period)
 
     return {
         "ADX": adx,

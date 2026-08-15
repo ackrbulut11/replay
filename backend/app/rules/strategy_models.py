@@ -182,6 +182,21 @@ class StrategyModel(BaseModel):
     )
     take_profit_pct: Optional[float] = Field(None, description="Yüzde Kar Al (Take Profit %), örn: 3.5 = %3.5 kârda sat")
     stop_loss_pct: Optional[float] = Field(None, description="Yüzde Zarar Durdur (Stop Loss %), örn: 2.0 = %2.0 zararda sat")
+    commission_bps: float = Field(
+        0.0,
+        ge=0,
+        le=1000,
+        description=(
+            "Her BACAK icin komisyon, baz puan (1 bps = %0,01). Binance spot taker ~10 bps. "
+            "Giris ve cikis ayri ayri alinir."
+        ),
+    )
+    slippage_bps: float = Field(
+        0.0,
+        ge=0,
+        le=1000,
+        description="Emrin istenen fiyattan ne kadar kotu doldugu (bps). Alista yukari, satista asagi.",
+    )
     bar_delay: int = Field(
         1,
         ge=0,
@@ -215,6 +230,8 @@ class StrategyCreateRequest(BaseModel):
     allow_short: bool = Field(False, description="Short pozisyon açılsın mı?")
     take_profit_pct: Optional[float] = Field(None, description="Yüzde Kar Al (Take Profit %)")
     stop_loss_pct: Optional[float] = Field(None, description="Yüzde Zarar Durdur (Stop Loss %)")
+    commission_bps: float = Field(0.0, ge=0, le=1000, description="Bacak basina komisyon (bps)")
+    slippage_bps: float = Field(0.0, ge=0, le=1000, description="Slipaj (bps)")
     bar_delay: int = Field(1, ge=0, le=10, description="Sinyal → gerçekleşme gecikmesi (mum). 0 = intrabar.")
 
 
@@ -230,6 +247,8 @@ class StrategyUpdateRequest(BaseModel):
     allow_short: Optional[bool] = None
     take_profit_pct: Optional[float] = None
     stop_loss_pct: Optional[float] = None
+    commission_bps: Optional[float] = Field(None, ge=0, le=1000)
+    slippage_bps: Optional[float] = Field(None, ge=0, le=1000)
     bar_delay: Optional[int] = Field(None, ge=0, le=10)
 
 

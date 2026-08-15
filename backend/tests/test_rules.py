@@ -546,5 +546,87 @@ class TestParameterOverrides(unittest.TestCase):
         self.assertEqual(params["bar_delay"], 0)
 
 
+class TestExecutionCostsInEngine(unittest.TestCase):
+    """Kural motoru komisyon ve slipaji gercekten uygulamali."""
+
+    @staticmethod
+    def _df():
+        # Uzun yatay + yukselis: EMA5 EMA20'yi yukari keser ve pozisyon acilir.
+        closes = [10.0] * 30 + [11.0 + i * 0.6 for i in range(30)]
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=len(closes), freq="1D"),
+            "open": closes, "high": [c + 1 for c in closes], "low": [c - 1 for c in closes],
+            "close": closes, "volume": [1000] * len(closes),
+        })
+
+    @staticmethod
+    def _strategy(**overrides):
+        # take_profit ile kapanis DETERMINISTIK: brut kazanc tam %2.
+        strategy = {
+            "id": "cost", "name": "Cost", "parameters": [],
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "indicator", "name": "EMA", "period": 5},
+                "operator": ">",
+                "right": {"type": "indicator", "name": "EMA", "period": 20},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+            "take_profit_pct": 2.0,
+        }
+        strategy.update(overrides)
+        return strategy
+
+    def _closed(self, strategy):
+        signals = RuleEngine.evaluate_range(strategy, self._df())
+        return [s for s in signals if s.get("pnl_percent") is not None]
+
+    def test_gross_profit_without_costs(self):
+        trades = self._closed(self._strategy())
+        self.assertTrue(trades, "take_profit ile kapanan bir islem beklenirdi")
+        self.assertAlmostEqual(trades[0]["pnl_percent"], 2.0, places=2)
+
+    def test_commission_is_subtracted(self):
+        # 50 bps/bacak -> gidis-donus %1 -> net %1
+        trades = self._closed(self._strategy(commission_bps=50))
+        self.assertAlmostEqual(trades[0]["pnl_percent"], 1.0, places=2)
+
+    def test_commission_can_flip_a_winner(self):
+        """Asil mesele: maliyet ince kazananlari zarara cevirir."""
+        free = self._closed(self._strategy())
+        expensive = self._closed(self._strategy(commission_bps=200))  # %2/bacak -> %4
+
+        self.assertGreater(free[0]["pnl_percent"], 0.0)
+        self.assertLess(expensive[0]["pnl_percent"], 0.0)
+
+    def test_costs_do_not_change_trade_count(self):
+        self.assertEqual(
+            len(self._closed(self._strategy())),
+            len(self._closed(self._strategy(commission_bps=50, slippage_bps=10))),
+            "maliyet islem SAYISINI degistirmemeli",
+        )
+
+    def test_zero_costs_match_previous_behaviour(self):
+        """Maliyet verilmezse sonuc eskisiyle ayni (kayitli testlerin anlami korunur)."""
+        self.assertEqual(
+            [t["pnl_percent"] for t in self._closed(self._strategy())],
+            [t["pnl_percent"] for t in self._closed(self._strategy(commission_bps=0, slippage_bps=0))],
+        )
+
+    def test_slippage_moves_fill_price_adversely(self):
+        signals = RuleEngine.evaluate_range(self._strategy(slippage_bps=100), self._df())
+        buys = [s for s in signals if s["signal"] == "BUY"]
+        self.assertTrue(buys)
+
+        df = self._df()
+        for buy in buys:
+            # %1 slipajla alis, mumun acilisindan DAHA PAHALI dolmali
+            self.assertGreater(buy["price"], float(df.iloc[buy["bar_index"]]["open"]))
+
+    def test_slippage_reduces_pnl_even_without_commission(self):
+        self.assertLess(
+            self._closed(self._strategy(slippage_bps=50))[0]["pnl_percent"],
+            self._closed(self._strategy())[0]["pnl_percent"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

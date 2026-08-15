@@ -82,6 +82,10 @@ class StrategyEngine:
         # Alan öncesinde kaydedilmiş stratejiler kural uyumlu varsayılana düşer
         # (RULES.md #22): 1 bar gecikme.
         data.setdefault("bar_delay", DEFAULT_BAR_DELAY)
+        # Maliyet alanlari alan oncesi stratejilerde yok; sifir = maliyetsiz
+        # (eski davranis), boylece kayitli sonuclarin anlami degismez.
+        data.setdefault("commission_bps", 0.0)
+        data.setdefault("slippage_bps", 0.0)
         return data
 
     @staticmethod
@@ -96,6 +100,8 @@ class StrategyEngine:
             "take_profit_pct": data.get("take_profit_pct"),
             "stop_loss_pct": data.get("stop_loss_pct"),
             "bar_delay": data.get("bar_delay", DEFAULT_BAR_DELAY),
+            "commission_bps": data.get("commission_bps", 0.0),
+            "slippage_bps": data.get("slippage_bps", 0.0),
         }
 
     # ─── CRUD İşlemleri ────────────────────────────────────────────────────
@@ -142,6 +148,11 @@ class StrategyEngine:
             allow_short=request.allow_short,
             take_profit_pct=request.take_profit_pct,
             stop_loss_pct=request.stop_loss_pct,
+            # Bunlar geçirilmezse istek gövdesindeki değerler sessizce düşer ve
+            # her yeni strateji model varsayılanıyla kaydedilirdi.
+            bar_delay=request.bar_delay,
+            commission_bps=request.commission_bps,
+            slippage_bps=request.slippage_bps,
         )
         data = strategy.model_dump()
 
@@ -196,6 +207,10 @@ class StrategyEngine:
             rules["stop_loss_pct"] = request.stop_loss_pct
         if request.bar_delay is not None:
             rules["bar_delay"] = request.bar_delay
+        if request.commission_bps is not None:
+            rules["commission_bps"] = request.commission_bps
+        if request.slippage_bps is not None:
+            rules["slippage_bps"] = request.slippage_bps
 
         row.rules = rules
         row.version = (row.version or 1) + 1

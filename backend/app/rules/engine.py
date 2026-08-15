@@ -18,6 +18,7 @@ from typing import Union
 
 import pandas as pd
 
+from app.engines.execution import ExecutionCosts, fill_price, net_pnl_percent
 from app.indicators.registry import IndicatorRegistry
 from app.rules.evaluator import RuleEvaluator
 from app.rules.strategy_models import SignalType
@@ -34,7 +35,14 @@ DEFAULT_BAR_DELAY = 1
 
 # Strateji parametresi olmayan, ama değerlendirme çağrısıyla geçilebilen motor
 # ayarları. `_resolve_params` bunları bilinmeyen override saymaz.
-ENGINE_OVERRIDE_KEYS = frozenset({"allow_short", "take_profit_pct", "stop_loss_pct", "bar_delay"})
+ENGINE_OVERRIDE_KEYS = frozenset({
+    "allow_short",
+    "take_profit_pct",
+    "stop_loss_pct",
+    "bar_delay",
+    "commission_bps",
+    "slippage_bps",
+})
 
 # TP/SL bu gecikmeye TABİ DEĞİLDİR: bunlar mum içinde piyasada duran koşullu
 # emirlerdir, kapanışı görüp karar verilen bir sinyal değil. Seviyeye
@@ -224,6 +232,7 @@ class RuleEngine:
         indicator_cache: dict = {}
 
         bar_delay = RuleEngine._resolve_bar_delay(strategy, effective_params)
+        costs = ExecutionCosts.from_strategy(strategy, effective_params)
 
         allow_short = strategy.get("allow_short", False)
         if "allow_short" in effective_params:
@@ -267,6 +276,11 @@ class RuleEngine:
             """
             nonlocal position_state, last_entry_price
 
+            # Slipaj gerçekleşme fiyatına gömülür: alış istenenin üstünde,
+            # satış altında dolar. Böylece hem kâr/zarar hem grafikte gösterilen
+            # fiyat gerçekçi olur (bkz. engines/execution.py).
+            exec_price = fill_price(exec_price, is_buy=(signal == SignalType.BUY), costs=costs)
+
             item: dict = {
                 "bar_index": bar_index,
                 "timestamp": timestamp,
@@ -280,14 +294,16 @@ class RuleEngine:
             # ── Açık pozisyonu kapat (varsa) ──────────────────────────────
             has_position = last_entry_price is not None and last_entry_price > 0
             if signal == SignalType.BUY and position_state == "short" and has_position:
-                short_pnl = ((last_entry_price - exec_price) / last_entry_price) * 100.0
                 item["entry_price"] = round(last_entry_price, 4)
-                item["pnl_percent"] = round(short_pnl, 2)
+                item["pnl_percent"] = round(
+                    net_pnl_percent("short", last_entry_price, exec_price, costs), 2
+                )
                 item["position_closed"] = "SHORT"
             elif signal == SignalType.SELL and position_state == "long" and has_position:
-                long_pnl = ((exec_price - last_entry_price) / last_entry_price) * 100.0
                 item["entry_price"] = round(last_entry_price, 4)
-                item["pnl_percent"] = round(long_pnl, 2)
+                item["pnl_percent"] = round(
+                    net_pnl_percent("long", last_entry_price, exec_price, costs), 2
+                )
                 item["position_closed"] = "LONG"
 
             # ── Yeni pozisyon durumu ──────────────────────────────────────

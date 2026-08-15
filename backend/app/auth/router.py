@@ -87,6 +87,15 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
                 google_requests.Request(),
                 settings.GOOGLE_CLIENT_ID
             )
+            # Kullanıcı eşleştirmesi E-POSTAYA göre yapılıyor (aşağıya bakın),
+            # bu yüzden adresin Google tarafından doğrulanmış olması şart:
+            # doğrulanmamış bir adres taşıyan hesap, aynı adrese sahip mevcut
+            # bir hesabın üzerine oturabilirdi.
+            if not id_info.get("email_verified"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google hesabınızın e-posta adresi doğrulanmamış.",
+                )
             user_info = {
                 "google_id": id_info.get("sub"),
                 "email": id_info.get("email"),

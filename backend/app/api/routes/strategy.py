@@ -349,6 +349,7 @@ def evaluate_strategy(
                 conditions_met=s["conditions_met"],
                 entry_price=s.get("entry_price"),
                 pnl_percent=s.get("pnl_percent"),
+                signal_timestamp=s.get("signal_timestamp"),
             )
             for s in result["signals"]
         ],

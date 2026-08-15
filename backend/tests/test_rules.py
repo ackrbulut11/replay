@@ -161,5 +161,79 @@ class TestRules(unittest.TestCase):
         self.assertIn(sig, (SignalType.BUY, SignalType.SELL, SignalType.NEUTRAL))
 
 
+class TestBarDelay(unittest.TestCase):
+    """RULES.md #22: sinyal kapanan mumdan, islem bir sonraki mumun acilisindan."""
+
+    @staticmethod
+    def _df():
+        # Acilis ve kapanis bilerek FARKLI: gecikmeli emrin sonraki mumun
+        # ACILISINDAN gerceklestigini fiyattan dogrulayabilmek icin.
+        closes = [10.0] * 30 + [12.0, 15.0, 18.0, 22.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0]
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=len(closes), freq="1D"),
+            "open": [c + 0.5 for c in closes],
+            "high": [c + 1 for c in closes],
+            "low": [c - 1 for c in closes],
+            "close": closes,
+            "volume": [1000] * len(closes),
+        })
+
+    @staticmethod
+    def _strategy(**overrides):
+        strategy = {
+            "id": "delay_strat",
+            "name": "Delay Strategy",
+            "parameters": [],
+            "entry_rules": {
+                "logic": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "EMA", "period": 5},
+                    "operator": ">",
+                    "right": {"type": "indicator", "name": "EMA", "period": 20},
+                }],
+            },
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        strategy.update(overrides)
+        return strategy
+
+    def test_default_is_one_bar_delay(self):
+        """Alan verilmezse varsayilan kural uyumludur: 1 bar gecikme."""
+        signals = RuleEngine.evaluate_range(self._strategy(), self._df())
+        self.assertTrue(signals, "En az bir sinyal beklenirdi")
+
+        first = signals[0]
+        # Sinyal bar i'de uretilir, emir bar i+1'de gerceklesir.
+        self.assertEqual(first["bar_index"], first["signal_bar_index"] + 1)
+        # ...ve fiyat, gerceklesme mumunun ACILISIDIR (kapanis degil).
+        df = self._df()
+        self.assertAlmostEqual(first["price"], float(df.iloc[first["bar_index"]]["open"]), places=4)
+        self.assertNotAlmostEqual(first["price"], float(df.iloc[first["signal_bar_index"]]["close"]), places=4)
+
+    def test_intrabar_opt_in(self):
+        """bar_delay=0 acikca secilirse eski (intrabar) davranis korunur."""
+        signals = RuleEngine.evaluate_range(self._strategy(bar_delay=0), self._df())
+        self.assertTrue(signals)
+
+        first = signals[0]
+        self.assertEqual(first["bar_index"], first["signal_bar_index"])
+        df = self._df()
+        self.assertAlmostEqual(first["price"], float(df.iloc[first["bar_index"]]["close"]), places=4)
+
+    def test_delay_shifts_signal_later(self):
+        """Gecikmeli emir, intrabar esdegerinden en az bir mum sonra gerceklesir."""
+        delayed = RuleEngine.evaluate_range(self._strategy(), self._df())
+        intrabar = RuleEngine.evaluate_range(self._strategy(bar_delay=0), self._df())
+        self.assertGreater(delayed[0]["bar_index"], intrabar[0]["bar_index"])
+
+    def test_stop_loss_is_not_delayed(self):
+        """TP/SL piyasada duran emirdir; gecikmeye tabi degildir."""
+        strategy = self._strategy(stop_loss_pct=5.0)
+        signals = RuleEngine.evaluate_range(strategy, self._df())
+        stops = [s for s in signals if s["signal_bar_index"] == s["bar_index"] and "Zarar Durdur" in " ".join(s["conditions_met"])]
+        for stop in stops:
+            self.assertEqual(stop["bar_index"], stop["signal_bar_index"])
+
+
 if __name__ == "__main__":
     unittest.main()

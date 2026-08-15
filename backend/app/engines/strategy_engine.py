@@ -21,7 +21,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.database.models import Strategy, StrategyEvaluation
-from app.rules.engine import RuleEngine
+from app.rules.engine import DEFAULT_BAR_DELAY, RuleEngine
 from app.rules.strategy_models import (
     StrategyCreateRequest,
     StrategyModel,
@@ -70,6 +70,9 @@ class StrategyEngine:
         data.setdefault("allow_short", False)
         data.setdefault("take_profit_pct", None)
         data.setdefault("stop_loss_pct", None)
+        # Alan öncesinde kaydedilmiş stratejiler kural uyumlu varsayılana düşer
+        # (RULES.md #22): 1 bar gecikme.
+        data.setdefault("bar_delay", DEFAULT_BAR_DELAY)
         return data
 
     @staticmethod
@@ -83,6 +86,7 @@ class StrategyEngine:
             "allow_short": data.get("allow_short", False),
             "take_profit_pct": data.get("take_profit_pct"),
             "stop_loss_pct": data.get("stop_loss_pct"),
+            "bar_delay": data.get("bar_delay", DEFAULT_BAR_DELAY),
         }
 
     # ─── CRUD İşlemleri ────────────────────────────────────────────────────
@@ -181,6 +185,8 @@ class StrategyEngine:
             rules["take_profit_pct"] = request.take_profit_pct
         if request.stop_loss_pct is not None:
             rules["stop_loss_pct"] = request.stop_loss_pct
+        if request.bar_delay is not None:
+            rules["bar_delay"] = request.bar_delay
 
         row.rules = rules
         row.version = (row.version or 1) + 1

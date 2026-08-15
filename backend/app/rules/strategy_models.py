@@ -182,6 +182,17 @@ class StrategyModel(BaseModel):
     )
     take_profit_pct: Optional[float] = Field(None, description="Yüzde Kar Al (Take Profit %), örn: 3.5 = %3.5 kârda sat")
     stop_loss_pct: Optional[float] = Field(None, description="Yüzde Zarar Durdur (Stop Loss %), örn: 2.0 = %2.0 zararda sat")
+    bar_delay: int = Field(
+        1,
+        ge=0,
+        le=10,
+        description=(
+            "Sinyal ile emrin gerçekleşmesi arasındaki mum sayısı (RULES.md #22). "
+            "1 (varsayılan): sinyal kapanan mumdan üretilir, işlem bir sonraki mumun "
+            "açılışından yapılır. 0: intrabar — aynı mumun kapanışından işlem; "
+            "sonuçları iyimserleştirdiği için yalnızca açıkça intrabar test edilirken kullanılır."
+        ),
+    )
 
 
 # ─── API İstek/Yanıt Modelleri ───────────────────────────────────────────────
@@ -204,6 +215,7 @@ class StrategyCreateRequest(BaseModel):
     allow_short: bool = Field(False, description="Short pozisyon açılsın mı?")
     take_profit_pct: Optional[float] = Field(None, description="Yüzde Kar Al (Take Profit %)")
     stop_loss_pct: Optional[float] = Field(None, description="Yüzde Zarar Durdur (Stop Loss %)")
+    bar_delay: int = Field(1, ge=0, le=10, description="Sinyal → gerçekleşme gecikmesi (mum). 0 = intrabar.")
 
 
 class StrategyUpdateRequest(BaseModel):
@@ -218,6 +230,7 @@ class StrategyUpdateRequest(BaseModel):
     allow_short: Optional[bool] = None
     take_profit_pct: Optional[float] = None
     stop_loss_pct: Optional[float] = None
+    bar_delay: Optional[int] = Field(None, ge=0, le=10)
 
 
 
@@ -239,10 +252,14 @@ class EvaluateRequest(BaseModel):
 class SignalResult(BaseModel):
     """Tek bir sinyal sonucu."""
 
-    timestamp: int = Field(..., description="Unix timestamp (saniye)")
+    timestamp: int = Field(..., description="Emrin GERÇEKLEŞTİĞİ mumun unix timestamp'i (saniye)")
     signal: SignalType = Field(..., description="Sinyal tipi")
-    price: float = Field(0.0, description="Sinyal anındaki kapanış fiyatı")
+    price: float = Field(0.0, description="Gerçekleşme fiyatı (gecikmeli emirlerde sonraki mumun açılışı)")
     conditions_met: List[str] = Field(default_factory=list, description="Karşılanan koşulların açıklaması")
+    signal_timestamp: Optional[int] = Field(
+        None,
+        description="Sinyali ÜRETEN kapanmış mumun timestamp'i; bar_delay=0 iken timestamp ile aynıdır",
+    )
     entry_price: Optional[float] = Field(None, description="Alış fiyatı (SELL sinyalinde doldurulur)")
     pnl_percent: Optional[float] = Field(None, description="Kar/Zarar yüzdesi (SELL sinyalinde doldurulur)")
 

@@ -6,6 +6,10 @@ Lookahead bias koruması: bar_index'e kadar olan veriye erişim.
 
 Aynı strateji motoru canlı analiz ve replay'de kullanılır (RULES.md #3).
 Stratejiler kod değil, veridir (RULES.md #4).
+
+Emir gerçekleşme konvansiyonu (RULES.md #22): sinyal KAPANAN mumdan üretilir,
+işlem BİR SONRAKİ mumun AÇILIŞINDAN gerçekleşir. Bkz. `DEFAULT_BAR_DELAY` ve
+`evaluate_range`.
 """
 
 from __future__ import annotations
@@ -16,6 +20,21 @@ import pandas as pd
 
 from app.rules.evaluator import RuleEvaluator
 from app.rules.strategy_models import SignalType
+
+
+# Sinyal üretimi ile emrin gerçekleşmesi arasındaki mum sayısı (RULES.md #22).
+#
+# 1 = sinyal bar i'nin kapanışında üretilir, pozisyon bar i+1'in açılışından
+# açılır/kapanır. Aynı mumun kapanışını görüp yine aynı mumda işlem yapmak
+# (0 = intrabar) varsayılan olarak yasaktır; backtest sonuçlarını sistematik
+# olarak iyimserleştirir. Strateji `bar_delay` alanıyla açıkça 0 seçebilir —
+# bunun "intrabar test ediyorum" beyanı olduğu kabul edilir.
+DEFAULT_BAR_DELAY = 1
+
+# TP/SL bu gecikmeye TABİ DEĞİLDİR: bunlar mum içinde piyasada duran koşullu
+# emirlerdir, kapanışı görüp karar verilen bir sinyal değil. Seviyeye
+# dokunulduğu anda ve tam o seviyeden gerçekleşirler (bkz. engines/replay_engine
+# içindeki aynı konvansiyon).
 
 
 class RuleEngine:
@@ -191,11 +210,15 @@ class RuleEngine:
         signals: list[dict] = []
         position_state: str = "none"  # "none", "long", "short"
         last_entry_price: float | None = None
+        # Kapanışta üretilmiş ama henüz gerçekleşmemiş sinyal (bkz. bar_delay).
+        pending_signal: dict | None = None
         # Aralık boyunca aynı df sabit kaldığından, kullanılan her indikatör
         # serisi (isim+period başına) yalnızca bir kez hesaplanıp burada
         # önbelleğe alınır — aksi halde her bar için tüm seri yeniden
         # hesaplanır (O(n) yerine O(n^2), bkz. IndicatorRegistry.get_value).
         indicator_cache: dict = {}
+
+        bar_delay = RuleEngine._resolve_bar_delay(strategy, effective_params)
 
         allow_short = strategy.get("allow_short", False)
         if "allow_short" in effective_params:
@@ -214,12 +237,86 @@ class RuleEngine:
         close_col = next((col for col in df.columns if str(col).lower() == "close"), None)
         high_col = next((col for col in df.columns if str(col).lower() == "high"), None)
         low_col = next((col for col in df.columns if str(col).lower() == "low"), None)
+        # Gecikmeli emir bir SONRAKİ mumun açılışından gerçekleşir; açılış
+        # sütunu yoksa (bazı testlerdeki sentetik df) kapanışa düşülür.
+        open_col = next((col for col in df.columns if str(col).lower() == "open"), None)
 
+        def _execute(
+            signal: SignalType,
+            conditions_met: list[str],
+            exec_price: float,
+            bar_index: int,
+            timestamp: int,
+            signal_bar_index: int,
+            signal_timestamp: int,
+        ) -> None:
+            """Bir sinyali gerçekleştirir: pozisyon durumunu günceller ve kaydı yazar.
+
+            `bar_index`/`timestamp` emrin GERÇEKLEŞTİĞİ mumdur (grafikteki
+            işaret oraya konur), `signal_*` ise sinyali üreten kapanmış mum.
+            Gecikme yokken (bar_delay=0) ikisi aynıdır.
+            """
+            nonlocal position_state, last_entry_price
+
+            item: dict = {
+                "bar_index": bar_index,
+                "timestamp": timestamp,
+                "signal": signal.value,
+                "price": round(exec_price, 4),
+                "conditions_met": conditions_met,
+                "signal_bar_index": signal_bar_index,
+                "signal_timestamp": signal_timestamp,
+            }
+
+            if signal == SignalType.BUY:
+                if position_state == "short" and last_entry_price is not None and last_entry_price > 0:
+                    # Short pozisyonunu kapat ve Short PnL % hesapla
+                    short_pnl = ((last_entry_price - exec_price) / last_entry_price) * 100.0
+                    item["entry_price"] = round(last_entry_price, 4)
+                    item["pnl_percent"] = round(short_pnl, 2)
+                    item["position_closed"] = "SHORT"
+
+                position_state = "long"
+                last_entry_price = exec_price
+            else:  # SELL
+                if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
+                    # Long pozisyonunu kapat ve Long PnL % hesapla
+                    long_pnl = ((exec_price - last_entry_price) / last_entry_price) * 100.0
+                    item["entry_price"] = round(last_entry_price, 4)
+                    item["pnl_percent"] = round(long_pnl, 2)
+                    item["position_closed"] = "LONG"
+
+                if allow_short:
+                    position_state = "short"
+                    last_entry_price = exec_price
+                else:
+                    position_state = "none"
+                    last_entry_price = None
+
+            signals.append(item)
 
         for i in range(start_index, end_index + 1):
             close_price = float(df.iloc[i][close_col]) if close_col else 0.0
             high_price = float(df.iloc[i][high_col]) if high_col else close_price
             low_price = float(df.iloc[i][low_col]) if low_col else close_price
+            open_price = float(df.iloc[i][open_col]) if open_col else close_price
+            timestamp = RuleEngine._bar_timestamp(df, i)
+
+            # ─── 1. Bekleyen sinyalin gerçekleşmesi ───────────────────────
+            # Önceki mumun kapanışında üretilen emir, bu mumun AÇILIŞINDAN
+            # gerçekleşir. TP/SL kontrolünden ÖNCE yapılır: pozisyon mumun
+            # başında açıldığı için o mumun içindeki seviyeler onu bağlar.
+            if pending_signal is not None and i >= pending_signal["execute_at"]:
+                _execute(
+                    signal=pending_signal["signal"],
+                    conditions_met=pending_signal["conditions_met"],
+                    exec_price=open_price,
+                    bar_index=i,
+                    timestamp=timestamp,
+                    signal_bar_index=pending_signal["bar_index"],
+                    signal_timestamp=pending_signal["timestamp"],
+                )
+                pending_signal = None
 
             # Pozisyon kontrolü & TP/SL kontrolleri
             tp_sl_signal = None
@@ -266,76 +363,92 @@ class RuleEngine:
             elif position_state == "short" and last_entry_price is not None and last_entry_price > 0:
                 unrealized_pnl = ((last_entry_price - close_price) / last_entry_price) * 100.0
 
+            # ─── 2. TP/SL gerçekleşmesi ──────────────────────────────────
+            # Gecikmeye tabi değildir: piyasada duran koşullu emirlerdir,
+            # seviyeye dokunulduğu anda gerçekleşirler.
             if tp_sl_signal is not None:
-                signal = tp_sl_signal
-                conditions_met = tp_sl_reason
-            else:
-                signal, conditions_met = RuleEngine.evaluate_bar_with_state(
-                    strategy=strategy,
-                    df=df,
+                _execute(
+                    signal=tp_sl_signal,
+                    conditions_met=tp_sl_reason,
+                    exec_price=exec_price,
                     bar_index=i,
-                    position_state=position_state,
-                    effective_params=effective_params,
-                    multi_tf_data=multi_tf_data,
-                    current_pnl=unrealized_pnl,
-                    cache=indicator_cache,
+                    timestamp=timestamp,
+                    signal_bar_index=i,
+                    signal_timestamp=timestamp,
                 )
+                # Seviye tetiklenen mumda kural değerlendirilmez (mevcut
+                # davranış korunuyor): pozisyon zaten bu mumda el değiştirdi.
+                continue
 
-            ts_val = df.iloc[i].get("timestamp", 0)
-            if hasattr(ts_val, "timestamp"):
-                timestamp = int(ts_val.timestamp())
-            elif "time" in df.columns:
-                time_val = df.iloc[i]["time"]
-                timestamp = int(time_val.timestamp()) if hasattr(time_val, "timestamp") else int(time_val)
+            # ─── 3. Kural değerlendirmesi ────────────────────────────────
+            # Bekleyen bir emir varken yenisi üretilmez; aksi halde gecikme
+            # penceresi içindeki sinyaller üst üste binerdi.
+            if pending_signal is not None:
+                continue
+
+            signal, conditions_met = RuleEngine.evaluate_bar_with_state(
+                strategy=strategy,
+                df=df,
+                bar_index=i,
+                position_state=position_state,
+                effective_params=effective_params,
+                multi_tf_data=multi_tf_data,
+                current_pnl=unrealized_pnl,
+                cache=indicator_cache,
+            )
+
+            if signal == SignalType.NEUTRAL:
+                continue
+
+            if bar_delay <= 0:
+                # İntrabar (açıkça seçildi): kapanışı görüp yine aynı mumun
+                # kapanışından işlem yapılır.
+                _execute(
+                    signal=signal,
+                    conditions_met=conditions_met,
+                    exec_price=close_price,
+                    bar_index=i,
+                    timestamp=timestamp,
+                    signal_bar_index=i,
+                    signal_timestamp=timestamp,
+                )
             else:
-                timestamp = int(ts_val) if ts_val else 0
-
-            if signal == SignalType.BUY:
-                sig_item: dict = {
+                pending_signal = {
+                    "signal": signal,
+                    "conditions_met": conditions_met,
                     "bar_index": i,
                     "timestamp": timestamp,
-                    "signal": "BUY",
-                    "price": round(exec_price, 4),
-                    "conditions_met": conditions_met,
+                    "execute_at": i + bar_delay,
                 }
-
-                if position_state == "short" and last_entry_price is not None and last_entry_price > 0:
-                    # Short pozisyonunu kapat ve Short PnL % hesapla
-                    short_pnl = ((last_entry_price - exec_price) / last_entry_price) * 100.0
-                    sig_item["entry_price"] = round(last_entry_price, 4)
-                    sig_item["pnl_percent"] = round(short_pnl, 2)
-                    sig_item["position_closed"] = "SHORT"
-
-                position_state = "long"
-                last_entry_price = close_price
-                signals.append(sig_item)
-
-            elif signal == SignalType.SELL:
-                sig_item: dict = {
-                    "bar_index": i,
-                    "timestamp": timestamp,
-                    "signal": "SELL",
-                    "price": round(exec_price, 4),
-                    "conditions_met": conditions_met,
-                }
-
-                if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
-                    # Long pozisyonunu kapat ve Long PnL % hesapla
-                    long_pnl = ((exec_price - last_entry_price) / last_entry_price) * 100.0
-                    sig_item["entry_price"] = round(last_entry_price, 4)
-                    sig_item["pnl_percent"] = round(long_pnl, 2)
-                    sig_item["position_closed"] = "LONG"
-
-                if allow_short:
-                    position_state = "short"
-                    last_entry_price = close_price
-                else:
-                    position_state = "none"
-                    last_entry_price = None
-
-                signals.append(sig_item)
 
         return signals
+
+    @staticmethod
+    def _bar_timestamp(df: pd.DataFrame, bar_index: int) -> int:
+        """Bir barın unix zaman damgasını (saniye) döndürür."""
+        ts_val = df.iloc[bar_index].get("timestamp", 0)
+        if hasattr(ts_val, "timestamp"):
+            return int(ts_val.timestamp())
+        if "time" in df.columns:
+            time_val = df.iloc[bar_index]["time"]
+            return int(time_val.timestamp()) if hasattr(time_val, "timestamp") else int(time_val)
+        return int(ts_val) if ts_val else 0
+
+    @staticmethod
+    def _resolve_bar_delay(strategy: dict, params: dict) -> int:
+        """Sinyal ile gerçekleşme arasındaki mum sayısı (RULES.md #22).
+
+        Strateji alanı ya da parametre override'ı verilmemişse
+        `DEFAULT_BAR_DELAY` (1 bar gecikme) kullanılır — yani varsayılan
+        davranış kural uyumludur, intrabar açıkça seçilmelidir.
+        """
+        raw = params.get("bar_delay", strategy.get("bar_delay"))
+        if raw is None:
+            return DEFAULT_BAR_DELAY
+        try:
+            return max(int(raw), 0)
+        except (TypeError, ValueError):
+            return DEFAULT_BAR_DELAY
 
 
     @staticmethod

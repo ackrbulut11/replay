@@ -31,11 +31,11 @@ python main.py                   # uvicorn on 127.0.0.1:8000 with reload
 ```
 
 ### Tests (`backend/`)
-Tests are `unittest`-based (not pytest, despite the stale `.pytest_cache/`). `tests/` has no `__init__.py`, so `unittest discover` fails — run modules by name from the `backend/` directory:
+Tests are `unittest`-based (not pytest, despite the stale `.pytest_cache/`). Run from the `backend/` directory:
 ```bash
+python -m unittest discover -s tests -t .                # whole suite
 python -m unittest tests.test_rules                      # single module
 python -m unittest tests.test_rules.TestRules.test_operators   # single test
-python -m unittest tests.test_rules tests.test_strategy_api tests.test_alerts tests.test_auth_api
 ```
 `ruff` is installed in the venv (no config file; defaults apply).
 
@@ -127,7 +127,7 @@ Phases 1–4 are built; 5–6 have not started. Verify a module is real before w
 
 Frontend deploys to Vercel. **There are two `vercel.json` files and only one is live.** Vercel reads the config in the project's configured Root Directory: since `/api/*` is in fact proxied on the deployed site, [frontend/vercel.json](frontend/vercel.json) is the effective one and the repo-root [vercel.json](vercel.json) is ignored. Both now carry the same `/api/:path*` → `https://replay-xj3e.onrender.com/api/:path*` rewrite, so editing either one cannot silently break API routing — but **change both** or the next reader will hit the same trap. `.env.production` sets the same backend as `VITE_API_BASE_URL`, which `AuthContext`/`waitlistApi` use as an absolute URL while everything else relies on the relative `/api` rewrite.
 
-CORS in `main.py` allows `replay-*.vercel.app` plus localhost via regex. CI ([.github/workflows/build.yml](.github/workflows/build.yml)) only runs the frontend build on windows-latest — no backend tests or lint in CI, even though `backend/tests/` has a full unittest suite.
+CORS in `main.py` allows `replay-*.vercel.app` plus localhost via regex. CI ([.github/workflows/build.yml](.github/workflows/build.yml)) runs two jobs on windows-latest: the frontend build, and the backend (`ruff check`, `python -c "import main"`, `unittest discover`). The backend job uses `discover` rather than a hand-written module list — the list silently left new test files out of CI.
 
 Note on `npm run lint`: the script exists but `eslint` is not installed and there is no `eslint.config.js`, so it fails immediately. Use `npx tsc --noEmit` and `npm run build` to check the frontend.
 

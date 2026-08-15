@@ -48,6 +48,12 @@ Tamamlanan maddeleri `[x]` yaparak işaretleyin.
   strateji/alarm/admin uçları için smoke test'ler ve CI'da `python -m unittest` + `ruff check`
   adımı ekleyin.
 
+  **Bu maddenin ne kadar kritik olduğuna dair yeni kanıt (2026-08-15):**
+  [tests/test_auth_api.py](backend/tests/test_auth_api.py) pytest tarzı düz bir fonksiyon
+  olduğu için `python -m unittest` altında **hiç çalışmıyordu** ve içeriği de eskimişti —
+  kaldırılmış olan imzasız-JWT yedek yolunu doğruluyordu. Kimse fark etmedi çünkü test
+  komutu CI'da hiç koşmuyor. Dosya artık gerçek davranışı test eden 11 unittest içeriyor.
+
 - [x] **Piyasa verisi retention/pruning uygulanmalı.** `DataLoader._prune_to_retention`
   (`RETENTION_1M/1H/1D`, [config.py:43-45](backend/app/core/config.py#L43)) artık her yüklemede
   eski barları kırpıyor, ve [scripts/update_market.py](scripts/update_market.py) gece yarısı tüm
@@ -75,9 +81,13 @@ Tamamlanan maddeleri `[x]` yaparak işaretleyin.
   Render (`SENTRY_DSN`, `ENVIRONMENT=production`) ile Vercel (`VITE_SENTRY_DSN`) ortam
   değişkenlerine girmek — bu adım otomatikleştirilemez, elle yapılmalı.
 
-- [ ] **Veri sağlayıcı isteklerine rate limiting ekleyin.** `market/data` ucu Yahoo Finance ve
-  Binance'e doğrudan proxy yapıyor, kullanıcı başına throttling yok. Gerçek trafik altında
-  sunucunuzun IP'si bu sağlayıcılar tarafından geçici olarak engellenebilir.
+- [x] **Veri sağlayıcı isteklerine rate limiting ekleyin.** Yapıldı — ve sorun sanılandan
+  büyüktü: `/api/market/*` uçlarının **tamamı kimlik doğrulaması istemiyordu**, yani backend
+  herkesin kullanabileceği açık bir piyasa verisi proxy'siydi. Artık router seviyesinde
+  `get_current_user` var ve kullanıcı başına dakikalık istek sınırı işliyor
+  (`MARKET_RATE_LIMIT_PER_MINUTE`, varsayılan 120). Hız sınırlayıcı
+  [core/security.py](backend/app/core/security.py) içinde paylaşılan bir sınıf; waitlist ve
+  analytics uçları da onu kullanıyor.
 
 - [ ] **Sessiz veri kırpma kullanıcıya bildirilmeli.** BIST/NASDAQ (Yahoo Finance) sağlayıcısı
   `1h` istekleri için pencereyi sessizce ~700 güne kırpıyor
@@ -109,8 +119,10 @@ Bkz. [roadmap.md](roadmap.md). Faz 1-3 (grafik, replay kontrolleri, strateji mot
 watchlist, alarmlar) büyük ölçüde tamamlanmış durumda; aşağıdakiler henüz stub veya hiç
 başlamamış:
 
-- [ ] **Faz 4 — Manuel Backtest:** `engines/backtest_engine.py`, Trade Journal, Performans Raporu
-  (Win Rate, Sharpe, Drawdown vb.)
+- [x] **Faz 4 — Manuel Backtest:** Tamamlandı — `engines/replay_engine.py`, `journal/`,
+  `reports/performance_report.py` ve arayüzdeki replay işlem paneli + işlem günlüğü sayfası
+  çalışır durumda. Yalnızca `engines/backtest_engine.py` hâlâ stub (otomatik backtest;
+  manuel backtest onsuz da çalışıyor).
 - [ ] **Faz 5 — Gelişmiş Analiz:** Parameter Optimizer, Walk Forward Test, Monte Carlo, Portfolio
   Test
 - [ ] **Faz 6 — AI Özellikleri:** doğal dil → JSON strateji çevirisi, AI destekli analiz
@@ -120,7 +132,16 @@ başlamamış:
 
 ## Ek notlar
 
-- Bu liste 2026-07-29 tarihli bir oturumdaki bulgulara dayanır; kod değiştikçe güncel kalması
-  için periyodik olarak gözden geçirilmelidir.
+- Bu liste 2026-07-29 tarihli bir oturumdaki bulgulara dayanır, 2026-08-15'te bir bug avı
+  turuyla güncellendi; kod değiştikçe güncel kalması için periyodik olarak gözden
+  geçirilmelidir.
+- 2026-08-15 turunda kapatılan ve burada ayrıca madde açılmayan hatalar (hepsi ayrı commit):
+  aynı-bar execution (RULES.md §22 ihlali), çoklu timeframe'de lookahead bias (§19-21),
+  üst dilim yüklenemediğinde sessizce ana dilime düşme, ATR/ADX'in Wilder yerine `ewm(span=)`
+  kullanması, MACD/ADX/Stochastic'in yetersiz ısınma süresi, gösterge alarmlarının hiç
+  tetiklenmemesi, EMA kesişiminin kesişim değil durum kontrolü olması, replay'de gerçek
+  alarmların geçmiş fiyatla tetiklenmesi, retention limitini aşan isteklerin her seferinde
+  yeniden indirilmesi, `datetime.now()`/UTC karışımı ve replay oturumu sahipliğinin
+  doğrulanmaması.
 - Maddeler tamamlandıkça bu dosyadan silinmek yerine `[x]` ile işaretlenmesi, gelecekte "neden bu
   karar alındı" sorusuna cevap bırakır.

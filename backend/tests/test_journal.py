@@ -6,7 +6,7 @@ geçici, bellek içi bir SQLite veritabanı kullanır (test_alerts.py deseni).
 """
 
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

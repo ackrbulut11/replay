@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 from app.database.models import JournalTrade, ReplaySession, generate_uuid
 from app.engines import replay_engine
 from app.journal.models import (
-    ExitReason,
     ReplaySessionCreateRequest,
     TradeCloseRequest,
     TradeOpenRequest,

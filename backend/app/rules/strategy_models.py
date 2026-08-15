@@ -54,6 +54,8 @@ class OperandType(str, Enum):
     PRICE = "price"
     VALUE = "value"
     PNL = "pnl"
+    # Iki operandi bir islemle birlestiren aritmetik ifade (close - 2*ATR gibi).
+    EXPR = "expr"
 
 
 class ParameterType(str, Enum):
@@ -91,6 +93,19 @@ class ValueOperand(BaseModel):
     value: Union[float, int, str] = Field(..., description="Sabit değer veya parametre referansı ($rsi_threshold)")
 
 
+class ExprOperand(BaseModel):
+    """Aritmetik operand: `left <op> right`.
+
+    Bunsuz "close < giris - 2xATR" gibi en yaygin stop kurali DSL'de
+    yazilamiyordu. Operandlar kendileri de aritmetik olabilir (ic ice).
+    """
+
+    type: OperandType = OperandType.EXPR
+    op: str = Field(..., description="Islem: + - * /")
+    left: dict = Field(..., description="Sol operand")
+    right: dict = Field(..., description="Sag operand")
+
+
 class PnlOperand(BaseModel):
     """Pozisyon Kar/Zarar yüzdesi operandı (ör. %3.5 kâr, -%2.0 zarar)."""
 
@@ -98,7 +113,7 @@ class PnlOperand(BaseModel):
 
 
 # Birleşik operand tipi
-Operand = Union[IndicatorOperand, PriceOperand, ValueOperand, PnlOperand]
+Operand = Union[IndicatorOperand, PriceOperand, ValueOperand, PnlOperand, ExprOperand]
 
 
 

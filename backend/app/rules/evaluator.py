@@ -17,7 +17,7 @@ stratejinin bu olmadığını hiç öğrenemiyordu. Yükleme hatasının kendisi
 from __future__ import annotations
 
 import math
-from typing import Union
+from typing import Callable, Union
 
 import pandas as pd
 
@@ -29,6 +29,24 @@ from app.rules.conditions import get_operator
 # ileride AI tarafından üretilmiş) bir JSON'un özyinelemeyle yığını taşırmasına
 # izin verirdi; bu sınır anlaşılır bir hataya çevirir.
 MAX_GROUP_DEPTH = 10
+
+# Aritmetik ifadenin azami iç içe derinliği. Kural JSON'ı kullanıcıdan geliyor;
+# sınırsız özyineleme yığını taşırır.
+MAX_EXPR_DEPTH = 8
+
+
+def _safe_divide(left: float, right: float) -> float:
+    """Sıfıra bölmede NaN döner — koşul "yetersiz veri" sayılıp sağlanmaz."""
+    return float("nan") if right == 0 else left / right
+
+
+# Aritmetik operandın desteklediği işlemler.
+ARITHMETIC_OPS: dict[str, Callable[[float, float], float]] = {
+    "+": lambda a, b: a + b,
+    "-": lambda a, b: a - b,
+    "*": lambda a, b: a * b,
+    "/": _safe_divide,
+}
 
 
 def is_condition_group(item: dict) -> bool:
@@ -58,12 +76,23 @@ def iter_conditions(group: dict, _depth: int = 0):
 
 
 def iter_operands(group: dict):
-    """Bir grubun tüm koşullarındaki tüm operandları verir."""
+    """Bir grubun tüm koşullarındaki tüm operandları verir.
+
+    Aritmetik operandların (`type: "expr"`) içine de girer: `close - 2*ATR(14)`
+    ifadesindeki ATR de bir indikatördür ve warmup hesabına girmesi gerekir.
+    """
+
+    def _walk(operand, depth=0):
+        if not isinstance(operand, dict) or depth > MAX_EXPR_DEPTH:
+            return
+        yield operand
+        if operand.get("type") == "expr":
+            yield from _walk(operand.get("left"), depth + 1)
+            yield from _walk(operand.get("right"), depth + 1)
+
     for condition in iter_conditions(group):
         for side in ("left", "right", "right2"):
-            operand = condition.get(side)
-            if isinstance(operand, dict):
-                yield operand
+            yield from _walk(condition.get(side))
 
 
 def resolve_parameter(
@@ -166,11 +195,41 @@ def resolve_operand(
     multi_tf_data: dict[str, pd.DataFrame] | None = None,
     current_pnl: float = 0.0,
     cache: dict | None = None,
+    _depth: int = 0,
 ) -> float:
     """
     Bir operandın değerini çözümler.
     """
     op_type = operand.get("type", "value")
+
+    if op_type == "expr":
+        # Aritmetik operand: iki operandı bir işlemle birleştirir. Bunsuz
+        # "close < giriş − 2×ATR" gibi en yaygın stop kuralı DSL'de hiç
+        # yazılamıyordu; kullanıcı sabit yüzdeye mahkûmdu.
+        if _depth > MAX_EXPR_DEPTH:
+            raise ValueError(f"Aritmetik ifade en fazla {MAX_EXPR_DEPTH} seviye olabilir")
+
+        op = operand.get("op")
+        func = ARITHMETIC_OPS.get(op)
+        if func is None:
+            raise ValueError(
+                f"Bilinmeyen aritmetik işlem: {op}. Desteklenen: {list(ARITHMETIC_OPS)}"
+            )
+
+        left_def = operand.get("left")
+        right_def = operand.get("right")
+        if not isinstance(left_def, dict) or not isinstance(right_def, dict):
+            raise ValueError("Aritmetik operand 'left' ve 'right' alanlarını zorunlu kılar")
+
+        left = resolve_operand(
+            left_def, df, bar_index, params, multi_tf_data, current_pnl, cache, _depth + 1
+        )
+        right = resolve_operand(
+            right_def, df, bar_index, params, multi_tf_data, current_pnl, cache, _depth + 1
+        )
+        if math.isnan(left) or math.isnan(right):
+            return float("nan")
+        return func(left, right)
 
     if op_type in ("pnl", "pnl_percent"):
         return float(current_pnl)
@@ -361,6 +420,10 @@ class RuleEvaluator:
 def _operand_description(operand: dict) -> str:
     """Operandın okunabilir açıklamasını üretir."""
     op_type = operand.get("type", "value")
+    if op_type == "expr":
+        left = _operand_description(operand.get("left", {}))
+        right = _operand_description(operand.get("right", {}))
+        return f"({left} {operand.get('op', '?')} {right})"
     if op_type in ("pnl", "pnl_percent"):
         return "Kar/Zarar (%)"
     if op_type == "indicator":

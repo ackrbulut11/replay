@@ -746,5 +746,103 @@ class TestNestedConditionGroups(unittest.TestCase):
         self.assertIsInstance(model.conditions[1], ConditionGroupModel)
 
 
+class TestArithmeticOperand(unittest.TestCase):
+    """close - 2*ATR gibi ifadeler yazilabilmeli."""
+
+    @staticmethod
+    def _df(n=80):
+        np.random.seed(5)
+        close = 100 + np.random.randn(n).cumsum()
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="1D"),
+            "open": close, "high": close + 2, "low": close - 2,
+            "close": close, "volume": [1000] * n,
+        })
+
+    def test_addition_and_subtraction(self):
+        df = self._df()
+        expr = {"type": "expr", "op": "+",
+                "left": {"type": "price", "field": "close"},
+                "right": {"type": "value", "value": 10}}
+        close = float(df.iloc[50]["close"])
+        self.assertAlmostEqual(resolve_operand(expr, df, 50, {}), close + 10, places=9)
+
+        expr["op"] = "-"
+        self.assertAlmostEqual(resolve_operand(expr, df, 50, {}), close - 10, places=9)
+
+    def test_atr_based_stop_expression(self):
+        """Asil kullanim: giris - 2 x ATR."""
+        df = self._df()
+        expr = {
+            "type": "expr", "op": "-",
+            "left": {"type": "price", "field": "close"},
+            "right": {"type": "expr", "op": "*",
+                      "left": {"type": "value", "value": 2},
+                      "right": {"type": "indicator", "name": "ATR", "period": 14}},
+        }
+        atr = IndicatorRegistry.get_value("ATR", df, 14, 50)
+        close = float(df.iloc[50]["close"])
+        self.assertAlmostEqual(resolve_operand(expr, df, 50, {}), close - 2 * atr, places=9)
+
+    def test_parameter_reference_inside_expression(self):
+        df = self._df()
+        expr = {"type": "expr", "op": "*",
+                "left": {"type": "price", "field": "close"},
+                "right": {"type": "value", "value": "$carpan"}}
+        self.assertAlmostEqual(
+            resolve_operand(expr, df, 50, {"carpan": 1.02}),
+            float(df.iloc[50]["close"]) * 1.02, places=9,
+        )
+
+    def test_division_by_zero_is_nan_not_crash(self):
+        df = self._df()
+        expr = {"type": "expr", "op": "/",
+                "left": {"type": "price", "field": "close"},
+                "right": {"type": "value", "value": 0}}
+        self.assertTrue(np.isnan(resolve_operand(expr, df, 50, {})))
+
+    def test_nan_propagates(self):
+        """Isinmamis gosterge NaN ise ifade de NaN olmali (kosul saglanmaz)."""
+        df = self._df()
+        expr = {"type": "expr", "op": "+",
+                "left": {"type": "price", "field": "close"},
+                "right": {"type": "indicator", "name": "EMA", "period": 200}}
+        self.assertTrue(np.isnan(resolve_operand(expr, df, 50, {})))
+
+    def test_unknown_operation_is_rejected(self):
+        df = self._df()
+        expr = {"type": "expr", "op": "**",
+                "left": {"type": "value", "value": 2},
+                "right": {"type": "value", "value": 3}}
+        with self.assertRaises(ValueError):
+            resolve_operand(expr, df, 50, {})
+
+    def test_indicator_inside_expression_counts_for_warmup(self):
+        strategy = {
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "price", "field": "close"},
+                "operator": "<",
+                "right": {"type": "expr", "op": "-",
+                          "left": {"type": "price", "field": "close"},
+                          "right": {"type": "indicator", "name": "EMA", "period": 150}},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        self.assertEqual(RuleEngine._get_warmup_period(strategy, {}), 150)
+
+    def test_condition_using_expression_evaluates(self):
+        df = self._df()
+        condition = {
+            "left": {"type": "price", "field": "close"},
+            "operator": ">",
+            "right": {"type": "expr", "op": "-",
+                      "left": {"type": "price", "field": "close"},
+                      "right": {"type": "value", "value": 1}},
+        }
+        result, desc = RuleEvaluator.evaluate_condition(condition, df, 50, {})
+        self.assertTrue(result)
+        self.assertIn("(", desc, "aritmetik ifade aciklamada parantezle gosterilmeli")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,8 @@ from app.rules.conditions import (
 )
 from app.indicators.registry import IndicatorRegistry
 from app.rules.engine import RuleEngine, SignalType
-from app.rules.evaluator import _get_multi_tf_bar_index
+from app.rules.evaluator import RuleEvaluator, _get_multi_tf_bar_index, resolve_operand
+from app.engines.strategy_engine import StrategyEngine
 
 
 class TestRules(unittest.TestCase):
@@ -286,6 +287,69 @@ class TestMultiTimeframeAlignment(unittest.TestCase):
         future = coarse.copy()
         future["timestamp"] = future["timestamp"] + pd.Timedelta(days=5)
         self.assertEqual(_get_multi_tf_bar_index(fine, 0, future), -1)
+
+
+class TestMultiTimeframeNoSilentFallback(unittest.TestCase):
+    """Ust dilim verisi yoksa ana dilime DUSULMEZ (sessiz yanlis sonuc yerine NaN)."""
+
+    @staticmethod
+    def _df():
+        n = 60
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="15min"),
+            "open": np.linspace(100, 160, n),
+            "high": np.linspace(101, 161, n),
+            "low": np.linspace(99, 159, n),
+            "close": np.linspace(100, 160, n),
+            "volume": [1000] * n,
+        })
+
+    def test_indicator_operand_returns_nan_when_timeframe_missing(self):
+        df = self._df()
+        operand = {"type": "indicator", "name": "EMA", "period": 5, "timeframe": "4h"}
+        # multi_tf_data hic verilmemis
+        self.assertTrue(np.isnan(resolve_operand(operand, df, 40, {}, None)))
+        # verilmis ama istenen dilim yok
+        self.assertTrue(np.isnan(resolve_operand(operand, df, 40, {}, {"1d": df})))
+
+    def test_price_operand_returns_nan_when_timeframe_missing(self):
+        df = self._df()
+        operand = {"type": "price", "field": "close", "timeframe": "4h"}
+        self.assertTrue(np.isnan(resolve_operand(operand, df, 40, {}, None)))
+
+    def test_condition_with_missing_timeframe_is_not_met(self):
+        """NaN -> kosul saglanmaz; yanlislikla sinyal uretilmez."""
+        df = self._df()
+        condition = {
+            "left": {"type": "price", "field": "close", "timeframe": "4h"},
+            "operator": ">",
+            "right": {"type": "value", "value": 0},
+        }
+        result, desc = RuleEvaluator.evaluate_condition(condition, df, 40, {}, None)
+        self.assertFalse(result)
+        self.assertIn("Yetersiz veri", desc)
+
+
+class TestRequiredTimeframes(unittest.TestCase):
+    def test_collects_filters_and_operands_without_duplicates(self):
+        strategy = {
+            "timeframe_filters": [{
+                "timeframe": "1d",
+                "logic": "AND",
+                "conditions": [{
+                    "left": {"type": "indicator", "name": "EMA", "period": 200, "timeframe": "1d"},
+                    "operator": ">",
+                    "right": {"type": "value", "value": 1},
+                }],
+            }],
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "price", "field": "close", "timeframe": "4h"},
+                "operator": ">",
+                "right": {"type": "indicator", "name": "EMA", "period": 20},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        self.assertEqual(StrategyEngine.required_timeframes(strategy), ["1d", "4h"])
 
 
 if __name__ == "__main__":

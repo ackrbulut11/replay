@@ -4,6 +4,14 @@ Kural Değerlendirme Yardımcısı (Rule Evaluator).
 Bir koşul bloğunu (condition group) AND/OR mantığıyla değerlendirir.
 İndikatör ve fiyat değerlerini DataFrame'den çeker,
 parametre referanslarını ($fast_ema gibi) çözümler.
+
+Bir operand farklı bir zaman dilimi (`timeframe`) istediğinde ve o dilimin
+verisi elde yoksa ANA ZAMAN DİLİMİNE DÜŞÜLMEZ — NaN döndürülür, koşul da
+"yetersiz veri" sayılıp sağlanmaz. Eskiden düşülüyordu ve bu, üst dilim
+yüklemesi başarısız olduğunda "15dk grafik + 4S EMA200 filtresi"ni sessizce
+"15dk grafik + 15dk EMA200 filtresi"ne çeviriyordu: kullanıcı test ettiği
+stratejinin bu olmadığını hiç öğrenemiyordu. Yükleme hatasının kendisi
+`StrategyEngine.load_multi_tf_data` tarafından ayrıca yükseltilir.
 """
 
 from __future__ import annotations
@@ -136,8 +144,12 @@ def resolve_operand(
         field = operand.get("field", "close")
         timeframe = operand.get("timeframe")
 
-        if timeframe and multi_tf_data and timeframe in multi_tf_data:
-            target_df = multi_tf_data[timeframe]
+        if timeframe:
+            # Farklı bir zaman dilimi istendiyse ana dilime DÜŞÜLMEZ: veri yoksa
+            # değer bilinmiyordur (bkz. modül başlığı).
+            target_df = (multi_tf_data or {}).get(timeframe)
+            if target_df is None:
+                return float("nan")
             idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache)
             if idx < 0:
                 return float("nan")
@@ -157,8 +169,11 @@ def resolve_operand(
         field = operand.get("field")
         timeframe = operand.get("timeframe")
 
-        if timeframe and multi_tf_data and timeframe in multi_tf_data:
-            target_df = multi_tf_data[timeframe]
+        if timeframe:
+            # Ana dilime düşülmez (bkz. modül başlığı).
+            target_df = (multi_tf_data or {}).get(timeframe)
+            if target_df is None:
+                return float("nan")
             idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache)
             if idx < 0:
                 return float("nan")

@@ -19,7 +19,7 @@ from app.database.models import User
 from app.auth.dependencies import get_current_user
 from app.data.loader import DataLoader
 from app.engines.scanner_engine import ScannerEngine
-from app.engines.strategy_engine import StrategyEngine
+from app.engines.strategy_engine import MultiTimeframeDataError, StrategyEngine
 from app.indicators.registry import IndicatorRegistry
 from app.rules.strategy_models import (
     BatchEvaluateRequest,
@@ -295,14 +295,21 @@ def evaluate_strategy(
 
     # Çoklu timeframe verilerini yükle (varsa) — tekli test ve toplu tarama
     # arasında tutarlılık için ortak yardımcı kullanılır.
-    multi_tf_data = _engine.load_multi_tf_data(
-        strategy=strategy,
-        provider=request.provider,
-        symbol=request.symbol,
-        loader=_loader,
-        start_dt=start_dt,
-        end_dt=end_dt,
-    )
+    #
+    # Yükleme başarısız olursa test SÜRDÜRÜLMEZ: eksik bir üst dilim filtresi
+    # sessizce ana zaman dilimine düşerdi ve kullanıcı istediğinden farklı bir
+    # stratejinin sonucunu doğru sanardı.
+    try:
+        multi_tf_data = _engine.load_multi_tf_data(
+            strategy=strategy,
+            provider=request.provider,
+            symbol=request.symbol,
+            loader=_loader,
+            start_dt=start_dt,
+            end_dt=end_dt,
+        )
+    except MultiTimeframeDataError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
     if limit_bars > 0 and len(df) > limit_bars:
         df = df.tail(limit_bars).reset_index(drop=True)

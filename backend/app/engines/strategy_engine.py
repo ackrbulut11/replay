@@ -33,6 +33,14 @@ from app.rules.strategy_models import (
 MAX_EVALUATIONS_PER_USER = 30
 
 
+class MultiTimeframeDataError(RuntimeError):
+    """Stratejinin ihtiyaç duyduğu bir üst zaman dilimi verisi yüklenemedi.
+
+    Sessizce ana zaman dilimine düşmek yerine yükseltilir: eksik bir filtre,
+    kullanıcının test ettiğini sandığı stratejiyi sessizce değiştirir.
+    """
+
+
 def _iso(value: datetime | None) -> str:
     """datetime'ı arayüzün beklediği ISO 8601 + Z biçimine çevirir."""
     return (value or datetime.utcnow()).isoformat() + "Z"
@@ -397,6 +405,33 @@ class StrategyEngine:
         }
 
     @staticmethod
+    def required_timeframes(strategy: dict) -> list[str]:
+        """Stratejinin ana dilim dışında ihtiyaç duyduğu zaman dilimleri.
+
+        Hem `timeframe_filters` hem de koşul operandlarındaki `timeframe`
+        alanları taranır; sıra korunur, tekrar edilmez.
+        """
+        timeframes: list[str] = []
+
+        def _add(tf) -> None:
+            if tf and tf not in timeframes:
+                timeframes.append(tf)
+
+        for tf_filter in strategy.get("timeframe_filters", []):
+            _add(tf_filter.get("timeframe"))
+
+        groups = [strategy.get("entry_rules", {}), strategy.get("exit_rules", {})]
+        groups.extend(strategy.get("timeframe_filters", []))
+        for group in groups:
+            for condition in (group or {}).get("conditions", []):
+                for side in ("left", "right", "right2"):
+                    operand = condition.get(side)
+                    if operand:
+                        _add(operand.get("timeframe"))
+
+        return timeframes
+
+    @staticmethod
     def load_multi_tf_data(
         strategy: dict,
         provider: str,
@@ -405,48 +440,45 @@ class StrategyEngine:
         start_dt,
         end_dt,
     ) -> dict[str, pd.DataFrame]:
-        """Stratejinin `timeframe_filters` ve koşul operandlarında referans
-        verdiği ek zaman dilimlerini yükler (tekli test ve toplu tarama
-        arasında tutarlı davranış için ortak yardımcı)."""
+        """Stratejinin referans verdiği ek zaman dilimlerini yükler.
+
+        Tekli test ve toplu tarama arasında tutarlı davranış için ortak
+        yardımcıdır.
+
+        Bir dilim yüklenemezse (sağlayıcı hatası ya da boş yanıt) hata
+        YÜKSELTİLİR. Eskiden `except Exception: pass` ile yutuluyordu ve
+        değerlendirme, filtre hiç yokmuş gibi devam ediyordu — kullanıcı
+        istediğinden farklı bir stratejinin sonucunu görüyordu. Toplu taramada
+        `evaluate_symbol` bunu yakalayıp ilgili sembolü hata olarak işaretler,
+        tekli testte ise route 502'ye çevirir.
+        """
         multi_tf_data: dict[str, pd.DataFrame] = {}
+        failures: list[str] = []
 
-        tf_filters = strategy.get("timeframe_filters", [])
-        for tf_filter in tf_filters:
-            tf = tf_filter.get("timeframe")
-            if tf and tf not in multi_tf_data:
-                try:
-                    tf_df = loader.load_data(
-                        provider_name=provider,
-                        symbol=symbol,
-                        timeframe=tf,
-                        start_time=start_dt,
-                        end_time=end_dt,
-                    )
-                    if not tf_df.empty:
-                        multi_tf_data[tf] = tf_df
-                except Exception:
-                    pass
+        for tf in StrategyEngine.required_timeframes(strategy):
+            try:
+                tf_df = loader.load_data(
+                    provider_name=provider,
+                    symbol=symbol,
+                    timeframe=tf,
+                    start_time=start_dt,
+                    end_time=end_dt,
+                )
+            except Exception as exc:
+                failures.append(f"{tf} ({exc})")
+                continue
 
-        for rule_key in ("entry_rules", "exit_rules"):
-            rules = strategy.get(rule_key, {})
-            for condition in rules.get("conditions", []):
-                for side in ("left", "right", "right2"):
-                    operand = condition.get(side)
-                    if operand and operand.get("timeframe"):
-                        tf = operand["timeframe"]
-                        if tf not in multi_tf_data:
-                            try:
-                                tf_df = loader.load_data(
-                                    provider_name=provider,
-                                    symbol=symbol,
-                                    timeframe=tf,
-                                    start_time=start_dt,
-                                    end_time=end_dt,
-                                )
-                                if not tf_df.empty:
-                                    multi_tf_data[tf] = tf_df
-                            except Exception:
-                                pass
+            if tf_df is None or tf_df.empty:
+                failures.append(f"{tf} (veri bulunamadı)")
+                continue
+
+            multi_tf_data[tf] = tf_df
+
+        if failures:
+            raise MultiTimeframeDataError(
+                f"{symbol} için gereken üst zaman dilimi verisi yüklenemedi: "
+                + ", ".join(failures)
+            )
 
         return multi_tf_data
 

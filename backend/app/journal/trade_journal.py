@@ -58,13 +58,34 @@ class TradeJournal:
         return session
 
     @staticmethod
+    def owns_session(db: Session, session_id: str, user_id: str) -> bool:
+        """Verilen replay oturumu bu kullanıcıya mı ait?"""
+        return (
+            db.query(ReplaySession)
+            .filter(ReplaySession.id == session_id, ReplaySession.user_id == user_id)
+            .first()
+            is not None
+        )
+
+    @staticmethod
     def open_trade(db: Session, request: TradeOpenRequest, user_id: str) -> JournalTrade:
         """
         Yeni bir pozisyon açar.
 
+        `session_id` VERİLDİĞİNDE sahiplik kontrolünden geçer: istekten gelen
+        kimlik doğrulanmadan yabancı anahtara yazılıyordu, yani başka bir
+        kullanıcının oturum kimliği gönderilebiliyordu. İşlemin kendisi yine
+        `user_id` ile korunduğu için veri sızıntısı yoktu, ama iki kullanıcının
+        işlemleri aynı oturuma bağlanabiliyor ve `save_session` sayımı
+        bozulabiliyordu. Alan opsiyoneldir (oturumsuz işlem kaydı mümkün).
+
         Stop-loss/take-profit seviyeleri replay engine tarafından doğrulanır;
         ters tarafa konmuş bir seviye `ValueError` fırlatır.
         """
+        if request.session_id and not TradeJournal.owns_session(db, request.session_id, user_id):
+            # Var olmayan ve başkasına ait oturum aynı mesajı alır: varlık sızmaz.
+            raise ValueError(f"Replay oturumu bulunamadı: {request.session_id}")
+
         stop_loss, take_profit = request.stop_loss, request.take_profit
 
         # Yüzdeyle verilen seviyeler mutlak fiyata çevrilir. Mutlak değer de

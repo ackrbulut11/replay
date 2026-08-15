@@ -22,6 +22,7 @@ from app.journal.models import (
     TradeStatus,
     TradeUpdateRequest,
 )
+from app.journal.models import ReplaySessionCreateRequest
 from app.journal.trade_journal import TradeJournal
 
 
@@ -60,6 +61,19 @@ class JournalTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+    def _session(self, user_id: str, symbol: str = "BTCUSDT") -> str:
+        """Gercek bir replay oturumu acar ve kimligini dondurur.
+
+        open_trade artik session_id sahipligini dogruluyor; uydurma bir kimlik
+        reddediliyor (bkz. TradeJournal.open_trade).
+        """
+        session = self.journal.start_session(
+            self.db,
+            ReplaySessionCreateRequest(symbol=symbol, timeframe="1h"),
+            user_id=user_id,
+        )
+        return session.id
 
 
 class TestOpenTrade(JournalTestCase):
@@ -210,13 +224,16 @@ class TestSaveSession(JournalTestCase):
         olarak sızdırır (bkz. journalStore.reload, ReplayTradePanel). Bu yüzden
         save_session yalnızca kapanmış işlemleri işaretlemeli.
         """
-        open_trade = self.journal.open_trade(self.db, _open_request(session_id="session-1"), user_id=self.alice.id)
+        session_id = self._session(self.alice.id)
+        open_trade = self.journal.open_trade(
+            self.db, _open_request(session_id=session_id), user_id=self.alice.id
+        )
         closed_trade = self.journal.open_trade(
-            self.db, _open_request(session_id="session-1"), user_id=self.alice.id
+            self.db, _open_request(session_id=session_id), user_id=self.alice.id
         )
         self.journal.close_trade(self.db, closed_trade, TradeCloseRequest(exit_price=110.0))
 
-        saved_count = self.journal.save_session(self.db, "session-1", user_id=self.alice.id)
+        saved_count = self.journal.save_session(self.db, session_id, user_id=self.alice.id)
 
         self.assertEqual(saved_count, 1)
         self.db.refresh(open_trade)
@@ -226,15 +243,17 @@ class TestSaveSession(JournalTestCase):
 
     def test_kaydedilmis_acik_islem_yeni_oturuma_sizmaz(self):
         """Uçtan uca: eski oturumdaki açık işlem, yeni bir oturumun include_saved sorgusunda görünmemeli."""
+        old_session = self._session(self.alice.id)
         old_open = self.journal.open_trade(
-            self.db, _open_request(session_id="session-old"), user_id=self.alice.id
+            self.db, _open_request(session_id=old_session), user_id=self.alice.id
         )
-        self.journal.save_session(self.db, "session-old", user_id=self.alice.id)
+        self.journal.save_session(self.db, old_session, user_id=self.alice.id)
         self.db.refresh(old_open)
         self.assertFalse(old_open.is_saved)
 
         results = self.journal.list_trades(
-            self.db, self.alice.id, symbol="BTCUSDT", session_id="session-new", include_saved=True
+            self.db, self.alice.id, symbol="BTCUSDT",
+            session_id=self._session(self.alice.id), include_saved=True
         )
         self.assertEqual(results, [])
 
@@ -314,6 +333,35 @@ class TestDeleteTrade(JournalTestCase):
         trade = self.journal.open_trade(self.db, _open_request(), user_id=self.alice.id)
         self.journal.delete_trade(self.db, trade)
         self.assertEqual(len(self.journal.list_trades(self.db, self.alice.id)), 0)
+
+
+class TestSessionOwnership(JournalTestCase):
+    """open_trade, istekten gelen session_id'yi dogrulamali."""
+
+    def test_own_session_is_accepted(self):
+        session_id = self._session(self.alice.id)
+        trade = self.journal.open_trade(
+            self.db, _open_request(session_id=session_id), user_id=self.alice.id
+        )
+        self.assertEqual(trade.session_id, session_id)
+
+    def test_other_users_session_is_rejected(self):
+        bob_session = self._session(self.bob.id)
+        with self.assertRaises(ValueError):
+            self.journal.open_trade(
+                self.db, _open_request(session_id=bob_session), user_id=self.alice.id
+            )
+
+    def test_unknown_session_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.journal.open_trade(
+                self.db, _open_request(session_id="uydurma-kimlik"), user_id=self.alice.id
+            )
+
+    def test_missing_session_is_allowed(self):
+        """Alan opsiyonel: oturumsuz islem kaydi mumkun."""
+        trade = self.journal.open_trade(self.db, _open_request(), user_id=self.alice.id)
+        self.assertIsNone(trade.session_id)
 
 
 if __name__ == "__main__":

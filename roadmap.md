@@ -56,6 +56,24 @@ UI (React)
 - Trade Journal: not, ekran görüntüsü, sebep
 - Performans Raporu: Win Rate, Loss Rate, Profit Factor, Sharpe, Drawdown, Net Profit
 
+## Faz 4.5 — Hesap Modeli ✅
+- Komisyon + slipaj (`engines/execution.py`), iki motorda da ortak
+- Pozisyon boyutlandırma: sabit adet / sabit tutar / bakiye yüzdesi / risk yüzdesi
+- Strateji testinde tam metrik seti (Sharpe, drawdown, profit factor, bakiye eğrisi)
+- Al-tut karşılaştırması
+- Replay oturumunda gerçek hesap bakiyesi
+
+## Faz 4.6 — Kural DSL'i ✅
+- İç içe koşul grupları: `(A VE B) VEYA (C VE D)`
+- Aritmetik operand: `close < giriş − 2×ATR`
+- Gösterge kaydırma (`offset`) + `rising`/`falling` operatörleri
+- Kaydetme anında doğrulama (422 + hata listesi)
+- Hazır strateji şablonları
+
+## Faz 4.7 — Karşılaştırma Ekranı (sırada)
+- Aynı pencerede manuel sonuç vs strateji sonucu
+- "Şu 3 noktada erken çıkmışsın" tipi fark analizi
+
 ## Faz 5 — Gelişmiş Analiz
 - Parameter Optimizer: parametre aralıklarının tüm kombinasyonlarını tarama
 - Walk Forward Test: overfitting analizi

@@ -59,7 +59,7 @@ React UI  ──HTTP /api──▶  FastAPI routes (thin)  ──▶  engines/ +
 - Frontend talks to the backend only through `src/services/*`; components must not `fetch` directly (several existing files violate this — don't copy the pattern).
 
 ### Strategies are data, not code — and they are per-user
-A strategy is a JSON rule tree stored in the `strategies.rules` column (`parameters`, `entry_rules`, `exit_rules`, `timeframe_filters`, `allow_short`, `take_profit_pct`, `stop_loss_pct`). Never add a `.py` file per strategy. The older `storage/strategies/*.json` files are pre-migration backups and are no longer read — `scripts/import_strategies_to_db.py` imports them.
+A strategy is a JSON rule tree stored in the `strategies.rules` column (`parameters`, `entry_rules`, `exit_rules`, `timeframe_filters`, `allow_short`, `take_profit_pct`, `stop_loss_pct`, `bar_delay`, `commission_bps`, `slippage_bps`). Never add a `.py` file per strategy. The older `storage/strategies/*.json` files are pre-migration backups and are no longer read — `scripts/import_strategies_to_db.py` imports them.
 
 Ownership is enforced, not advisory:
 - Every strategy endpoint requires a valid token (`get_current_user`); there is no anonymous access.
@@ -70,9 +70,17 @@ Ownership is enforced, not advisory:
 
 Scan history (`strategy_scans`) is scoped the same way and cascades on strategy/user delete.
 
-Rule DSL: a condition group is `{logic: "AND"|"OR", conditions: [{left, operator, right, right2?}]}`. Each operand is `{type: "indicator"|"price"|"value"|"pnl", ...}`. Numeric fields may reference a strategy parameter as a `"$param_name"` string, resolved by `resolve_parameter()` in [evaluator.py](backend/app/rules/evaluator.py).
+Rule DSL: a condition group is `{logic: "AND"|"OR", conditions: [...]}`, where each entry is either a condition `{left, operator, right, right2?}` **or a nested group** — that is how `(A AND B) OR (C AND D)` is expressed. Operands are `{type: "indicator"|"price"|"value"|"pnl"|"expr", ...}`; `expr` is arithmetic (`{op: "+|-|*|/", left, right}`) and makes `close < entry - 2*ATR` expressible. Price/indicator operands accept `offset` (read N bars back; negative is rejected as lookahead). Operators add `rising`/`falling`, where the right operand is a bar count, not a threshold. Numeric fields may reference a strategy parameter as a `"$param_name"` string, resolved by `resolve_parameter()`.
 
-Evaluation path: `StrategyEngine.evaluate()` → `RuleEngine.evaluate_range()` (bar-by-bar loop, position state machine `none|long|short`, TP/SL checks before rule checks) → `RuleEngine.evaluate_bar_with_state()` → `RuleEvaluator.evaluate_group()` → `IndicatorRegistry.get_value()`.
+Anything that walks the rule tree must use `iter_conditions()`/`iter_operands()` from [evaluator.py](backend/app/rules/evaluator.py) — a flat loop silently skips nested groups and operands inside `expr`, which is how warmup and multi-timeframe collection would go wrong.
+
+[validation.py](backend/app/rules/validation.py) checks the tree at **save time** (create/update return 422 with a list of errors); [templates.py](backend/app/rules/templates.py) holds ready-made starter strategies served by `GET /api/strategy/templates`.
+
+Evaluation path: `StrategyEngine.evaluate()` → `RuleEngine.evaluate_range()` (bar-by-bar loop, position state machine `none|long|short`) → `RuleEngine.evaluate_bar_with_state()` → `RuleEvaluator.evaluate_group()` → `IndicatorRegistry.get_value()`.
+
+Order inside each bar of `evaluate_range`: (1) execute a pending signal at the bar's **open**, (2) check TP/SL against the resulting position, (3) evaluate rules and queue a new pending signal. Rule signals are delayed by `bar_delay` (default 1, per RULES.md §22); TP/SL is **not** delayed — those are resting orders, not decisions made on a close. Costs live in [execution.py](backend/app/engines/execution.py) and are shared with the manual replay path: slippage is baked into the fill price, commission is charged on both legs.
+
+`StrategyEngine.evaluate()` also returns `performance` (the full [performance_report.py](backend/app/reports/performance_report.py) metric set, computed from a cash simulation with `starting_balance` + `PositionSizing`) and `buy_and_hold`/`outperformance_pct`. The manual journal feeds the *same* report function, so the two sides are directly comparable.
 
 Adding an indicator = one pure function plus one entry in `INDICATOR_INFO` in [registry.py](backend/app/indicators/registry.py) (`multi_output: True` returns a dict of named series). Adding an operator = one small function in [conditions.py](backend/app/rules/conditions.py). Both require a unit test.
 

@@ -738,17 +738,33 @@ class DataLoader:
                     df.to_parquet(cache_path, index=False)
                     file_mtime = os.path.getmtime(cache_path)
                     self._mem_cache[(provider_name, symbol, timeframe)] = (file_mtime, df)
-                return df
+                # Diğer dönüş yolları gibi istenen aralığa kırpılır: sağlayıcı
+                # istenenden geniş bir aralık döndürebiliyor.
+                return df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)].reset_index(drop=True)
 
             # 3. Önbellek Var: Tazelik & Kapsama Kontrolü
             cached_start = df['timestamp'].min()
             cached_end = df['timestamp'].max()
-            
+
             needed_start = start_time
             needed_end = end_time
-            
+
             # Başlangıç tarihi kapsanıyor mu? (Geriye dönük geçmiş verimiz yeterli mi?)
-            has_start_covered = (needed_start >= cached_start)
+            #
+            # Önbellek retention tavanına dayanmışsa "kapsanıyor" sayılır:
+            # elimizdeki en eski mum, SAKLAYABİLECEĞİMİZ en eski mumdur, daha
+            # fazlasını istemenin anlamı yoktur.
+            #
+            # Bu kontrol olmadan retention'ı aşan her istek sonsuz bir döngüye
+            # giriyordu: eksik önek indiriliyor, birleştiriliyor, _prune_to_retention
+            # tarafından hemen tekrar kırpılıyor, bir sonraki istekte yine eksik
+            # görünüyordu. Binance 1h'te /data'nın varsayılan aralığı 3 yıl =
+            # 26.280 mum, RETENTION_1H ise 20.000: her grafik yüklemesi ~6.300
+            # mumu (7 sayfa) yeniden indiriyordu. 1m'de tablo daha kötü:
+            # 182 gün = 262.080 mum, RETENTION_1M 100.000 -> istek başına 163 sayfa.
+            retention_limit = self._retention_limit(timeframe)
+            at_retention_cap = retention_limit is not None and len(df) >= retention_limit
+            has_start_covered = (needed_start >= cached_start) or at_retention_cap
             
             # Bitiş tarihi kapsanıyor mu veya dosya son 5 dakika içinde güncellendi mi?
             cache_age_seconds = time.time() - file_mtime
@@ -763,7 +779,9 @@ class DataLoader:
             df_before = pd.DataFrame()
             df_after = pd.DataFrame()
             
-            if needed_start < cached_start:
+            # Retention tavanındaysak önek indirmek boşunadır: gelen mumlar
+            # birleştirmeden hemen sonra tekrar kırpılırdı.
+            if needed_start < cached_start and not at_retention_cap:
                 try:
                     df_before = provider.fetch_ohlcv(symbol, timeframe, needed_start, cached_start)
                 except Exception as e:

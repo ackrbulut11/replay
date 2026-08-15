@@ -71,6 +71,16 @@ def calc_rsi(df: pd.DataFrame, period: int) -> pd.Series:
     return rsi
 
 
+def _macd_periods(period: int) -> tuple[int, int, int]:
+    """MACD'nin (fast, slow, signal) periyotları — `period` fast olarak kullanılır.
+
+    Warmup hesabı da bu türetmeye dayandığı için tek yerde tutulur (RULES.md #8).
+    """
+    fast = period
+    slow = max(fast * 2 + 2, 26)  # fast=12 -> slow=26
+    return fast, slow, 9
+
+
 def calc_macd(df: pd.DataFrame, period: int = 12) -> dict[str, pd.Series]:
     """
     MACD hesaplama.
@@ -78,9 +88,7 @@ def calc_macd(df: pd.DataFrame, period: int = 12) -> dict[str, pd.Series]:
     Varsayılan: fast=12, slow=26, signal=9.
     period parametresi fast period olarak kullanılır.
     """
-    fast = period
-    slow = max(fast * 2 + 2, 26)  # fast=12 -> slow=26
-    signal_period = 9
+    fast, slow, signal_period = _macd_periods(period)
 
     ema_fast = df["close"].ewm(span=fast, adjust=False).mean()
     ema_slow = df["close"].ewm(span=slow, adjust=False).mean()
@@ -182,6 +190,8 @@ INDICATOR_INFO = {
         "fields": [],
         "calc": calc_ema,
         "multi_output": False,
+        # ewm tam yakinsamaz ama period bar sonrasi pratikte kararlidir.
+        "warmup": lambda period: period,
     },
     "SMA": {
         "display_name": "Simple Moving Average",
@@ -192,6 +202,7 @@ INDICATOR_INFO = {
         "fields": [],
         "calc": calc_sma,
         "multi_output": False,
+        "warmup": lambda period: period,
     },
     "RSI": {
         "display_name": "Relative Strength Index",
@@ -202,6 +213,7 @@ INDICATOR_INFO = {
         "fields": [],
         "calc": calc_rsi,
         "multi_output": False,
+        "warmup": lambda period: period,
     },
     "MACD": {
         "display_name": "MACD",
@@ -212,6 +224,8 @@ INDICATOR_INFO = {
         "fields": ["MACD", "MACD_signal", "MACD_hist"],
         "calc": calc_macd,
         "multi_output": True,
+        # Sinyal cizgisi yavas EMA uzerine kurulur: slow + signal.
+        "warmup": lambda period: sum(_macd_periods(period)[1:]),
     },
     "ATR": {
         "display_name": "Average True Range",
@@ -222,6 +236,7 @@ INDICATOR_INFO = {
         "fields": [],
         "calc": calc_atr,
         "multi_output": False,
+        "warmup": lambda period: period,
     },
     "BollingerBands": {
         "display_name": "Bollinger Bands",
@@ -232,6 +247,7 @@ INDICATOR_INFO = {
         "fields": ["BB_upper", "BB_middle", "BB_lower"],
         "calc": calc_bollinger,
         "multi_output": True,
+        "warmup": lambda period: period,
     },
     "Stochastic": {
         "display_name": "Stochastic Oscillator",
@@ -242,6 +258,8 @@ INDICATOR_INFO = {
         "fields": ["STOCH_K", "STOCH_D"],
         "calc": calc_stochastic,
         "multi_output": True,
+        # %D, %K uzerinde 3 periyotluk ortalamadir.
+        "warmup": lambda period: period + 3,
     },
     "ADX": {
         "display_name": "Average Directional Index",
@@ -252,6 +270,8 @@ INDICATOR_INFO = {
         "fields": ["ADX", "+DI", "-DI"],
         "calc": calc_adx,
         "multi_output": True,
+        # DX, period ile yumusatilmis DI uzerine yine period ile yumusatilir.
+        "warmup": lambda period: period * 2,
     },
     "VolumeMA": {
         "display_name": "Volume Moving Average",
@@ -262,6 +282,7 @@ INDICATOR_INFO = {
         "fields": [],
         "calc": calc_volume_ma,
         "multi_output": False,
+        "warmup": lambda period: period,
     },
 }
 
@@ -283,6 +304,21 @@ class IndicatorRegistry:
                 f"Desteklenen: {list(INDICATOR_INFO.keys())}"
             )
         return info
+
+    @staticmethod
+    def warmup_bars(name: str, period: int) -> int:
+        """İndikatörün güvenilir değer üretmesi için gereken bar sayısı.
+
+        `period`'un kendisi yeterli DEĞİLDİR: MACD'nin sinyal çizgisi yavaş
+        EMA'nın üzerine kurulur (fast=12 iken gerçek ısınma 26+9=35 bar,
+        12 değil), Stochastic'in %D'si %K üzerinde 3 barlık ortalamadır,
+        ADX ise period ile yumuşatılmış DI'nın üzerine yine period ile
+        yumuşatılır. Eskiden hepsi için ham `period` kullanılıyordu ve
+        yakınsamamış değerler geçerli sinyal sayılıyordu.
+        """
+        info = IndicatorRegistry.get_info(name)
+        warmup = info.get("warmup")
+        return int(warmup(period)) if callable(warmup) else int(period)
 
     @staticmethod
     def calculate(name: str, df: pd.DataFrame, period: int) -> pd.Series | dict[str, pd.Series]:
@@ -312,7 +348,10 @@ class IndicatorRegistry:
         tekrar kullanılır — aksi halde her bar için tüm seri baştan
         hesaplanır (O(n) yerine O(n^2)).
         """
-        if bar_index < 0 or bar_index >= len(df) or bar_index < period:
+        if bar_index < 0 or bar_index >= len(df):
+            return float("nan")
+        # Isınma: gerçek gereksinim period'dan büyük olabilir (bkz. warmup_bars).
+        if bar_index < IndicatorRegistry.warmup_bars(name, period):
             return float("nan")
 
         if cache is not None:

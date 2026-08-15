@@ -18,6 +18,7 @@ from typing import Union
 
 import pandas as pd
 
+from app.indicators.registry import IndicatorRegistry
 from app.rules.evaluator import RuleEvaluator
 from app.rules.strategy_models import SignalType
 
@@ -489,7 +490,8 @@ class RuleEngine:
         """
         Stratejide kullanılan indikatörlerin gerektirdiği minimum warmup barını hesaplar.
 
-        En büyük period değerini bulur ve yeterli veri birikimine izin verir.
+        Ham `period` yerine indikatörün GERÇEK ısınma gereksinimi kullanılır
+        (bkz. `IndicatorRegistry.warmup_bars`): MACD(12) için 12 değil 35 bar.
         """
         max_period = 0
 
@@ -504,6 +506,12 @@ class RuleEngine:
                             period = int(params.get(raw_period[1:], 14))
                         else:
                             period = int(raw_period)
+                        try:
+                            period = IndicatorRegistry.warmup_bars(operand.get("name", ""), period)
+                        except ValueError:
+                            # Bilinmeyen indikatör: değerlendirme sırasında zaten
+                            # hata verecek; burada ham period'la yetin.
+                            pass
                         max_period = max(max_period, period)
 
         # Entry ve exit kurallarını tara

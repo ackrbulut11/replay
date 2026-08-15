@@ -419,5 +419,56 @@ class TestWilderSmoothing(unittest.TestCase):
         )
 
 
+class TestWarmup(unittest.TestCase):
+    """Isinma, ham period degil indikatorun GERCEK gereksinimi olmali."""
+
+    @staticmethod
+    def _df(n=200):
+        np.random.seed(3)
+        close = 100 + np.random.randn(n).cumsum()
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="1D"),
+            "open": close, "high": close + 1, "low": close - 1, "close": close,
+            "volume": [1000] * n,
+        })
+
+    def test_warmup_bars_table(self):
+        self.assertEqual(IndicatorRegistry.warmup_bars("EMA", 20), 20)
+        self.assertEqual(IndicatorRegistry.warmup_bars("RSI", 14), 14)
+        # MACD(12): slow=26, signal=9 -> 35 (12 degil)
+        self.assertEqual(IndicatorRegistry.warmup_bars("MACD", 12), 35)
+        # MACD(20): slow=max(42,26)=42, signal=9 -> 51
+        self.assertEqual(IndicatorRegistry.warmup_bars("MACD", 20), 51)
+        # Stochastic %D, %K uzerinde 3 barlik ortalama
+        self.assertEqual(IndicatorRegistry.warmup_bars("Stochastic", 14), 17)
+        # ADX: period ile yumusatilmis DI uzerine yine period
+        self.assertEqual(IndicatorRegistry.warmup_bars("ADX", 14), 28)
+
+    def test_macd_is_nan_before_real_warmup(self):
+        df = self._df()
+        # Eskiden bar 12'de deger donuyordu (yakinsamamis EMA26 uzerinden).
+        self.assertTrue(np.isnan(IndicatorRegistry.get_value("MACD", df, 12, 20)))
+        self.assertTrue(np.isnan(IndicatorRegistry.get_value("MACD", df, 12, 34)))
+        self.assertFalse(np.isnan(IndicatorRegistry.get_value("MACD", df, 12, 35)))
+
+    def test_adx_is_nan_before_real_warmup(self):
+        df = self._df()
+        self.assertTrue(np.isnan(IndicatorRegistry.get_value("ADX", df, 14, 20, field="ADX")))
+        self.assertFalse(np.isnan(IndicatorRegistry.get_value("ADX", df, 14, 28, field="ADX")))
+
+    def test_range_start_index_respects_indicator_warmup(self):
+        """evaluate_range, MACD kullanan bir stratejide 35. bardan once baslamamali."""
+        strategy = {
+            "id": "warmup_strat", "name": "Warmup", "parameters": [],
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "indicator", "name": "MACD", "period": 12, "field": "MACD"},
+                "operator": ">",
+                "right": {"type": "indicator", "name": "MACD", "period": 12, "field": "MACD_signal"},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        self.assertEqual(RuleEngine._get_warmup_period(strategy, {}), 35)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark, Banknote, LineChart, Gem } from 'lucide-react';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
+import { searchSymbols } from '../services/marketApi';
 
 export interface SymbolItem {
   symbol: string;
@@ -53,12 +54,9 @@ export default function SymbolSearchModal({
   const fetchSymbols = async (q: string, tab: string) => {
     setLoading(true);
     try {
-      const providerFilter = tab === 'all' ? '' : tab;
-      const res = await fetch(`/api/market/search?q=${encodeURIComponent(q)}&provider=${providerFilter}`);
-      if (res.ok) {
-        const data = await res.json();
-        setResults(data);
-      }
+      // Doğrudan fetch değil servis katmanı: token'sız istek 401 alır
+      // (piyasa uçları artık giriş gerektiriyor).
+      setResults(await searchSymbols(q, tab === 'all' ? undefined : tab));
     } catch (e) {
       console.error('Failed to search symbols', e);
     } finally {

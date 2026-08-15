@@ -6,7 +6,7 @@ import CandleChart from './charts/CandleChart';
 import { IndicatorsState } from './charts/IndicatorToolbar';
 import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
-import { getWindow } from './services/marketApi';
+import { getRange, getWindow } from './services/marketApi';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
 import { watchlistStore } from './store/watchlistStore';
 import { useChartSettingsStore, chartSettingsStore, DEFAULT_ACTIVE_INDICATORS } from './store/chartSettingsStore';
@@ -261,13 +261,17 @@ function MainApp() {
     bgControllerRef.current = controller;
     setIsBackgroundLoading(true);
 
-    const startParam = params.userStart ?? '';
-    fetch(
-      `/api/market/data?provider=${params.provider}&symbol=${params.symbol}&timeframe=${params.timeframe}&start=${startParam}&end=${params.olderEnd}`,
-      { signal: controller.signal }
-    )
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Geçmiş veri yüklenemedi.'))))
-      .then((olderData: CandleData[]) => {
+    // Doğrudan fetch değil servis katmanı: token'sız istek 401 alır
+    // (piyasa uçları artık giriş gerektiriyor).
+    getRange({
+      provider: params.provider,
+      symbol: params.symbol,
+      timeframe: params.timeframe,
+      start: params.userStart ?? '',
+      end: params.olderEnd,
+      signal: controller.signal,
+    })
+      .then((olderData) => {
         if (controller.signal.aborted) return;
         mergeOlderData(olderData);
       })
@@ -495,15 +499,16 @@ function MainApp() {
     const initialStart = needsBackgroundExtend ? quickStartStr : (userStart ?? '');
 
     try {
-      const response = await fetch(
-        `/api/market/data?provider=${provider}&symbol=${symbol}&timeframe=${timeframe}&start=${initialStart}&end=${endParam}`,
-        { signal }
-      );
-      if (!response.ok) {
-        const errJson = await response.json();
-        throw new Error(errJson.detail || 'Veriler yüklenirken bir hata oluştu.');
-      }
-      const data = await response.json();
+      // Doğrudan fetch değil servis katmanı: token'sız istek 401 alır
+      // (piyasa uçları artık giriş gerektiriyor).
+      const data = await getRange({
+        provider,
+        symbol,
+        timeframe,
+        start: initialStart,
+        end: endParam,
+        signal,
+      });
       console.log(`Fetched ${data.length} data points.`);
       if (data.length === 0) {
         setError('Belirtilen tarih aralığında veri bulunamadı. Lütfen önce bu veriyi indirdiğinizden emin olun.');

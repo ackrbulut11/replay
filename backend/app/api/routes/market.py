@@ -1,9 +1,23 @@
+"""
+Piyasa verisi REST API uçları.
+
+**Tüm uçlar giriş gerektirir ve kullanıcı başına hız sınırlıdır.** Eskiden
+tamamı herkese açıktı: `/data` tek bir istekle onlarca sayfalık Yahoo/Binance
+indirmesi tetikleyebildiği için dağıtılmış backend, herkesin kullanabileceği
+sınırsız bir piyasa verisi proxy'sine dönüşüyordu — sağlayıcıların sunucu
+IP'sini engellemesi ve barındırma kotasının tükenmesi an meselesiydi.
+Frontend'deki `isAuthenticated` kontrolleri yalnızca istemci tarafı süslemeydi.
+"""
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional, List, Dict
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.auth.dependencies import get_current_user
+from app.core.config import settings
+from app.core.security import RateLimiter
 from app.data.loader import (
     DataLoader,
     SOURCE_TIMEFRAME_COLUMN,
@@ -11,8 +25,30 @@ from app.data.loader import (
     WINDOW_BARS_BEFORE,
 )
 from app.data.symbols import get_symbols, search_symbols
+from app.database.models import User
 
-router = APIRouter(prefix="/market", tags=["market"])
+# Kullanıcı başına dakikalık istek sınırı. Gerçek kullanımın belirgin şekilde
+# üstünde: izleme listesi 15 sn'de bir tek `/quotes` isteği atıyor, grafik
+# gezinmesi sembol başına birkaç istek üretiyor. Amaç insan kullanımını
+# engellemek değil, tek bir hesabın sağlayıcı kotasını tüketmesini önlemek.
+_rate_limiter = RateLimiter(
+    max_requests=settings.MARKET_RATE_LIMIT_PER_MINUTE,
+    window_seconds=60,
+    detail="Piyasa verisi istek sınırına ulaşıldı. Lütfen biraz sonra tekrar deneyin.",
+)
+
+
+def rate_limited_user(current_user: User = Depends(get_current_user)) -> User:
+    """Giriş yapmış kullanıcıyı döndürür ve istek sayacını işletir."""
+    _rate_limiter.check(current_user.id)
+    return current_user
+
+
+router = APIRouter(
+    prefix="/market",
+    tags=["market"],
+    dependencies=[Depends(rate_limited_user)],
+)
 loader = DataLoader()
 
 @router.get("/symbols")

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
+import { getQuotes } from '../services/marketApi';
 import { TOKEN_STORAGE_KEY } from '../context/AuthContext';
 
 export type FlagColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'cyan' | 'pink';
@@ -688,30 +689,26 @@ export const watchlistStore = {
         applyState({ quotesLoading: false });
         return;
       }
-      const itemKeys = itemsToFetch.map((i) => `${i.provider}:${i.symbol}`).join(',');
-      const res = await fetch(`/api/market/quotes?items=${encodeURIComponent(itemKeys)}`);
-      if (res.ok) {
-        const quotes: Array<{ provider: string; symbol: string; lastPrice: number | null; change: number | null; changePercent: number | null }> = await res.json();
-        const quoteMap = new Map(quotes.map((q) => [`${q.provider.toLowerCase()}:${q.symbol.toUpperCase()}`, q]));
+      // Doğrudan fetch değil servis katmanı: token'sız istek 401 alır
+      // (piyasa uçları artık giriş gerektiriyor).
+      const quotes = await getQuotes(itemsToFetch.map((i) => `${i.provider}:${i.symbol}`));
+      const quoteMap = new Map(quotes.map((q) => [`${q.provider.toLowerCase()}:${q.symbol.toUpperCase()}`, q]));
 
-        const newLists = currentState.lists.map((group) => ({
-          ...group,
-          items: group.items.map((item) => {
-            const q = quoteMap.get(item.id);
-            if (!q) return item;
-            return {
-              ...item,
-              lastPrice: q.lastPrice !== null ? q.lastPrice : item.lastPrice,
-              change: q.change !== null ? q.change : item.change,
-              changePercent: q.changePercent !== null ? q.changePercent : item.changePercent,
-            };
-          }),
-        }));
+      const newLists = currentState.lists.map((group) => ({
+        ...group,
+        items: group.items.map((item) => {
+          const q = quoteMap.get(item.id);
+          if (!q) return item;
+          return {
+            ...item,
+            lastPrice: q.lastPrice !== null ? q.lastPrice : item.lastPrice,
+            change: q.change !== null ? q.change : item.change,
+            changePercent: q.changePercent !== null ? q.changePercent : item.changePercent,
+          };
+        }),
+      }));
 
-        applyState({ lists: sanitizeLists(newLists), quotesLoading: false });
-      } else {
-        applyState({ quotesLoading: false });
-      }
+      applyState({ lists: sanitizeLists(newLists), quotesLoading: false });
     } catch {
       applyState({ quotesLoading: false });
     }

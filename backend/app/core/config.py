@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # RETENTION_1H/1M gibi bir "yok" durumu değil, kapasite artışı.
     TWELVE_API_KEY: str = ""
 
+    # Piyasa verisi uçları için kullanıcı başına dakikalık istek sınırı.
+    # Uçlar sağlayıcıya (Yahoo/Binance) proxy yaptığı için sınırsız kullanım
+    # sunucu IP'sinin engellenmesine yol açabiliyor.
+    MARKET_RATE_LIMIT_PER_MINUTE: int = 120
+
     # Veri Saklama Limitleri (Varsayılan bar sayıları)
     RETENTION_1M: int = 100000  # son birkaç ay
     RETENTION_1H: int = 20000   # son 1-2 yıl

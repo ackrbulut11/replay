@@ -112,3 +112,42 @@ export async function getRange(params: {
     signal: params.signal,
   });
 }
+
+/** Sembol katalog kaydı — backend `symbols.py` sözlükleriyle birebir. */
+export interface MarketSymbol {
+  symbol: string;
+  name: string;
+  sector?: string;
+  exchange: string;
+  ticker?: string;
+}
+
+/** Sembol kataloğunda arama yapar. Boş sorgu tüm katalogu döndürür. */
+export async function searchSymbols(
+  query: string,
+  provider?: string
+): Promise<MarketSymbol[]> {
+  const params = new URLSearchParams({ q: query });
+  if (provider) params.set('provider', provider);
+  return request<MarketSymbol[]>(`${API_BASE}/search?${params.toString()}`);
+}
+
+/** Bir sembolün son fiyatı ve günlük değişimi. */
+export interface MarketQuote {
+  provider: string;
+  symbol: string;
+  lastPrice: number | null;
+  change: number | null;
+  changePercent: number | null;
+}
+
+/**
+ * Birden fazla sembolün güncel fiyatını tek istekte getirir.
+ *
+ * `items`, "provider:symbol" biçiminde anahtarlardır (ör. `binance:BTCUSDT`).
+ */
+export async function getQuotes(items: string[]): Promise<MarketQuote[]> {
+  if (items.length === 0) return [];
+  const params = new URLSearchParams({ items: items.join(',') });
+  return request<MarketQuote[]>(`${API_BASE}/quotes?${params.toString()}`);
+}

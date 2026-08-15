@@ -104,5 +104,56 @@ class TestRetentionCacheCoverage(unittest.TestCase):
         self.assertLessEqual(df["timestamp"].max(), self.end)
 
 
+class TestCachedFrameNormalization(unittest.TestCase):
+    """load_data ve /window ayni parquet'ten AYNI mumlari uretmeli."""
+
+    def setUp(self) -> None:
+        self.loader = DataLoader()
+
+    def test_daily_timestamps_are_normalized_and_deduped(self):
+        raw = pd.DataFrame({
+            "timestamp": [
+                pd.Timestamp("2024-01-01 09:30"),
+                pd.Timestamp("2024-01-01 17:00"),
+                pd.Timestamp("2024-01-02 09:30"),
+            ],
+            "open": [1.0, 1.1, 1.2], "high": [2.0, 2.1, 2.2],
+            "low": [0.5, 0.6, 0.7], "close": [1.5, 1.6, 1.7], "volume": [10.0, 11.0, 12.0],
+        })
+        out = self.loader._normalize_cached_frame(raw, "bist", "1d")
+        self.assertEqual(len(out), 2)
+        self.assertTrue((out["timestamp"] == out["timestamp"].dt.normalize()).all())
+        self.assertAlmostEqual(float(out.iloc[0]["close"]), 1.6)
+
+    def test_forex_zero_volume_is_synthesized(self):
+        n = 20
+        raw = pd.DataFrame({
+            "timestamp": pd.date_range("2024-01-01", periods=n, freq="1D"),
+            "open": [1.1] * n, "high": [1.2] * n, "low": [1.0] * n,
+            "close": [1.15] * n, "volume": [0.0] * n,
+        })
+        out = self.loader._normalize_cached_frame(raw, "forex", "1d")
+        self.assertGreater(out["volume"].sum(), 0.0)
+
+    def test_non_forex_is_left_alone(self):
+        n = 5
+        raw = pd.DataFrame({
+            "timestamp": pd.date_range("2024-01-01", periods=n, freq="1h"),
+            "open": [1.0] * n, "high": [2.0] * n, "low": [0.5] * n,
+            "close": [1.0] * n, "volume": [0.0] * n,
+        })
+        out = self.loader._normalize_cached_frame(raw, "binance", "1h")
+        self.assertEqual(out["volume"].sum(), 0.0)
+
+    def test_input_frame_is_not_mutated(self):
+        raw = pd.DataFrame({
+            "timestamp": [pd.Timestamp("2024-01-01 09:30")],
+            "open": [1.0], "high": [2.0], "low": [0.5], "close": [1.5], "volume": [10.0],
+        })
+        before = raw["timestamp"].iloc[0]
+        self.loader._normalize_cached_frame(raw, "bist", "1d")
+        self.assertEqual(raw["timestamp"].iloc[0], before)
+
+
 if __name__ == "__main__":
     unittest.main()

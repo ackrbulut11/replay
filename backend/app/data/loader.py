@@ -633,13 +633,52 @@ class DataLoader:
         if df.empty:
             return None
 
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        # `load_data` ile AYNI normalizasyon: aksi halde aynı sembol /data ve
+        # /window üzerinden farklı mumlar döndürüyordu.
+        df = self._normalize_cached_frame(df, provider_name, timeframe)
 
         # Sağ uç, önbelleğin sonunu aşabilir: "şimdi"nin ötesi zaten yok.
-        sliced = self._trim_window(df.sort_values("timestamp"), anchor, bars_before, bars_after)
+        sliced = self._trim_window(df, anchor, bars_before, bars_after)
         if sliced.empty:
             return None
         return sliced.reset_index(drop=True)
+
+    @staticmethod
+    def _normalize_cached_frame(
+        df: pd.DataFrame, provider_name: str, timeframe: str
+    ) -> pd.DataFrame:
+        """Parquet'ten okunan mumları kullanıma hazır hale getirir.
+
+        Hem `load_data` hem `_read_cache_window` bunu kullanır. Eskiden yalnızca
+        `load_data` yapıyordu; `/window` dosyayı ham okuduğu için aynı sembol
+        `/data` ile `/window` üzerinden FARKLI mumlar döndürebiliyordu (forex'te
+        düzeltilmemiş open/hacim, günlük dilimlerde normalize edilmemiş ve
+        tekrarlı zaman damgaları). Replay'de zaman dilimi değiştirince mumların
+        "değişmesi" bundan geliyordu.
+        """
+        df = df.copy()
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+        if timeframe in ["1d", "1w", "1mo"]:
+            df["timestamp"] = df["timestamp"].dt.normalize()
+            df.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
+
+        df.sort_values("timestamp", inplace=True)
+        df.reset_index(drop=True, inplace=True)
+
+        # Forex eski önbellek verilerindeki Open==Close ve 0-Volume sorunları.
+        if provider_name.lower() in ["forex", "fx"] and not df.empty:
+            if (df["open"] == df["close"]).mean() > 0.1:
+                shifted_open = df["close"].shift(1)
+                df.loc[df["open"] == df["close"], "open"] = shifted_open
+                df["open"] = df["open"].fillna(df["close"])
+            if df["volume"].sum() == 0 or (df["volume"] == 0).all():
+                avg_price = df["close"].mean()
+                pip = 0.01 if avg_price > 20 else 0.0001
+                range_diff = (df["high"] - df["low"]).abs()
+                df["volume"] = (range_diff / pip * 15.0).round().clip(lower=50.0)
+
+        return df
 
     def _prune_to_retention(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """RULES.md #24-27: her zaman dilimi için ham veriyi sınırsız biriktirmez."""
@@ -700,25 +739,9 @@ class DataLoader:
                 # RAM'de yoksa parquet dosyasından oku
                 if df is None:
                     try:
-                        df = pd.read_parquet(cache_path)
-                        df['timestamp'] = pd.to_datetime(df['timestamp'])
-                        if timeframe in ["1d", "1w", "1mo"]:
-                            df['timestamp'] = df['timestamp'].dt.normalize()
-                            df.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
-                        df.sort_values('timestamp', inplace=True)
-                        df.reset_index(drop=True, inplace=True)
-
-                        # Forex eski önbellek verilerindeki Open==Close ve 0-Volume sorunlarını otomatik düzelt
-                        if provider_name in ["forex", "fx"] and not df.empty:
-                            if (df['open'] == df['close']).mean() > 0.1:
-                                shifted_open = df['close'].shift(1)
-                                df.loc[df['open'] == df['close'], 'open'] = shifted_open
-                                df['open'] = df['open'].fillna(df['close'])
-                            if df['volume'].sum() == 0 or (df['volume'] == 0).all():
-                                avg_price = df['close'].mean()
-                                pip = 0.01 if avg_price > 20 else 0.0001
-                                range_diff = (df['high'] - df['low']).abs()
-                                df['volume'] = (range_diff / pip * 15.0).round().clip(lower=50.0)
+                        df = self._normalize_cached_frame(
+                            pd.read_parquet(cache_path), provider_name, timeframe
+                        )
                         self._mem_cache[cache_key] = (file_mtime, df)
                     except Exception as e:
                         print(f"Warning: Failed to load parquet cache at {cache_path}: {e}")

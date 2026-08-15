@@ -844,5 +844,91 @@ class TestArithmeticOperand(unittest.TestCase):
         self.assertIn("(", desc, "aritmetik ifade aciklamada parantezle gosterilmeli")
 
 
+class TestOffsetAndTrendOperators(unittest.TestCase):
+    """N bar onceki deger + yukseliyor/dusuyor operatorleri."""
+
+    @staticmethod
+    def _frame(closes):
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=len(closes), freq="1D"),
+            "open": closes, "high": [c + 1 for c in closes], "low": [c - 1 for c in closes],
+            "close": closes, "volume": [1000] * len(closes),
+        })
+
+    def _up(self, n=60):
+        return self._frame([100.0 + i for i in range(n)])
+
+    def _down(self, n=60):
+        return self._frame([200.0 - i for i in range(n)])
+
+    def test_offset_reads_an_earlier_bar(self):
+        df = self._up()
+        now = resolve_operand({"type": "price", "field": "close"}, df, 50, {})
+        five_ago = resolve_operand({"type": "price", "field": "close", "offset": 5}, df, 50, {})
+        self.assertAlmostEqual(now - five_ago, 5.0, places=9)
+
+    def test_offset_before_series_start_is_nan(self):
+        self.assertTrue(np.isnan(
+            resolve_operand({"type": "price", "field": "close", "offset": 10}, self._up(), 3, {})
+        ))
+
+    def test_negative_offset_is_rejected(self):
+        """Ileriye kaydirma lookahead'dir (RULES.md #20)."""
+        with self.assertRaises(ValueError):
+            resolve_operand({"type": "price", "field": "close", "offset": -1}, self._up(), 50, {})
+
+    def test_offset_works_on_indicators(self):
+        df = self._up()
+        direct = IndicatorRegistry.get_value("EMA", df, 20, 45)
+        shifted = resolve_operand(
+            {"type": "indicator", "name": "EMA", "period": 20, "offset": 5}, df, 50, {}
+        )
+        self.assertAlmostEqual(direct, shifted, places=9)
+
+    def test_rising_on_an_uptrend(self):
+        condition = {
+            "left": {"type": "indicator", "name": "EMA", "period": 20},
+            "operator": "rising",
+            "right": {"type": "value", "value": 3},
+        }
+        self.assertTrue(RuleEvaluator.evaluate_condition(condition, self._up(), 50, {})[0])
+
+    def test_falling_on_an_uptrend_is_false(self):
+        condition = {
+            "left": {"type": "indicator", "name": "EMA", "period": 20},
+            "operator": "falling",
+            "right": {"type": "value", "value": 3},
+        }
+        self.assertFalse(RuleEvaluator.evaluate_condition(condition, self._up(), 50, {})[0])
+
+    def test_falling_on_a_downtrend(self):
+        condition = {
+            "left": {"type": "indicator", "name": "EMA", "period": 20},
+            "operator": "falling",
+            "right": {"type": "value", "value": 3},
+        }
+        self.assertTrue(RuleEvaluator.evaluate_condition(condition, self._down(), 50, {})[0])
+
+    def test_rising_without_enough_history_is_not_met(self):
+        condition = {
+            "left": {"type": "price", "field": "close"},
+            "operator": "rising",
+            "right": {"type": "value", "value": 100},
+        }
+        result, desc = RuleEvaluator.evaluate_condition(condition, self._up(), 50, {})
+        self.assertFalse(result)
+        self.assertIn("Yetersiz veri", desc)
+
+    def test_rising_respects_an_existing_offset(self):
+        """Operandin kendi offset'i varsa lookback onun uzerine eklenir."""
+        df = self._up()
+        condition = {
+            "left": {"type": "price", "field": "close", "offset": 2},
+            "operator": "rising",
+            "right": {"type": "value", "value": 3},
+        }
+        self.assertTrue(RuleEvaluator.evaluate_condition(condition, df, 50, {})[0])
+
+
 if __name__ == "__main__":
     unittest.main()

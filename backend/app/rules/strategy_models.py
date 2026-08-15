@@ -30,6 +30,9 @@ class OperatorType(str, Enum):
     CROSS_ABOVE = "cross_above"
     CROSS_BELOW = "cross_below"
     BETWEEN = "between"
+    # Sag operand esik degil, "kac bar oncesine gore" anlamindadir.
+    RISING = "rising"
+    FALLING = "falling"
 
 
 class LogicType(str, Enum):
@@ -76,6 +79,10 @@ class IndicatorOperand(BaseModel):
     period: Union[int, str] = Field(..., description="Period değeri veya parametre referansı ($fast_ema)")
     field: Optional[str] = Field(None, description="İndikatör alt alanı (ör. MACD -> MACD, MACD_signal, MACD_hist)")
     timeframe: Optional[str] = Field(None, description="Farklı timeframe'den veri almak için (ör. '4h')")
+    offset: int = Field(
+        0, ge=0, description="Kac bar GERIDEKI deger okunsun (0 = mevcut bar). Negatif yasak."
+    )
+
 
 
 class PriceOperand(BaseModel):
@@ -84,6 +91,10 @@ class PriceOperand(BaseModel):
     type: OperandType = OperandType.PRICE
     field: str = Field(..., description="Fiyat alanı: open, high, low, close, volume")
     timeframe: Optional[str] = Field(None, description="Farklı timeframe'den veri almak için")
+    offset: int = Field(
+        0, ge=0, description="Kac bar GERIDEKI deger okunsun (0 = mevcut bar). Negatif yasak."
+    )
+
 
 
 class ValueOperand(BaseModel):

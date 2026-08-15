@@ -22,7 +22,7 @@ from typing import Callable, Union
 import pandas as pd
 
 from app.indicators.registry import IndicatorRegistry
-from app.rules.conditions import get_operator
+from app.rules.conditions import LOOKBACK_OPERATORS, get_operator
 
 
 # Koşul ağacının azami derinliği. Sınırsız bırakmak, elle hazırlanmış (ya da
@@ -240,6 +240,14 @@ def resolve_operand(
             raise ValueError("Value operandında 'value' alanı zorunludur")
         return float(resolve_parameter(raw, params))
 
+    # Geriye kaydırma: "5 bar önceki değer". Yalnızca GEÇMİŞE bakar —
+    # negatif offset RULES.md #20 gereği yasaktır (lookahead).
+    offset = int(resolve_parameter(operand.get("offset", 0) or 0, params))
+    if offset < 0:
+        raise ValueError(
+            f"Negatif offset yasaktır (lookahead bias, RULES.md #20): {offset}"
+        )
+
     if op_type == "price":
         field = operand.get("field", "close")
         timeframe = operand.get("timeframe")
@@ -250,14 +258,15 @@ def resolve_operand(
             target_df = (multi_tf_data or {}).get(timeframe)
             if target_df is None:
                 return float("nan")
-            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache)
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache) - offset
             if idx < 0:
                 return float("nan")
             return float(target_df[field].iloc[idx])
 
-        if bar_index < 0 or bar_index >= len(df):
+        idx = bar_index - offset
+        if idx < 0 or idx >= len(df):
             return float("nan")
-        return float(df[field].iloc[bar_index])
+        return float(df[field].iloc[idx])
 
     if op_type == "indicator":
         name = operand.get("name")
@@ -274,12 +283,14 @@ def resolve_operand(
             target_df = (multi_tf_data or {}).get(timeframe)
             if target_df is None:
                 return float("nan")
-            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache)
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache) - offset
             if idx < 0:
                 return float("nan")
             return IndicatorRegistry.get_value(name, target_df, period, idx, field, cache=cache)
 
-        return IndicatorRegistry.get_value(name, df, period, bar_index, field, cache=cache)
+        return IndicatorRegistry.get_value(
+            name, df, period, bar_index - offset, field, cache=cache
+        )
 
     raise ValueError(f"Bilinmeyen operand tipi: {op_type}")
 
@@ -324,6 +335,20 @@ class RuleEvaluator:
 
         # Cross operatörleri için önceki bar değerleri gerekli
         kwargs: dict = {}
+
+        if operator_name in LOOKBACK_OPERATORS:
+            # `rising`/`falling`: sağ operand eşik değil, GERİYE KAÇ BAR
+            # bakılacağıdır. Sol operand o kadar bar geriden bir kez daha
+            # çözülür ve karşılaştırma iki değer arasında yapılır.
+            lookback = max(int(right_val), 1)
+            prev = resolve_operand(
+                {**left_def, "offset": int(left_def.get("offset", 0) or 0) + lookback},
+                df, bar_index, params, multi_tf_data, current_pnl, cache,
+            )
+            if math.isnan(prev):
+                return False, "Yetersiz veri (NaN)"
+            kwargs["prev_left"] = prev
+
         if operator_name in ("cross_above", "cross_below"):
             if bar_index > 0:
                 prev_left = resolve_operand(left_def, df, bar_index - 1, params, multi_tf_data, current_pnl, cache)

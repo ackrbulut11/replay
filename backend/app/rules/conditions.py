@@ -76,6 +76,40 @@ def cross_below(
     return prev_left >= prev_right and left < right
 
 
+def rising(
+    left: float,
+    right: float,
+    prev_left: float | None = None,
+    **_: float,
+) -> bool:
+    """
+    Yükseliyor (rising).
+
+    Sol değer, `right` bar önceki değerinden BÜYÜKSE True. Karşılaştırma
+    değeri `prev_left` olarak evaluator tarafından geçirilir (bkz.
+    `RuleEvaluator.evaluate_condition`).
+
+    "EMA20 son 3 barda yükseliyor" gibi trend yönü koşulları bunsuz
+    yazılamıyordu; kullanıcı iki ayrı operandla elle kaydırma yapmak
+    zorundaydı.
+    """
+    if prev_left is None:
+        return False
+    return left > prev_left
+
+
+def falling(
+    left: float,
+    right: float,
+    prev_left: float | None = None,
+    **_: float,
+) -> bool:
+    """Düşüyor (falling) — `rising`'in tersi."""
+    if prev_left is None:
+        return False
+    return left < prev_left
+
+
 def between(
     left: float,
     right: float,
@@ -108,7 +142,14 @@ OPERATOR_REGISTRY: dict[str, Callable] = {
     "cross_above": cross_above,
     "cross_below": cross_below,
     "between": between,
+    # Sağ operand "kaç bar önceye göre" anlamına gelir, eşik değil.
+    "rising": rising,
+    "falling": falling,
 }
+
+# Sağ operandı bir eşik değil, GERİYE KAÇ BAR bakılacağı olan operatörler.
+# Evaluator bunlar için sol operandı o kadar bar geriden bir kez daha çözer.
+LOOKBACK_OPERATORS = frozenset({"rising", "falling"})
 
 
 def get_operator(name: str) -> Callable:

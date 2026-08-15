@@ -31,6 +31,7 @@ from app.engines.execution import (
 from app.reports.performance_report import calculate_performance, compound_return_pct
 from app.rules.engine import DEFAULT_BAR_DELAY, RuleEngine
 from app.rules.evaluator import iter_operands
+from app.rules.validation import raise_if_invalid
 from app.rules.strategy_models import (
     StrategyCreateRequest,
     StrategyModel,
@@ -168,6 +169,9 @@ class StrategyEngine:
             slippage_bps=request.slippage_bps,
         )
         data = strategy.model_dump()
+        # Kaydetmeden ONCE dogrula: tanimsiz parametre/gosterge/alan hatasi
+        # eskiden ancak test calistirilinca, ustelik 500 olarak ortaya cikiyordu.
+        raise_if_invalid(data)
 
         row = Strategy(
             id=strategy.id,
@@ -224,6 +228,10 @@ class StrategyEngine:
             rules["commission_bps"] = request.commission_bps
         if request.slippage_bps is not None:
             rules["slippage_bps"] = request.slippage_bps
+
+        # Guncellenen agac da dogrulanir: kismi bir guncelleme gecerli bir
+        # stratejiyi gecersiz hale getirebilir (ornegin kullanilan parametreyi silmek).
+        raise_if_invalid({**rules, "id": row.id, "name": row.name})
 
         row.rules = rules
         row.version = (row.version or 1) + 1

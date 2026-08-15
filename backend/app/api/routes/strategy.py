@@ -23,6 +23,7 @@ from app.engines.scanner_engine import ScannerEngine
 from app.engines.execution import PositionSizing
 from app.engines.strategy_engine import MultiTimeframeDataError, StrategyEngine
 from app.indicators.registry import IndicatorRegistry
+from app.rules.validation import StrategyValidationError
 from app.rules.strategy_models import (
     BatchEvaluateRequest,
     EvaluateRequest,
@@ -179,6 +180,12 @@ def create_strategy(
     """Yeni strateji oluşturur. Sahip, token'daki kullanıcıdır."""
     try:
         strategy = _engine.create_strategy(db, request, user_id=current_user.id)
+    except StrategyValidationError as e:
+        db.rollback()
+        # Maddeler ayri ayri donuluyor ki arayuz hepsini birden gosterebilsin.
+        raise HTTPException(
+            status_code=422, detail={"message": "Strateji geçersiz", "errors": e.errors}
+        )
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
@@ -193,7 +200,13 @@ def update_strategy(
     db: Session = Depends(get_db),
 ):
     """Mevcut stratejiyi günceller (yalnızca sahibi)."""
-    result = _engine.update_strategy(db, strategy_id, request, current_user.id)
+    try:
+        result = _engine.update_strategy(db, strategy_id, request, current_user.id)
+    except StrategyValidationError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=422, detail={"message": "Strateji geçersiz", "errors": e.errors}
+        )
     if result is None:
         raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {strategy_id}")
     return {"message": "Strateji güncellendi", "strategy": result}

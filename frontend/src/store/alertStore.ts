@@ -224,18 +224,21 @@ export const alertStore = {
     }
   },
 
-  checkAlerts: async (symbol: string, provider: string, currentPrice: number, indicatorValues?: Record<string, number>) => {
+  /**
+   * Sunucudan bu sembolün etkin alarmlarını değerlendirmesini ister.
+   *
+   * Fiyat ve gösterge değerleri artık gönderilmez: sunucu bunları kendi
+   * verisinden hesaplıyor (bkz. backend AlertEngine.check_alerts). Eskiden
+   * gösterge değerleri hiç gönderilmediği için fiyat dışındaki tüm alarm
+   * tipleri hiç tetiklenmiyordu.
+   */
+  checkAlerts: async (symbol: string, provider: string) => {
     try {
       const data = await apiRequest<{ checked_count: number; triggered_alerts: AlertItem[] }>(
         '/api/alerts/check',
         {
           method: 'POST',
-          body: JSON.stringify({
-            symbol,
-            provider,
-            current_price: currentPrice,
-            indicator_values: indicatorValues || {},
-          }),
+          body: JSON.stringify({ symbol, provider }),
         }
       );
       const triggered: AlertItem[] = data.triggered_alerts || [];

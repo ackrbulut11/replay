@@ -37,6 +37,14 @@ import CompareSettingsModal from './CompareSettingsModal';
 
 
 
+// Etkin alarmların sunucuya kontrol ettirilme aralığı.
+//
+// Alarm değerlendirmesi artık sunucuda veri yükleyip gösterge hesaplıyor;
+// istek başına maliyet düşük değil. 30 sn, izleme listesi fiyat yenileme
+// aralığıyla (15 sn) aynı büyüklük mertebesinde ve gecikme kullanıcı için
+// fark edilir değil.
+const ALERT_CHECK_INTERVAL_MS = 30_000;
+
 interface CandleData {
   time: number;
   open: number;
@@ -2460,12 +2468,27 @@ export default function CandleChart({
     };
   }, [alertState.alerts, symbol, data, indicators, updateAlarmOverlays]);
 
-  // Check alerts against current visible price
+  // Etkin alarmları sunucuya kontrol ettir.
+  //
+  // Replay'de KAPALIDIR: replay'de ekrandaki son mum geçmişten gelir ve
+  // 2019'a gidip oynatmak, 2019 fiyatlarıyla gerçek alarmları kalıcı olarak
+  // TRIGGERED yapıyordu.
+  //
+  // Zamanlama `visibleData`ya bağlı değildir. Bağlıydı ve replay oynatılırken
+  // her mumda bir POST gidiyordu (100 ms/mum hızda saniyede ~10 istek, her
+  // biri bir veritabanı commit'i). Artık sembol/sağlayıcı değişiminde bir kez
+  // ve sonrasında sabit aralıklarla kontrol edilir; fiyatı zaten sunucu
+  // okuduğu için istemcinin mum başına tetikleme yapmasına gerek yok.
   useEffect(() => {
-    if (visibleData.length === 0) return;
-    const last = visibleData[visibleData.length - 1];
-    alertStore.checkAlerts(symbol, provider, last.close);
-  }, [visibleData, symbol, provider]);
+    if (replayState.isReplayActive) return;
+    if (!symbol || !provider) return;
+
+    alertStore.checkAlerts(symbol, provider);
+    const timer = setInterval(() => {
+      alertStore.checkAlerts(symbol, provider);
+    }, ALERT_CHECK_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [symbol, provider, replayState.isReplayActive]);
 
 
   

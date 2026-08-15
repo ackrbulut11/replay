@@ -250,12 +250,16 @@ class RuleEngine:
             timestamp: int,
             signal_bar_index: int,
             signal_timestamp: int,
+            reverse: bool = True,
         ) -> None:
             """Bir sinyali gerçekleştirir: pozisyon durumunu günceller ve kaydı yazar.
 
             `bar_index`/`timestamp` emrin GERÇEKLEŞTİĞİ mumdur (grafikteki
             işaret oraya konur), `signal_*` ise sinyali üreten kapanmış mum.
             Gecikme yokken (bar_delay=0) ikisi aynıdır.
+
+            `reverse=False` yalnızca pozisyonu KAPATIR, ters yöne geçmez —
+            TP/SL çıkışları böyledir (bkz. çağrı yeri).
             """
             nonlocal position_state, last_entry_price
 
@@ -269,30 +273,33 @@ class RuleEngine:
                 "signal_timestamp": signal_timestamp,
             }
 
-            if signal == SignalType.BUY:
-                if position_state == "short" and last_entry_price is not None and last_entry_price > 0:
-                    # Short pozisyonunu kapat ve Short PnL % hesapla
-                    short_pnl = ((last_entry_price - exec_price) / last_entry_price) * 100.0
-                    item["entry_price"] = round(last_entry_price, 4)
-                    item["pnl_percent"] = round(short_pnl, 2)
-                    item["position_closed"] = "SHORT"
+            # ── Açık pozisyonu kapat (varsa) ──────────────────────────────
+            has_position = last_entry_price is not None and last_entry_price > 0
+            if signal == SignalType.BUY and position_state == "short" and has_position:
+                short_pnl = ((last_entry_price - exec_price) / last_entry_price) * 100.0
+                item["entry_price"] = round(last_entry_price, 4)
+                item["pnl_percent"] = round(short_pnl, 2)
+                item["position_closed"] = "SHORT"
+            elif signal == SignalType.SELL and position_state == "long" and has_position:
+                long_pnl = ((exec_price - last_entry_price) / last_entry_price) * 100.0
+                item["entry_price"] = round(last_entry_price, 4)
+                item["pnl_percent"] = round(long_pnl, 2)
+                item["position_closed"] = "LONG"
 
+            # ── Yeni pozisyon durumu ──────────────────────────────────────
+            if not reverse:
+                # Risk yönetimi çıkışı: nakite geçilir, ters pozisyon açılmaz.
+                position_state = "none"
+                last_entry_price = None
+            elif signal == SignalType.BUY:
                 position_state = "long"
                 last_entry_price = exec_price
-            else:  # SELL
-                if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
-                    # Long pozisyonunu kapat ve Long PnL % hesapla
-                    long_pnl = ((exec_price - last_entry_price) / last_entry_price) * 100.0
-                    item["entry_price"] = round(last_entry_price, 4)
-                    item["pnl_percent"] = round(long_pnl, 2)
-                    item["position_closed"] = "LONG"
-
-                if allow_short:
-                    position_state = "short"
-                    last_entry_price = exec_price
-                else:
-                    position_state = "none"
-                    last_entry_price = None
+            elif allow_short:
+                position_state = "short"
+                last_entry_price = exec_price
+            else:
+                position_state = "none"
+                last_entry_price = None
 
             signals.append(item)
 
@@ -367,6 +374,11 @@ class RuleEngine:
             # ─── 2. TP/SL gerçekleşmesi ──────────────────────────────────
             # Gecikmeye tabi değildir: piyasada duran koşullu emirlerdir,
             # seviyeye dokunulduğu anda gerçekleşirler.
+            #
+            # `reverse=False`: TP/SL bir risk yönetimi çıkışıdır, yön değiştirme
+            # kararı değil. Eskiden allow_short açıkken zarar durdur emri
+            # kendiliğinden bir SHORT açıyordu (ve short'un stop'u bir LONG) —
+            # kullanıcının hiç kurmadığı bir "her zaman piyasada" stratejisi.
             if tp_sl_signal is not None:
                 _execute(
                     signal=tp_sl_signal,
@@ -376,6 +388,7 @@ class RuleEngine:
                     timestamp=timestamp,
                     signal_bar_index=i,
                     signal_timestamp=timestamp,
+                    reverse=False,
                 )
                 # Seviye tetiklenen mumda kural değerlendirilmez (mevcut
                 # davranış korunuyor): pozisyon zaten bu mumda el değiştirdi.

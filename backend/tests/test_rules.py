@@ -470,5 +470,52 @@ class TestWarmup(unittest.TestCase):
         self.assertEqual(RuleEngine._get_warmup_period(strategy, {}), 35)
 
 
+class TestStopLossDoesNotReverse(unittest.TestCase):
+    """TP/SL risk yonetimi cikisidir; kendiliginden ters pozisyon acmaz."""
+
+    @staticmethod
+    def _df():
+        # Once yukselis (long girisi tetiklensin), sonra sert dusus (stop).
+        closes = [10.0] * 25 + [12.0, 15.0, 20.0, 26.0, 33.0] + [20.0, 14.0, 10.0, 8.0, 7.0] * 3
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=len(closes), freq="1D"),
+            "open": closes,
+            "high": [c + 0.5 for c in closes],
+            "low": [c - 0.5 for c in closes],
+            "close": closes,
+            "volume": [1000] * len(closes),
+        })
+
+    @staticmethod
+    def _strategy():
+        return {
+            "id": "sl_strat", "name": "SL", "parameters": [],
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "indicator", "name": "EMA", "period": 5},
+                "operator": ">",
+                "right": {"type": "indicator", "name": "EMA", "period": 20},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+            "allow_short": True,
+            "stop_loss_pct": 10.0,
+        }
+
+    def test_stop_loss_closes_flat_even_when_short_allowed(self):
+        signals = RuleEngine.evaluate_range(self._strategy(), self._df())
+        stops = [s for s in signals if any("Zarar Durdur" in c for c in s["conditions_met"])]
+        self.assertTrue(stops, "Bu veri setinde bir stop bekleniyordu")
+
+        for stop in stops:
+            # Stop bir pozisyonu KAPATMALI...
+            self.assertIn("position_closed", stop)
+            # ...ve hemen ardindan ters pozisyon acilmamali: bir sonraki kayit
+            # varsa o da bir kapanis olamaz (acik pozisyon yoktur).
+            idx = signals.index(stop)
+            if idx + 1 < len(signals):
+                nxt = signals[idx + 1]
+                if any("Zarar Durdur" in c or "Kar Al" in c for c in nxt["conditions_met"]):
+                    self.fail("Stop sonrasi acilan ters pozisyon yeniden stop olmus")
+
+
 if __name__ == "__main__":
     unittest.main()

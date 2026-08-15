@@ -30,6 +30,7 @@ from app.engines.execution import (
 )
 from app.reports.performance_report import calculate_performance, compound_return_pct
 from app.rules.engine import DEFAULT_BAR_DELAY, RuleEngine
+from app.rules.evaluator import iter_operands
 from app.rules.strategy_models import (
     StrategyCreateRequest,
     StrategyModel,
@@ -550,11 +551,10 @@ class StrategyEngine:
         groups = [strategy.get("entry_rules", {}), strategy.get("exit_rules", {})]
         groups.extend(strategy.get("timeframe_filters", []))
         for group in groups:
-            for condition in (group or {}).get("conditions", []):
-                for side in ("left", "right", "right2"):
-                    operand = condition.get(side)
-                    if operand:
-                        _add(operand.get("timeframe"))
+            # `iter_operands` alt grupları da gezer; iç içe bir grupta geçen
+            # zaman dilimi aksi halde yüklenmeden kalır ve koşul NaN döner.
+            for operand in iter_operands(group or {}):
+                _add(operand.get("timeframe"))
 
         return timeframes
 

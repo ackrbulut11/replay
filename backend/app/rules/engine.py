@@ -20,7 +20,7 @@ import pandas as pd
 
 from app.engines.execution import ExecutionCosts, fill_price, net_pnl_percent
 from app.indicators.registry import IndicatorRegistry
-from app.rules.evaluator import RuleEvaluator
+from app.rules.evaluator import RuleEvaluator, iter_operands
 from app.rules.strategy_models import SignalType
 
 
@@ -550,22 +550,22 @@ class RuleEngine:
 
         def scan_conditions(group: dict) -> None:
             nonlocal max_period
-            for condition in group.get("conditions", []):
-                for side in ("left", "right", "right2"):
-                    operand = condition.get(side)
-                    if operand and operand.get("type") == "indicator":
-                        raw_period = operand.get("period", 14)
-                        if isinstance(raw_period, str) and raw_period.startswith("$"):
-                            period = int(params.get(raw_period[1:], 14))
-                        else:
-                            period = int(raw_period)
-                        try:
-                            period = IndicatorRegistry.warmup_bars(operand.get("name", ""), period)
-                        except ValueError:
-                            # Bilinmeyen indikatör: değerlendirme sırasında zaten
-                            # hata verecek; burada ham period'la yetin.
-                            pass
-                        max_period = max(max_period, period)
+            # `iter_operands` alt grupları da gezer; düz döngü iç içe gruplardaki
+            # indikatörleri görmez ve warmup olduğundan kısa çıkardı.
+            for operand in iter_operands(group):
+                if operand.get("type") == "indicator":
+                    raw_period = operand.get("period", 14)
+                    if isinstance(raw_period, str) and raw_period.startswith("$"):
+                        period = int(params.get(raw_period[1:], 14))
+                    else:
+                        period = int(raw_period)
+                    try:
+                        period = IndicatorRegistry.warmup_bars(operand.get("name", ""), period)
+                    except ValueError:
+                        # Bilinmeyen indikatör: değerlendirme sırasında zaten
+                        # hata verecek; burada ham period'la yetin.
+                        pass
+                    max_period = max(max_period, period)
 
         # Entry ve exit kurallarını tara
         entry_rules = strategy.get("entry_rules", {})

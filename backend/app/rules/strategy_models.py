@@ -115,10 +115,18 @@ class ConditionModel(BaseModel):
 
 
 class ConditionGroupModel(BaseModel):
-    """AND/OR mantığıyla bağlanmış koşullar grubu."""
+    """AND/OR mantığıyla bağlanmış koşullar grubu.
+
+    `conditions` hem düz koşul hem ALT GRUP içerebilir; böylece
+    `(A VE B) VEYA (C VE D)` ifade edilebilir. Birlesimde ConditionModel
+    once denenir: alt grup left/operator/right tasimadigi icin ona uymaz,
+    duz kosul ise (tum alanlari varsayilanli) gruba da uyabilirdi.
+    """
 
     logic: LogicType = Field(LogicType.AND, description="Koşullar arası mantık operatörü")
-    conditions: List[ConditionModel] = Field(default_factory=list, description="Koşullar listesi")
+    conditions: List[Union[ConditionModel, "ConditionGroupModel"]] = Field(
+        default_factory=list, description="Koşullar ve/veya alt gruplar"
+    )
 
 
 # ─── Parametre Modelleri ──────────────────────────────────────────────────────
@@ -143,7 +151,9 @@ class TimeframeFilterModel(BaseModel):
 
     timeframe: str = Field(..., description="Filtre zaman dilimi (ör. 4h, 1d)")
     logic: LogicType = Field(LogicType.AND, description="Filtre koşulları arası mantık")
-    conditions: List[ConditionModel] = Field(default_factory=list, description="Filtre koşulları")
+    conditions: List[Union[ConditionModel, ConditionGroupModel]] = Field(
+        default_factory=list, description="Filtre koşulları ve/veya alt gruplar"
+    )
 
 
 # ─── Strateji Modeli ─────────────────────────────────────────────────────────

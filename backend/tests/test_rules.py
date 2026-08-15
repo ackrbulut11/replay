@@ -11,6 +11,7 @@ from app.rules.conditions import (
 )
 from app.indicators.registry import IndicatorRegistry
 from app.rules.engine import RuleEngine, SignalType
+from app.rules.strategy_models import ConditionGroupModel, ConditionModel
 from app.rules.evaluator import RuleEvaluator, _get_multi_tf_bar_index, resolve_operand
 from app.engines.strategy_engine import StrategyEngine
 
@@ -626,6 +627,123 @@ class TestExecutionCostsInEngine(unittest.TestCase):
             self._closed(self._strategy(slippage_bps=50))[0]["pnl_percent"],
             self._closed(self._strategy())[0]["pnl_percent"],
         )
+
+
+class TestNestedConditionGroups(unittest.TestCase):
+    """(A VE B) VEYA (C VE D) ifade edilebilmeli."""
+
+    @staticmethod
+    def _df(n=60):
+        closes = [100.0 + i for i in range(n)]
+        return pd.DataFrame({
+            "timestamp": pd.date_range(start="2024-01-01", periods=n, freq="1D"),
+            "open": closes, "high": [c + 1 for c in closes], "low": [c - 1 for c in closes],
+            "close": closes, "volume": [1000] * n,
+        })
+
+    @staticmethod
+    def _cond(value, operator=">"):
+        return {
+            "left": {"type": "price", "field": "close"},
+            "operator": operator,
+            "right": {"type": "value", "value": value},
+        }
+
+    def test_or_of_two_and_groups(self):
+        """Ust seviye OR; alt gruplardan biri saglaninca sonuc dogru."""
+        df = self._df()
+        group = {
+            "logic": "OR",
+            "conditions": [
+                # Yanlis grup: close hem >1000 hem <2000 olamaz (close ~150)
+                {"logic": "AND", "conditions": [self._cond(1000, ">"), self._cond(2000, "<")]},
+                # Dogru grup: close > 100 VE close < 1000
+                {"logic": "AND", "conditions": [self._cond(100, ">"), self._cond(1000, "<")]},
+            ],
+        }
+        result, met = RuleEvaluator.evaluate_group(group, df, 50, {})
+        self.assertTrue(result)
+        self.assertTrue(any("(" in m for m in met), "alt grup parantezle gosterilmeli")
+
+    def test_and_of_groups_requires_all(self):
+        df = self._df()
+        group = {
+            "logic": "AND",
+            "conditions": [
+                {"logic": "OR", "conditions": [self._cond(1000, ">"), self._cond(100, ">")]},
+                {"logic": "AND", "conditions": [self._cond(9999, ">")]},  # saglanmaz
+            ],
+        }
+        result, _ = RuleEvaluator.evaluate_group(group, df, 50, {})
+        self.assertFalse(result)
+
+    def test_flat_conditions_still_work(self):
+        """Geriye donuk uyum: duz kosul listesi eskisi gibi calismali."""
+        df = self._df()
+        group = {"logic": "AND", "conditions": [self._cond(100, ">")]}
+        result, met = RuleEvaluator.evaluate_group(group, df, 50, {})
+        self.assertTrue(result)
+        self.assertEqual(len(met), 1)
+
+    def test_mixed_condition_and_group(self):
+        df = self._df()
+        group = {
+            "logic": "AND",
+            "conditions": [
+                self._cond(100, ">"),
+                {"logic": "OR", "conditions": [self._cond(9999, ">"), self._cond(120, ">")]},
+            ],
+        }
+        self.assertTrue(RuleEvaluator.evaluate_group(group, df, 50, {})[0])
+
+    def test_depth_limit_is_enforced(self):
+        """Asiri derin agac anlasilir hata vermeli, yigini tasirmamali."""
+        group = {"logic": "AND", "conditions": [self._cond(1)]}
+        for _ in range(15):
+            group = {"logic": "AND", "conditions": [group]}
+        with self.assertRaises(ValueError):
+            RuleEvaluator.evaluate_group(group, self._df(), 50, {})
+
+    def test_warmup_sees_indicators_inside_nested_groups(self):
+        """Ic ice gruptaki gosterge warmup hesabina girmeli."""
+        strategy = {
+            "entry_rules": {"logic": "OR", "conditions": [
+                {"logic": "AND", "conditions": [{
+                    "left": {"type": "indicator", "name": "EMA", "period": 200},
+                    "operator": ">",
+                    "right": {"type": "value", "value": 1},
+                }]},
+            ]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        self.assertEqual(RuleEngine._get_warmup_period(strategy, {}), 200)
+
+    def test_required_timeframes_sees_nested_groups(self):
+        strategy = {
+            "entry_rules": {"logic": "OR", "conditions": [
+                {"logic": "AND", "conditions": [{
+                    "left": {"type": "price", "field": "close", "timeframe": "4h"},
+                    "operator": ">",
+                    "right": {"type": "value", "value": 1},
+                }]},
+            ]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+            "timeframe_filters": [],
+        }
+        self.assertEqual(StrategyEngine.required_timeframes(strategy), ["4h"])
+
+    def test_nested_group_survives_pydantic_validation(self):
+        """Sema ic ice grubu kabul etmeli ve duz kosulla karistirmamali."""
+        model = ConditionGroupModel(**{
+            "logic": "OR",
+            "conditions": [
+                self._cond(100, ">"),
+                {"logic": "AND", "conditions": [self._cond(50, ">")]},
+            ],
+        })
+        self.assertEqual(len(model.conditions), 2)
+        self.assertIsInstance(model.conditions[0], ConditionModel)
+        self.assertIsInstance(model.conditions[1], ConditionGroupModel)
 
 
 if __name__ == "__main__":

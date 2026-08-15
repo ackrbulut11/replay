@@ -25,6 +25,47 @@ from app.indicators.registry import IndicatorRegistry
 from app.rules.conditions import get_operator
 
 
+# Koşul ağacının azami derinliği. Sınırsız bırakmak, elle hazırlanmış (ya da
+# ileride AI tarafından üretilmiş) bir JSON'un özyinelemeyle yığını taşırmasına
+# izin verirdi; bu sınır anlaşılır bir hataya çevirir.
+MAX_GROUP_DEPTH = 10
+
+
+def is_condition_group(item: dict) -> bool:
+    """Bir öğe alt grup mu, düz koşul mu?
+
+    Alt grubun ayırt edici işareti kendi `conditions` listesini taşımasıdır.
+    Düz koşulda `left`/`operator`/`right` bulunur.
+    """
+    return isinstance(item, dict) and "conditions" in item
+
+
+def iter_conditions(group: dict, _depth: int = 0):
+    """Bir grubun (alt grupları dahil) TÜM düz koşullarını sırayla verir.
+
+    Kural ağacını gezmesi gereken her yer bunu kullanır — warmup hesabı,
+    zaman dilimi toplama, doğrulama. Aksi halde her biri kendi gezicisini
+    yazar ve iç içe gruplar birinde desteklenip diğerinde sessizce atlanır
+    (RULES.md #8).
+    """
+    if _depth > MAX_GROUP_DEPTH or not isinstance(group, dict):
+        return
+    for item in group.get("conditions", []) or []:
+        if is_condition_group(item):
+            yield from iter_conditions(item, _depth + 1)
+        elif isinstance(item, dict):
+            yield item
+
+
+def iter_operands(group: dict):
+    """Bir grubun tüm koşullarındaki tüm operandları verir."""
+    for condition in iter_conditions(group):
+        for side in ("left", "right", "right2"):
+            operand = condition.get(side)
+            if isinstance(operand, dict):
+                yield operand
+
+
 def resolve_parameter(
     value: Union[int, float, str],
     params: dict[str, Union[int, float]],
@@ -261,13 +302,26 @@ class RuleEvaluator:
         multi_tf_data: dict[str, pd.DataFrame] | None = None,
         current_pnl: float = 0.0,
         cache: dict | None = None,
+        _depth: int = 0,
     ) -> tuple[bool, list[str]]:
         """
         Bir koşul grubunu AND/OR mantığıyla değerlendirir.
 
+        `conditions` listesindeki her öğe ya bir KOŞUL ya da bir ALT GRUPtur.
+        Alt grup, kendi `logic` alanını taşıyan bir sözlüktür — bu sayede
+        `(A VE B) VEYA (C VE D)` yazılabilir. Eskiden liste yalnızca düz
+        koşullardan oluşuyordu ve bu ifade DSL'de hiç yazılamıyordu; kullanıcı
+        ya iki ayrı strateji kurmak ya da kuralı bozmak zorunda kalıyordu.
+
         Returns:
             (sonuç, karşılanan_koşullar) tuple'ı.
         """
+        if _depth > MAX_GROUP_DEPTH:
+            raise ValueError(
+                f"Koşul grubu en fazla {MAX_GROUP_DEPTH} seviye iç içe olabilir "
+                "(döngüsel/aşırı derin kural ağacı)"
+            )
+
         logic = group.get("logic", "AND")
         conditions = group.get("conditions", [])
 
@@ -277,13 +331,24 @@ class RuleEvaluator:
         met_conditions: list[str] = []
         results: list[bool] = []
 
-        for condition in conditions:
-            result, desc = RuleEvaluator.evaluate_condition(
-                condition, df, bar_index, params, multi_tf_data, current_pnl, cache
-            )
+        for item in conditions:
+            if is_condition_group(item):
+                result, nested_met = RuleEvaluator.evaluate_group(
+                    item, df, bar_index, params, multi_tf_data, current_pnl, cache, _depth + 1
+                )
+                # Alt grubun karşılanan koşulları parantezle gösterilir ki
+                # açıklamada hangi grubun sağlandığı belli olsun.
+                if result and nested_met:
+                    inner_logic = f" {item.get('logic', 'AND')} "
+                    met_conditions.append(f"({inner_logic.join(nested_met)})")
+            else:
+                result, desc = RuleEvaluator.evaluate_condition(
+                    item, df, bar_index, params, multi_tf_data, current_pnl, cache
+                )
+                if result:
+                    met_conditions.append(desc)
+
             results.append(result)
-            if result:
-                met_conditions.append(desc)
 
         if logic == "AND":
             final = all(results)

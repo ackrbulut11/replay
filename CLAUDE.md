@@ -108,22 +108,28 @@ A dev bypass exists but is off by default: it only fires when `.env`'s `DEV_LOGI
 Frontend session keys live in one place: `TOKEN_STORAGE_KEY` and `clearStoredSession()` in [AuthContext.tsx](frontend/src/context/AuthContext.tsx). On 401, `notifyUnauthorized()` clears storage and fires the `replay:unauthorized` event, which `AuthProvider` listens for to drop back to the login screen.
 
 ### Frontend state and routing
-There is **no router**. `App.tsx` holds an `activeTab` string and renders chart/replay/strategy inline; every other tab renders a placeholder. Symbol/provider/timeframe/date range are `useState` in `App.tsx` and threaded down as props.
+`react-router-dom` handles top-level routing: `/` (landing), `/login`, and `/app/*` behind `ProtectedRoute`. Inside `/app/*` the active tab is derived from the URL path (`getTabFromPath` in `App.tsx`), not from component state — `handleSelectTab` navigates. Chart/replay/strategy/journal/admin render inline; the remaining tabs render a placeholder. Symbol/provider/timeframe/date range are `useState` in `App.tsx` and threaded down as props.
 
 Stores in `src/store/` are hand-rolled (no zustand/redux): a module-level `currentState`, a `Set` of listeners, and a `useXStore()` hook returning `[state, setState]`. Follow that shape for new stores.
 
-Charts use `lightweight-charts` only — do not write a custom candlestick renderer. `charts/CandleChart.tsx` is ~2300 lines and owns most chart behavior.
+Charts use `lightweight-charts` only — do not write a custom candlestick renderer. `charts/CandleChart.tsx` is ~3200 lines and owns most chart behavior.
+
+Components must not `fetch` directly — every call goes through `src/services/*`, which attaches the bearer token via `apiRequest`. This is not stylistic: `/api/market/*` requires auth, so a direct `fetch` gets a 401.
 
 ### Implementation status — many files are 0–3 line placeholders
-Only Phases 1–3 are partially built. Verify a module is real before wiring to it:
-- **Implemented:** market data + symbols, indicators, rules/evaluator/engine, strategy engine + routes, scanner engine, alerts, auth, admin, analytics; frontend chart, strategy builder/list/condition editor, batch scanner, watchlist, alerts, replay controls, admin page.
-- **Stubs:** `engines/replay_engine.py`, `engines/backtest_engine.py`, `optimizer/`, `ai/`, `journal/`, `reports/`, `api/websocket.py`, routes `replay|scanner|backtest|journal`, and frontend `pages/{Chart,Dashboard,Replay,Scanner,Backtest,Journal}Page.tsx`, `scanner/`, `journal/`, `workspace/`, `services/{websocket,backend}.ts`, `store/{chartStore,userStore}.ts`, `charts/{ChartManager,Indicators,Drawings}.ts`.
+Phases 1–4 are built; 5–6 have not started. Verify a module is real before wiring to it:
+- **Implemented:** market data + symbols, indicators, rules/evaluator/engine, strategy engine + routes, scanner engine, alerts, auth, admin, analytics, journal + reports, `engines/replay_engine.py`; frontend chart, strategy builder/list/condition editor, batch scanner, watchlist, alerts, replay controls + trade panel, journal page, admin page, landing page.
+- **Stubs:** `engines/backtest_engine.py`, `optimizer/`, `ai/`, `api/websocket.py`, routes `replay|scanner|backtest`, and frontend `pages/{Chart,Dashboard,Replay,Scanner,Backtest}Page.tsx`, `scanner/`, `journal/` components, `workspace/`, `services/{websocket,backend}.ts`, `store/{chartStore,userStore}.ts`, `charts/{ChartManager,Indicators,Drawings}.ts`.
 
-`main.py` mounts `auth`, `market`, `strategy`, `alerts`, `watchlist`, `admin`, `analytics` under `/api`. New routers must be added there explicitly.
+`main.py` mounts `auth`, `market`, `strategy`, `alerts`, `watchlist`, `chart_settings`, `journal`, `admin`, `analytics`, `waitlist` under `/api`. New routers must be added there explicitly.
 
 ## Deployment
 
-Frontend deploys to Vercel; `vercel.json` rewrites `/api/*` to the Render backend at `https://replay-xj3e.onrender.com/api`, which `.env.production` also sets as `VITE_API_BASE_URL`. CORS in `main.py` allows any `*.vercel.app` plus localhost via regex. CI ([.github/workflows/build.yml](.github/workflows/build.yml)) only runs the frontend build on windows-latest — no backend tests or lint in CI.
+Frontend deploys to Vercel. **There are two `vercel.json` files and only one is live.** Vercel reads the config in the project's configured Root Directory: since `/api/*` is in fact proxied on the deployed site, [frontend/vercel.json](frontend/vercel.json) is the effective one and the repo-root [vercel.json](vercel.json) is ignored. Both now carry the same `/api/:path*` → `https://replay-xj3e.onrender.com/api/:path*` rewrite, so editing either one cannot silently break API routing — but **change both** or the next reader will hit the same trap. `.env.production` sets the same backend as `VITE_API_BASE_URL`, which `AuthContext`/`waitlistApi` use as an absolute URL while everything else relies on the relative `/api` rewrite.
+
+CORS in `main.py` allows `replay-*.vercel.app` plus localhost via regex. CI ([.github/workflows/build.yml](.github/workflows/build.yml)) only runs the frontend build on windows-latest — no backend tests or lint in CI, even though `backend/tests/` has a full unittest suite.
+
+Note on `npm run lint`: the script exists but `eslint` is not installed and there is no `eslint.config.js`, so it fails immediately. Use `npx tsc --noEmit` and `npm run build` to check the frontend.
 
 Note: `backend/app/core/config.py` currently hardcodes a Google client ID and a dev JWT secret as pydantic-settings defaults. Real values belong in `.env` (RULES.md §17).
 

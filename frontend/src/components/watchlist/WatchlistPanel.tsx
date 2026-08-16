@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { useVisibleInterval } from '../../hooks/useVisibleInterval';
 import {
   Plus, RefreshCw, ChevronDown, Flag, Trash2,
   Sparkles, ArrowUpDown, GripVertical, StickyNote,
@@ -266,14 +267,13 @@ export default function WatchlistPanel({
     watchlistStore.reorderSymbols(state.activeListId, oldIndex, newIndex);
   }, [state.activeListId, state.lists]);
 
-  // Auto-fetch quotes on mount or active list change
-  useEffect(() => {
-    watchlistStore.fetchQuotes();
-    const interval = setInterval(() => {
-      watchlistStore.fetchQuotes();
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [state.activeListId]);
+  // Fiyatları düzenli tazele — yalnızca sekme GÖRÜNÜRKEN.
+  //
+  // Düz setInterval arka planda da çalışıyordu: başka bir sekmeye geçen
+  // kullanıcı için saatlerce boşuna sorgu atılıyor, ücretsiz barındırmada
+  // sunucu hiç uykuya geçemiyor ve kullanıcı başına istek sınırı boşuna
+  // tükeniyordu (bkz. hooks/useVisibleInterval).
+  useVisibleInterval(() => watchlistStore.fetchQuotes(), 15000, [state.activeListId]);
 
   // ---- Panel Resize Handlers ----
   const onResizeMouseDown = useCallback((e: React.MouseEvent) => {

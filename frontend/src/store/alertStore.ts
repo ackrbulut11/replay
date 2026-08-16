@@ -48,6 +48,15 @@ function emitChange() {
   listeners.forEach(listener => listener());
 }
 
+/**
+ * Süren bir alarm kontrolü var mı.
+ *
+ * Sunucu tarafı artık veri yükleyip gösterge hesaplıyor; yavaş bir sağlayıcıda
+ * ya da barındırma uyanırken (ücretsiz katmanda ilk istek ~50 sn) tek bir
+ * çağrı periyottan uzun sürebiliyor ve istekler üst üste biniyordu.
+ */
+let alertCheckInFlight = false;
+
 let alarmAudioCtx: AudioContext | null = null;
 let alarmAudioTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -233,6 +242,9 @@ export const alertStore = {
    * tipleri hiç tetiklenmiyordu.
    */
   checkAlerts: async (symbol: string, provider: string) => {
+    // Önceki kontrol hâlâ sürüyorsa bu turu atla; sonuç zaten birazdan gelecek.
+    if (alertCheckInFlight) return;
+    alertCheckInFlight = true;
     try {
       const data = await apiRequest<{ checked_count: number; triggered_alerts: AlertItem[] }>(
         '/api/alerts/check',
@@ -259,6 +271,8 @@ export const alertStore = {
       }
     } catch (err: any) {
       console.error('Check alerts error:', err);
+    } finally {
+      alertCheckInFlight = false;
     }
   },
 };

@@ -17,6 +17,7 @@ import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
 import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { useVisibleInterval } from '../hooks/useVisibleInterval';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import ReplayTradePanel from '../replay/ReplayTradePanel';
@@ -2496,16 +2497,15 @@ export default function CandleChart({
   // biri bir veritabanı commit'i). Artık sembol/sağlayıcı değişiminde bir kez
   // ve sonrasında sabit aralıklarla kontrol edilir; fiyatı zaten sunucu
   // okuduğu için istemcinin mum başına tetikleme yapmasına gerek yok.
-  useEffect(() => {
-    if (replayState.isReplayActive) return;
-    if (!symbol || !provider) return;
-
-    alertStore.checkAlerts(symbol, provider);
-    const timer = setInterval(() => {
-      alertStore.checkAlerts(symbol, provider);
-    }, ALERT_CHECK_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [symbol, provider, replayState.isReplayActive]);
+  //
+  // Yalnızca sekme görünürken çalışır: arka plandaki bir sekme için alarm
+  // sorgulamak sunucuda veri yükleyip gösterge hesaplattırıyor ve karşılığı yok.
+  useVisibleInterval(
+    () => alertStore.checkAlerts(symbol, provider),
+    ALERT_CHECK_INTERVAL_MS,
+    [symbol, provider],
+    !replayState.isReplayActive && Boolean(symbol) && Boolean(provider),
+  );
 
 
   

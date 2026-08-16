@@ -197,6 +197,14 @@ const listeners: Set<Listener> = new Set();
 
 let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Süren bir fiyat sorgusu var mı.
+ *
+ * `/market/quotes` sembol başına veri yüklüyor; yavaş bir sağlayıcıda tek
+ * çağrı 15 sn'lik periyottan uzun sürebiliyor ve istekler birikiyordu.
+ */
+let quotesInFlight = false;
+
 function saveToLocalStorage() {
   try {
     localStorage.setItem(
@@ -679,7 +687,10 @@ export const watchlistStore = {
   fetchQuotes: async () => {
     const activeGroup = currentState.lists.find((g) => g.id === currentState.activeListId);
     if (!activeGroup || activeGroup.items.length === 0) return;
+    // Önceki sorgu hâlâ sürüyorsa bu turu atla.
+    if (quotesInFlight) return;
 
+    quotesInFlight = true;
     applyState({ quotesLoading: true });
 
     try {
@@ -711,6 +722,8 @@ export const watchlistStore = {
       applyState({ lists: sanitizeLists(newLists), quotesLoading: false });
     } catch {
       applyState({ quotesLoading: false });
+    } finally {
+      quotesInFlight = false;
     }
   },
 

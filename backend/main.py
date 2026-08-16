@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
 from app.auth.router import router as auth_router
-from app.api.routes import alerts, market, strategy, admin, watchlist, analytics, waitlist, chart_settings, journal
+from app.api.routes import alerts, market, strategy, admin, watchlist, analytics, waitlist, chart_settings, journal, patterns
 
 
 def init_error_monitoring() -> None:
@@ -138,6 +138,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api")
 app.include_router(market.router, prefix="/api")
 app.include_router(strategy.router, prefix="/api")
+app.include_router(patterns.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
 app.include_router(chart_settings.router, prefix="/api")

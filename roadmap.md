@@ -33,8 +33,8 @@ UI (React)
 
 ---
 
-> **Durum işaretleri:** ✅ tamam · ⚠️ kısmen (eksik maddeler ayrıca işaretli) · ⬜ başlanmadı.
-> Son gözden geçirme: 2026-08-16.
+> **Durum işaretleri:** ✅ tamam · 🔄 üzerinde çalışılıyor · ⚠️ kısmen (eksik maddeler
+> ayrıca işaretli) · ⬜ başlanmadı. Son gözden geçirme: 2026-08-16.
 
 ## Faz 1 — MVP ✅
 - Mum/çizgi grafiği, zoom, pan, crosshair, ölçüm araçları
@@ -52,7 +52,7 @@ UI (React)
 - ✅ Stratejiyi tüm sembollerde (Binance/Nasdaq/BIST) çalıştırma, sinyal listesi
   — `engines/scanner_engine.py` + Strateji Motoru içindeki "Toplu tarama" sekmesi.
   Tarama geçmişi `strategy_scans` tablosunda kullanıcı bazlı saklanıyor.
-- ⬜ **Pattern Search**: belirli koşulların oluştuğu geçmiş bölgeleri işaretleme — yazılmadı
+- ⬜ **Pattern Search** — kapsamı büyüdüğü için ayrı faza taşındı, bkz. [Faz 3.5](#faz-35--örüntü-arama)
 - ✅ Watchlist: izleme listesi, sinyal renklendirme, sürükle-bırak sıralama, bölümler, notlar
 - ⚠️ Alarm Sistemi: koşul bazlı alarm motoru çalışıyor (`alerts/engine.py`), tetiklenme
   ekranda modal ve sesle bildiriliyor.
@@ -89,6 +89,40 @@ UI (React)
 - İşlem listesi CSV dışa aktarımı
 - Replay klavye kısayolları (L/S/K) ve oturum özeti
 - Kör mod: sembol ve tarih gizli manuel test
+
+## Faz 3.5 — Örüntü arama 🔄
+
+"Pattern search" üç ayrı şeye denk geliyor. Üçü de aynı çıktıyı üretir — **geçmişte
+bir yerler listesi** — bu yüzden asıl iş üç arama değil, **sonuç yüzeyini bir kez
+kurmak**: `bulucu → eşleşme listesi → grafikte işaretleme + replay imlecini oraya
+atlatma`. Bulucular ona takılır.
+
+Strateji testinden farkı: orada pozisyon durum makinesi var (giriş → çıkış → PnL).
+Burada pozisyon yok, çıkış kuralı yok, kâr/zarar yok. Tek soru: **bu durum ne zaman
+oluştu?** Kural kurmadan ÖNCEKİ aşama bu — "bu 3 yılda 40 kez mi oldu, 4 kez mi?"
+
+### Kapsamda
+
+- 🔄 **Kural eşleşmesi.** Bir koşul grubunun doğru olduğu bar aralıklarını bul.
+  Primitif hazır: `RuleEvaluator.evaluate_group()` pozisyondan bağımsız çalışıyor.
+- 🔄 **Mum formasyonları.** Yutan mum, çekiç, doji, yıldız — 1–3 barın OHLC'sinden
+  çıkan deterministik formüller. İndikatör olarak eklenir; böylece yalnızca aramada
+  değil **strateji kurallarının içinde de** kullanılabilirler ("yutan mum VE RSI<30").
+
+### Bilinçli olarak ertelendi
+
+- ⬜ **Grafik formasyonları** (OBO, üçgen, çift tepe). Nesnel tanımı yok: neyin OBO
+  sayıldığına tolerans parametreleri karar verir, ayar değişince cevap değişir.
+  Yanlış pozitif oranı yüksek, doğrulaması zor. Diğer iki maddenin toplamından
+  büyük ve getirisi en belirsiz olan bu. Yapılacaksa kapsamı daraltılarak
+  (yalnızca çift tepe/dip, pivotlardan) girilmeli.
+- ⬜ **Benzerlik arama** ("şu ana benzeyen geçmiş pencereler"). Teknik tarafı kolay
+  ama iki tuzağı var: (1) en-yakın-komşu her zaman bir şey döndürür ve görsel
+  benzerliğin öngörü değeri düşüktür — tek "en iyi eşleşme" değil, N eşleşmenin
+  **sonrasının dağılımı** gösterilmeli; (2) lookahead riski üründeki en keskin yer,
+  hem arama havuzu hem "sonrasında ne oldu" ufku bar-index sınırlı olmalı
+  (RULES.md §19–23). Faz 6'daki "Benzer senaryolar" maddesiyle aynı iş — orada
+  değerlendirilmeli, burada değil.
 
 ## Faz 4.8 — Tasarım sistemi ve cihaz uyumu ✅
 Ürün fazı değil ama ürünün görünen yüzü; roadmap'te izi olmadığı için buraya yazıldı.
@@ -138,7 +172,9 @@ Yukarıda ⬜ ile işaretlenenlerin tek listesi. Sıra bir öneridir, karar sizi
    uygulama açıkken duyuluyor; alarmın asıl değeri kapalıyken haber vermesi.
 2. **Scanner sekmesi.** Menüde duruyor, yer tutucu gösteriyor. Motor hazır, eksik olan
    kendi ekranı.
-3. **Pattern Search** (Faz 3'ten kalan).
+3. ~~Pattern Search~~ → [Faz 3.5](#faz-35--örüntü-arama) olarak ayrıldı, üzerinde
+   çalışılıyor. Ertelenen iki maddesi (grafik formasyonları, benzerlik arama)
+   orada gerekçesiyle duruyor.
 4. **İşleme not / sebep yazma** (Faz 4'ten kalan) — manuel backtest'in "neden"i
    şu an hiçbir yere yazılmıyor.
 5. **Faz 5** — optimizer, walk-forward, Monte Carlo.

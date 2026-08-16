@@ -66,6 +66,7 @@ TradingResearchPlatform/
 │   │   ├── strategy/
 │   │   │   ├── StrategyBuilder.tsx
 │   │   │   ├── ConditionEditor.tsx
+│   │   │   ├── PatternSearchPanel.tsx # Koşulun geçmişteki eşleşmeleri (Faz 3.5)
 │   │   │   └── StrategyList.tsx
 │   │   │
 │   │   ├── scanner/                  # STUB
@@ -85,6 +86,7 @@ TradingResearchPlatform/
 │   │   ├── services/
 │   │   │   ├── api.ts
 │   │   │   ├── strategyApi.ts
+│   │   │   ├── patternApi.ts
 │   │   │   ├── adminApi.ts
 │   │   │   ├── chartAnalytics.ts
 │   │   │   ├── websocket.ts          # STUB
@@ -132,6 +134,7 @@ TradingResearchPlatform/
 │   │   │   │   ├── watchlist.py
 │   │   │   │   ├── admin.py
 │   │   │   │   ├── analytics.py
+│   │   │   │   ├── patterns.py        # Örüntü arama (Faz 3.5)
 │   │   │   │   ├── replay.py          # STUB
 │   │   │   │   ├── scanner.py         # STUB
 │   │   │   │   ├── backtest.py        # STUB
@@ -164,9 +167,11 @@ TradingResearchPlatform/
 │   │   │
 │   │   ├── indicators/
 │   │   │   ├── base.py
+│   │   │   ├── registry.py            # INDICATOR_INFO — indikatör eklemenin tek yeri
 │   │   │   ├── trend.py
 │   │   │   ├── momentum.py
-│   │   │   └── volatility.py
+│   │   │   ├── volatility.py
+│   │   │   └── patterns.py            # Mum formasyonları (0/1 seri döndürür)
 │   │   │
 │   │   ├── rules/                    # Rule/Strategy Engine — JSON kural ağacı
 │   │   │   ├── engine.py
@@ -178,6 +183,7 @@ TradingResearchPlatform/
 │   │   ├── engines/
 │   │   │   ├── strategy_engine.py
 │   │   │   ├── scanner_engine.py
+│   │   │   ├── pattern_engine.py      # Koşulun doğru olduğu bar aralıkları (pozisyonsuz)
 │   │   │   ├── replay_engine.py
 │   │   │   ├── execution.py           # Komisyon/slipaj, pozisyon boyutlandırma, portföy simülasyonu
 │   │   │   ├── comparison.py          # Manuel backtest ↔ strateji karşılaştırması
@@ -208,6 +214,8 @@ TradingResearchPlatform/
 │       ├── test_rules.py
 │       ├── test_strategy_api.py
 │       ├── test_alerts.py
+│       ├── test_candle_patterns.py
+│       ├── test_pattern_engine.py
 │       └── test_auth_api.py
 │
 │

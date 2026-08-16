@@ -301,6 +301,38 @@ export interface IndicatorInfo {
   min_period: number;
   max_period: number;
   fields: string[];
+  /**
+   * Periyot kavramı var mı? Mum formasyonları (yutan mum, doji, çekiç) 1–3
+   * barlıktır ve periyot almaz; koşul editörü onlarda anlamsız bir "Periyot"
+   * kutusu çizmesin diye backend bunu açıkça bildiriyor. Eski yanıtlarda alan
+   * yok — tanımsızsa `true` varsayılır.
+   */
+  uses_period?: boolean;
+}
+
+/** Koşulun geçmişte doğru olduğu bitişik bar aralığı (Faz 3.5 örüntü arama). */
+export interface PatternRegion {
+  start_index: number;
+  end_index: number;
+  start_time: number;
+  end_time: number;
+  bar_count: number;
+  conditions_met: string[];
+}
+
+export interface PatternSearchResponse {
+  symbol: string;
+  provider: string;
+  timeframe: string;
+  total_bars: number;
+  total_bars_scanned: number;
+  /** Eşleşen BAR sayısı. */
+  match_count: number;
+  /** Bitişik BÖLGE sayısı — kırpılsa bile tam sayı. */
+  region_count: number;
+  regions: PatternRegion[];
+  /** Liste `max_regions`'ta kırpıldı mı? */
+  truncated: boolean;
 }
 
 // ─── Operatör Listesi ────────────────────────────────────────────────────────

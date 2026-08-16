@@ -21,10 +21,12 @@ import StrategyList from '../strategy/StrategyList';
 import StrategyBuilder from '../strategy/StrategyBuilder';
 import BatchScannerTab from '../strategy/BatchScannerTab';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
+import { replayStore } from '../store/replayStore';
 import type {
   Strategy,
   EvaluateRequest,
   EvaluateResponse,
+  PatternRegion,
   SingleEvaluationLogItem,
 } from '../types/strategy';
 import { csvNumber, csvTimestamp, downloadCsv } from '../utils/csv';
@@ -297,6 +299,35 @@ export default function StrategyPage({
     if (onSelectTab) onSelectTab('chart');
   };
 
+  /**
+   * Bulunan bir örüntü eşleşmesine git (Faz 3.5).
+   *
+   * Replay imlecini o mumun üstüne koyar ve replay sekmesine geçer: kullanıcı
+   * eşleşmeyi SONRASINI görmeden inceler. Örüntü aramanın bu üründeki asıl
+   * değeri bu — bulunan yerler manuel backtest egzersizine dönüşür.
+   *
+   * `targetTimestamp` yazmak yeterli: App.tsx konuma çapalı pencereyi çekiyor,
+   * CandleChart da yüklenen veride o zaman damgasını bulup currentIndex ve
+   * cutoffIndex'i oraya hizalıyor.
+   */
+  const handleJumpToRegion = (region: PatternRegion) => {
+    const provider = autoDetectProvider(evalSymbol);
+
+    if (setSymbol) setSymbol(evalSymbol);
+    if (setProvider) setProvider(provider);
+    if (setTimeframe) setTimeframe(evalTimeframe);
+
+    replayStore.setState({
+      isReplayActive: true,
+      targetTimestamp: region.start_time,
+      currentIndex: null,
+      cutoffIndex: null,
+      isPlaying: false,
+    });
+
+    if (onSelectTab) onSelectTab('replay');
+  };
+
   const handleNavigateToChart = () => {
     handleNavigateToChartWithSymbol(evalSymbol, autoDetectProvider(evalSymbol), evalTimeframe, {
       limitBars: evalLimitBars,
@@ -465,6 +496,12 @@ export default function StrategyPage({
                       onSaved={handleSaved}
                       onCancel={handleCancel}
                       onHistorySelect={handleHistorySelect}
+                      patternSearchContext={{
+                        symbol: evalSymbol,
+                        provider: autoDetectProvider(evalSymbol),
+                        timeframe: evalTimeframe,
+                        onJumpToRegion: handleJumpToRegion,
+                      }}
                     />
                   </div>
                 </>
@@ -477,6 +514,12 @@ export default function StrategyPage({
                     indicators={indicators}
                     onSaved={handleSaved}
                     onCancel={handleCancel}
+                    patternSearchContext={{
+                      symbol: evalSymbol,
+                      provider: autoDetectProvider(evalSymbol),
+                      timeframe: evalTimeframe,
+                      onJumpToRegion: handleJumpToRegion,
+                    }}
                   />
                 </div>
               )}

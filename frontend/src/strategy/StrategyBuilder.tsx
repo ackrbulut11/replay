@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import ConditionEditor from './ConditionEditor';
+import PatternSearchPanel from './PatternSearchPanel';
 import { logEvent, logError } from '../services/eventLog';
 import type {
   Strategy,
@@ -31,6 +32,7 @@ import type {
   ConditionGroup,
   TimeframeFilter,
   IndicatorInfo,
+  PatternRegion,
   SingleEvaluationLogItem,
 } from '../types/strategy';
 import { createEmptyConditionGroup, TIMEFRAMES } from '../types/strategy';
@@ -43,6 +45,16 @@ interface StrategyBuilderProps {
   onCancel?: () => void;
   /** Test geçmişinden bir kayıt seçildiğinde tetiklenir (değerlendirme panelini geri yüklemek için). */
   onHistorySelect?: (item: SingleEvaluationLogItem) => void;
+  /**
+   * Örüntü arama bağlamı (Faz 3.5). Verilmezse panel hiç çizilmez — builder
+   * hangi sembolde arama yapılacağını kendi bilmiyor, bu bilgi sayfadan gelir.
+   */
+  patternSearchContext?: {
+    symbol: string;
+    provider: string;
+    timeframe: string;
+    onJumpToRegion?: (region: PatternRegion) => void;
+  };
 }
 
 export default function StrategyBuilder({
@@ -51,6 +63,7 @@ export default function StrategyBuilder({
   onSaved,
   onCancel,
   onHistorySelect,
+  patternSearchContext,
 }: StrategyBuilderProps) {
   const isEditing = strategy !== null;
   const { singleEvalHistory, evaluateResult } = useStrategyStore();
@@ -475,6 +488,21 @@ export default function StrategyBuilder({
           indicators={indicators}
           title="Giriş kuralları — pozisyon açar"
         />
+
+        {/* Örüntü arama (Faz 3.5).
+            Giriş kurallarının hemen altında duruyor çünkü sorduğu soru onun
+            öncesi: "bu koşul geçmişte kaç kez oluştu?". Kural kurulurken,
+            stratejiyi kaydetmeden çalışır. */}
+        {patternSearchContext && (
+          <PatternSearchPanel
+            group={entryRules}
+            parameters={parameters}
+            symbol={patternSearchContext.symbol}
+            provider={patternSearchContext.provider}
+            timeframe={patternSearchContext.timeframe}
+            onJumpToRegion={patternSearchContext.onJumpToRegion}
+          />
+        )}
 
         {/* Exit Rules */}
         <ConditionEditor

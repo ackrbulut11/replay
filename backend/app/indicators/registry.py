@@ -9,6 +9,16 @@ from __future__ import annotations
 
 import pandas as pd
 
+from app.indicators.patterns import (
+    calc_bearish_engulfing,
+    calc_bullish_engulfing,
+    calc_doji,
+    calc_evening_star,
+    calc_hammer,
+    calc_morning_star,
+    calc_shooting_star,
+)
+
 
 # ─── Ortak Yardımcılar ────────────────────────────────────────────────────────
 
@@ -284,6 +294,97 @@ INDICATOR_INFO = {
         "multi_output": False,
         "warmup": lambda period: period,
     },
+    # ─── Mum formasyonları ────────────────────────────────────────────────
+    # 1.0 = formasyon var, 0.0 = yok. Kuralda `> 0` ile okunur.
+    #
+    # `uses_period: False`: bu formasyonlar 1–3 barlıktır, periyot kavramı
+    # yoktur. Bayrak API'den arayüze taşınır ve koşul editörü orada anlamsız
+    # bir "Periyot" kutusu çizmez — kutu duruyorken kullanıcı ona bir sayı
+    # yazıyor ve hiçbir etkisi olmuyordu.
+    "BullishEngulfing": {
+        "display_name": "Yutan Boğa (mum formasyonu)",
+        "category": "pattern",
+        "default_period": 1,
+        "min_period": 1,
+        "max_period": 1,
+        "fields": [],
+        "calc": calc_bullish_engulfing,
+        "multi_output": False,
+        "uses_period": False,
+        "warmup": lambda period: 1,
+    },
+    "BearishEngulfing": {
+        "display_name": "Yutan Ayı (mum formasyonu)",
+        "category": "pattern",
+        "default_period": 1,
+        "min_period": 1,
+        "max_period": 1,
+        "fields": [],
+        "calc": calc_bearish_engulfing,
+        "multi_output": False,
+        "uses_period": False,
+        "warmup": lambda period: 1,
+    },
+    "Hammer": {
+        "display_name": "Çekiç (mum formasyonu)",
+        "category": "pattern",
+        "default_period": 1,
+        "min_period": 1,
+        "max_period": 1,
+        "fields": [],
+        "calc": calc_hammer,
+        "multi_output": False,
+        "uses_period": False,
+        "warmup": lambda period: 0,
+    },
+    "ShootingStar": {
+        "display_name": "Kayan Yıldız (mum formasyonu)",
+        "category": "pattern",
+        "default_period": 1,
+        "min_period": 1,
+        "max_period": 1,
+        "fields": [],
+        "calc": calc_shooting_star,
+        "multi_output": False,
+        "uses_period": False,
+        "warmup": lambda period: 0,
+    },
+    "Doji": {
+        "display_name": "Doji (mum formasyonu)",
+        "category": "pattern",
+        "default_period": 1,
+        "min_period": 1,
+        "max_period": 1,
+        "fields": [],
+        "calc": calc_doji,
+        "multi_output": False,
+        "uses_period": False,
+        "warmup": lambda period: 0,
+    },
+    "MorningStar": {
+        "display_name": "Sabah Yıldızı (mum formasyonu)",
+        "category": "pattern",
+        "default_period": 1,
+        "min_period": 1,
+        "max_period": 1,
+        "fields": [],
+        "calc": calc_morning_star,
+        "multi_output": False,
+        "uses_period": False,
+        "warmup": lambda period: 2,
+    },
+    "EveningStar": {
+        "display_name": "Akşam Yıldızı (mum formasyonu)",
+        "category": "pattern",
+        "default_period": 1,
+        "min_period": 1,
+        "max_period": 1,
+        "fields": [],
+        "calc": calc_evening_star,
+        "multi_output": False,
+        "uses_period": False,
+        "warmup": lambda period: 2,
+    },
 }
 
 
@@ -395,6 +496,9 @@ class IndicatorRegistry:
                     "min_period": info["min_period"],
                     "max_period": info["max_period"],
                     "fields": info["fields"],
+                    # Varsayılan True: periyot kavramı olmayan tek grup mum
+                    # formasyonları, geri kalan her indikatör periyot kullanıyor.
+                    "uses_period": info.get("uses_period", True),
                 }
             )
         return result

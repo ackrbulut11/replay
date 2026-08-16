@@ -241,6 +241,29 @@ def _validate_param_ref(
         )
 
 
+def validate_condition_group(
+    group: Any,
+    parameters: list[dict] | None = None,
+    field_name: str = "Koşul grubu",
+) -> list[str]:
+    """Tek başına bir koşul grubunu doğrular ve hata listesi döndürür.
+
+    Örüntü arama (Faz 3.5) kaydedilmiş bir stratejiye bağlı değildir: koşul
+    doğrudan istek gövdesinde gelir ve `entry_rules`/`exit_rules` anahtarları
+    yoktur. `validate_strategy` o yapıyı beklediği için burada aynı
+    `_validate_group` yeniden kullanılıyor — ikinci bir doğrulayıcı yazmak,
+    iki kural setinin zamanla ayrışması demekti.
+    """
+    errors: list[str] = []
+
+    if not isinstance(group, dict):
+        return [f"{field_name}: koşul grubu bir nesne olmalı"]
+
+    param_names = _parameter_names({"parameters": parameters or []}, errors)
+    _validate_group(group, param_names, field_name, errors, depth=0)
+    return errors
+
+
 def raise_if_invalid(strategy: dict) -> None:
     """Geçersizse `StrategyValidationError` fırlatır."""
     errors = validate_strategy(strategy)

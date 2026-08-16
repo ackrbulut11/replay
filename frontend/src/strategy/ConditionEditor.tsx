@@ -126,20 +126,26 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                 </option>
               ))}
             </select>
-            <input
-              type="text"
-              value={String(operand.period)}
-              onChange={(e) => {
-                const val = e.target.value;
-                onChange({
-                  ...operand,
-                  period: val.startsWith('$') ? val : parseInt(val) || operand.period,
-                });
-              }}
-              placeholder="Periyot (ör: 20)"
-              className="bg-surface-raised border border-line-strong text-content text-xs rounded-lg px-2 py-1.5 w-24 focus:border-accent-500 outline-none transition-colors font-mono"
-              title="İndikatör periyodu (örneğin: 14 veya 20). Gelişmiş kullanıcılar: $param_adı"
-            />
+            {/* Periyot kutusu yalnızca periyodu OLAN indikatörlerde.
+                Mum formasyonları (yutan mum, doji, çekiç) 1–3 barlıktır;
+                kutu duruyorken kullanıcı ona bir sayı yazıyor ve hiçbir
+                etkisi olmuyordu. */}
+            {indicators.find((i) => i.name === operand.name)?.uses_period !== false && (
+              <input
+                type="text"
+                value={String(operand.period)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onChange({
+                    ...operand,
+                    period: val.startsWith('$') ? val : parseInt(val) || operand.period,
+                  });
+                }}
+                placeholder="Periyot (ör: 20)"
+                className="bg-surface-raised border border-line-strong text-content text-xs rounded-lg px-2 py-1.5 w-24 focus:border-accent-500 outline-none transition-colors font-mono"
+                title="İndikatör periyodu (örneğin: 14 veya 20). Gelişmiş kullanıcılar: $param_adı"
+              />
+            )}
             {/* Çoklu çıktılı indikatörlerde alan seçimi */}
             {indicators.find((i) => i.name === operand.name)?.fields?.length ? (
               <select

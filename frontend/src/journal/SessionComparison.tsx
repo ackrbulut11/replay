@@ -209,8 +209,8 @@ export default function SessionComparisonPanel({ trades }: SessionComparisonPane
             </span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[440px] text-xs">
               <thead>
                 <tr className="text-content-faint border-b border-line">
                   <th className="text-left font-medium px-3 py-2">Metrik</th>

@@ -35,6 +35,14 @@ export default {
   theme: {
     fontSize: type as unknown as Record<string, [string, Record<string, string>]>,
     extend: {
+      /* Ekran genişliği giriş yöntemini söylemez: dokunmatik ekranlı bir
+         dizüstü geniştir ama fare yoktur, tabletin klavyesi olabilir. Yalnızca
+         hover'da beliren kontroller (satır silme, sürükleme tutamacı) böyle bir
+         cihazda hiç görünmez — `touch:` bu ayrımı ölçer, `lg:` ise ölçemez. */
+      screens: {
+        touch: { raw: '(hover: none)' },
+      },
+
       fontFamily: {
         sans: ['"IBM Plex Sans Variable"', 'system-ui', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],

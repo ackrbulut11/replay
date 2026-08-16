@@ -231,7 +231,11 @@ export default function ReplayTradePanel({
     // hâlde kalıyordu. Şerit artık sol altta, cetvelden uzakta durur.
     <div
       ref={panelRef}
-      className="flex items-center gap-1.5 bg-canvas border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-content-strong select-none"
+      /* Dar ekranda sarmalanır: stop/hedef/miktar alanları + Long/Short
+         düğmeleri tek satırda telefona sığmıyor ve işlem açma düğmeleri
+         ekranın dışında kalıyordu — manuel backtest'in tam da yapılamaz
+         hâle geldiği yer burasıydı. */
+      className="flex max-w-full flex-wrap items-center justify-center gap-1.5 bg-canvas border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-content-strong select-none"
     >
       {/* Sürükleme tutamacı + anlık fiyat */}
       <div
@@ -276,7 +280,7 @@ export default function ReplayTradePanel({
             onClick={handleClose}
             disabled={disabled}
             title="Pozisyonu kapat (K)"
-            className="flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded bg-ink-50 text-ink-950 hover:bg-ink-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1 touch:px-3 touch:py-2 text-2xs font-medium rounded bg-ink-50 text-ink-950 hover:bg-ink-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
             Kapat
@@ -346,7 +350,7 @@ export default function ReplayTradePanel({
             onClick={() => handleOpen('long')}
             disabled={disabled}
             title="Long pozisyon aç (L)"
-            className="flex items-center gap-0.5 px-2 py-1 text-2xs font-medium rounded bg-profit-500/15 text-profit-400 border border-profit-500/40 hover:bg-profit-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="flex items-center gap-0.5 px-2 py-1 touch:px-3 touch:py-2 text-2xs font-medium rounded bg-profit-500/15 text-profit-400 border border-profit-500/40 hover:bg-profit-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <TrendingUp className="w-3 h-3" />
             Long
@@ -356,7 +360,7 @@ export default function ReplayTradePanel({
             onClick={() => handleOpen('short')}
             disabled={disabled}
             title="Short pozisyon aç (S)"
-            className="flex items-center gap-0.5 px-2 py-1 text-2xs font-medium rounded bg-loss-500/15 text-loss-400 border border-loss-500/40 hover:bg-loss-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="flex items-center gap-0.5 px-2 py-1 touch:px-3 touch:py-2 text-2xs font-medium rounded bg-loss-500/15 text-loss-400 border border-loss-500/40 hover:bg-loss-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <TrendingDown className="w-3 h-3" />
             Short

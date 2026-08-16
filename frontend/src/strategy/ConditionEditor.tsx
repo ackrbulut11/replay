@@ -292,7 +292,7 @@ function ConditionRow({
         </div>
         <button
           onClick={onDelete}
-          className="opacity-0 group-hover:opacity-100 p-1 text-loss-400/60 hover:text-loss-400 hover:bg-loss-500/10 rounded-lg transition-all"
+          className="opacity-0 group-hover:opacity-100 touch:opacity-100 p-1 text-loss-400/60 hover:text-loss-400 hover:bg-loss-500/10 rounded-lg transition-all"
           title="Koşulu sil"
         >
           <Trash2 className="w-3.5 h-3.5" />

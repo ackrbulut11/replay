@@ -283,8 +283,10 @@ export default function JournalPage() {
         )}
 
         {trades.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          /* `min-w`siz bir `w-full` tablo kaba sığmak için sıkışır, kaymaz:
+             dokuz sütun telefonda okunamaz hâle geliyordu. */
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[760px] text-xs">
               <thead>
                 <tr className="text-content-faint border-b border-line">
                   <th className="text-left font-medium px-4 py-2.5 w-6"></th>

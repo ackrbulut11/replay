@@ -551,9 +551,13 @@ export default function BatchScannerTab({
   return (
     <div className="flex flex-col h-full bg-canvas overflow-hidden">
       {/* Üst Ayarlanabilir Kontrol & Özet Paneli */}
+      {/* Yükseklik satır içi `style` yerine CSS değişkeniyle: satır içi değer
+          sınıfları ezer ve sürüklenerek ayarlanmış masaüstü yüksekliği dar
+          ekranda da dayatılırdı. Telefonda panel içeriğine göre büyür,
+          ekranın yarısında durur — altındaki sonuç tablosu görünür kalsın. */}
       <div
-        style={{ height: `${topHeight}px` }}
-        className="flex-shrink-0 p-4 space-y-3 bg-canvas overflow-y-auto custom-scrollbar border-b border-line"
+        style={{ ['--top-h' as string]: `${topHeight}px` }}
+        className="flex-shrink-0 max-h-[50%] p-4 space-y-3 bg-canvas overflow-y-auto custom-scrollbar border-b border-line lg:max-h-none lg:h-[var(--top-h)]"
       >
 
         <div className="bg-surface-raised border border-line rounded-2xl p-4 space-y-4 shadow-xl">
@@ -776,7 +780,7 @@ export default function BatchScannerTab({
       <div
         onMouseDown={handleMouseDownResize}
         onDoubleClick={() => setTopHeight(310)}
-        className="group relative h-3 bg-canvas hover:bg-accent-600/40 border-t border-b border-line cursor-row-resize flex items-center justify-center transition-colors select-none z-20 flex-shrink-0"
+        className="group relative h-3 bg-canvas hover:bg-accent-600/40 border-t border-b border-line cursor-row-resize hidden lg:flex items-center justify-center transition-colors select-none z-20 flex-shrink-0"
         title="Yukarı / Aşağı sürükleyerek tablo alanını genişletin (Çift tık: Varsayılan boyut)"
       >
         <div className="w-16 h-1 rounded-full bg-ink-650 group-hover:bg-accent-300 transition-colors flex items-center justify-center">
@@ -829,8 +833,8 @@ export default function BatchScannerTab({
         </div>
 
         {/* Tüm Sembollerin Listelendiği Kaydırılabilir Metrik Tablosu */}
-        <div className="flex-1 min-h-0 bg-surface-raised border border-line rounded-2xl overflow-y-auto custom-scrollbar shadow-xl">
-          <table className="w-full text-left border-collapse">
+        <div className="flex-1 min-h-0 bg-surface-raised border border-line rounded-2xl overflow-auto custom-scrollbar shadow-xl">
+          <table className="w-full min-w-[720px] text-left border-collapse">
             <thead className="sticky top-0 z-10 bg-surface-raised border-b border-line">
               <tr className="text-2xs text-content-muted font-medium">
                 <th className="py-3 px-4">SEMBOL</th>

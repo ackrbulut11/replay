@@ -209,7 +209,7 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
     // (bkz. useDraggablePanel).
     <div
       ref={panelRef}
-      className="w-[420px] max-w-[90vw] bg-canvas border border-white/[0.1] rounded-lg shadow-2xl backdrop-blur-md text-content-strong select-none overflow-hidden"
+      className="w-[420px] max-w-full bg-canvas border border-white/[0.1] rounded-lg shadow-2xl backdrop-blur-md text-content-strong select-none overflow-hidden"
     >
       {/* Başlık: tutamaçtan sürüklenir, gerisine tıklanınca açılır/kapanır. */}
       <div className="flex items-center gap-1.5 px-2 py-1">

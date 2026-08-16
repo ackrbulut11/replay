@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useVisibleInterval } from '../../hooks/useVisibleInterval';
 import {
   Plus, RefreshCw, ChevronDown, Flag, Trash2,
-  Sparkles, ArrowUpDown, GripVertical, StickyNote,
+  Sparkles, ArrowUpDown, GripVertical, StickyNote, X,
 } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
@@ -138,7 +138,7 @@ function WatchlistRow({
             e.stopPropagation();
             onRemove();
           }}
-          className="opacity-0 group-hover:opacity-100 p-1 text-content-faint hover:text-loss-400 hover:bg-loss-950/40 rounded transition-all"
+          className="opacity-0 group-hover:opacity-100 touch:opacity-100 p-1 text-content-faint hover:text-loss-400 hover:bg-loss-950/40 rounded transition-all"
           title="Listeden Çıkar"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -387,14 +387,27 @@ export default function WatchlistPanel({
   const getListHeaderColor = () => activeGroup?.color || '#6366f1';
 
   return (
+    /* Dar ekranda panel grafiğin YANINA değil ÜSTÜNE açılır.
+       Yan yana dururken 288px'lik panel + iki 41px'lik ray, 375px'lik bir
+       telefonda grafiğe sıfır piksel bırakıyordu: grafik hiç görünmüyor,
+       paneller iç içe geçiyordu. `lg`den itibaren eski yerleşim aynen sürer.
+
+       Genişlik CSS değişkeniyle veriliyor: satır içi `style` her zaman
+       sınıfları ezerdi, yani sürüklenerek ayarlanan masaüstü genişliği
+       telefonda da uygulanır ve bu düzeltme hiç çalışmazdı. */
     <div
-      style={{ width: state.panelWidth }}
-      className="h-full bg-canvas border-l border-line flex flex-col z-20 shadow-2xl overflow-hidden animate-slideInRight relative shrink-0"
+      style={{ ['--panel-w' as string]: `${state.panelWidth}px` }}
+      /* Genişlik `vw` DEĞİL yüzde: panelin kabı ekrandan dar (solda gezinme
+         rayı + dolgu), `86vw` o kabı aşıp sağ kenarından kırpılıyordu.
+         Kalan %14 grafiği gösterir — panelin üste binen bir katman olduğu
+         böylece görünür. */
+      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] flex-col overflow-hidden border-l border-line bg-canvas shadow-2xl animate-slideInRight lg:static lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
     >
-      {/* Resize handle (left edge) */}
+      {/* Resize handle (left edge) — fareyle sürüklenir; dokunmatikte panel
+          zaten tam boy açıldığı için gizli. */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors hidden lg:block"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -497,6 +510,17 @@ export default function WatchlistPanel({
             title="Yeni Hisse / Sembol Ekle"
           >
             <Plus className="w-4 h-4" />
+          </button>
+
+          {/* Kapat — dar ekranda panel grafiğin üstüne bindiği için kendi
+              kapatma düğmesini taşır; sağdaki dikey ray orada gizli. */}
+          <button
+            onClick={() => watchlistStore.togglePanel()}
+            className="tap-target p-1.5 text-content-muted hover:text-content-strong hover:bg-surface-hover rounded-lg transition-all lg:hidden"
+            title="Paneli Kapat"
+            aria-label="İzleme listesi panelini kapat"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>

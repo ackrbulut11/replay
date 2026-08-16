@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import {
   Bell, Plus, Trash2, Power,
-  TrendingUp, TrendingDown, Clock, GripVertical
+  TrendingUp, TrendingDown, Clock, GripVertical, X
 } from 'lucide-react';
 import { alertStore, useAlertStore, AlertItem } from '../../store/alertStore';
 import { watchlistStore, useWatchlistStore } from '../../store/watchlistStore';
@@ -91,14 +91,21 @@ export default function AlertsPanel({
   };
 
   return (
+    /* İzleme listesi paneliyle aynı kural: dar ekranda grafiğin yanına değil
+       üstüne açılır, `lg`den itibaren yine yan yana. Genişlik satır içi
+       `style` yerine CSS değişkeniyle veriliyor — satır içi değer sınıfları
+       ezer ve telefonda da masaüstü genişliğini dayatırdı. */
     <div
-      style={{ width: watchlistState.panelWidth }}
-      className="h-full bg-canvas border-l border-line flex flex-col z-20 select-none shrink-0 shadow-2xl backdrop-blur-md animate-fadeIn relative overflow-hidden text-content-strong"
+      style={{ ['--panel-w' as string]: `${watchlistState.panelWidth}px` }}
+      /* Genişlik `vw` DEĞİL yüzde: panelin kabı ekrandan dar (solda gezinme
+         rayı + dolgu), `86vw` o kabı aşıp sağ kenarından kırpılıyordu. */
+      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] select-none flex-col overflow-hidden border-l border-line bg-canvas text-content-strong shadow-2xl backdrop-blur-md animate-fadeIn lg:static lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
     >
-      {/* Resize handle (left edge) */}
+      {/* Resize handle (left edge) — fareyle sürüklenir; dokunmatikte panel
+          zaten tam boy açıldığı için gizli. */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors hidden lg:block"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -122,13 +129,26 @@ export default function AlertsPanel({
           </div>
         </div>
 
-        <button
-          onClick={onOpenCreateModal}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-ink-50 text-ink-950 text-xs font-medium hover:bg-accent-300 transition-colors shadow-xs"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Alarm Ekle</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onOpenCreateModal}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-ink-50 text-ink-950 text-xs font-medium hover:bg-accent-300 transition-colors shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Alarm Ekle</span>
+          </button>
+
+          {/* Kapat — dar ekranda panel grafiğin üstüne bindiği için kendi
+              kapatma düğmesini taşır; sağdaki dikey ray orada gizli. */}
+          <button
+            onClick={() => watchlistStore.togglePanel()}
+            className="tap-target p-1.5 text-content-muted hover:text-content-strong hover:bg-surface-hover rounded-lg transition-all lg:hidden"
+            title="Paneli Kapat"
+            aria-label="Alarmlar panelini kapat"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Alerts Content */}

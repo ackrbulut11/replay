@@ -174,7 +174,55 @@
   }
 }
 
+@layer components {
+  /* ─── Dokunmatik hedefler ───────────────────────────────────────────────
+     Yoğun bir enstrüman arayüzünde düğmeler 24–30px; fareyle sorun değil,
+     parmakla değil. Düzeni bozmadan (padding büyütmeden) dokunma alanını
+     görünmez bir katmanla 44px'e çıkarır.
+
+     Yalnızca ÇEVRESİNDE yer olan düğmelerde kullanılır: yan yana duran
+     ikon dizilerinde 44px'lik alanlar üst üste biner ve komşunun dokunuşunu
+     çalar — orada çözüm aralığı açmaktır, bu sınıf değil. */
+  @media (pointer: coarse) {
+    .tap-target {
+      position: relative;
+    }
+
+    .tap-target::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 44px;
+      height: 44px;
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  /* Telefonda sağdan açılan panellerin (izleme listesi, alarmlar) ortak
+     zemini — grafiği daraltmak yerine üstüne biner. */
+  .sheet-backdrop {
+    background-color: rgb(0 0 0 / 0.55);
+  }
+}
+
 @layer utilities {
+  /* Çentik / ana ekran çizgisi payı. `viewport-fit=cover` ile arayüz ekranın
+     tamamına yayıldı; kenarlardaki dokunulamaz bölgeler burada geri veriliyor.
+     `max()` ile: güvenli alanı olmayan cihazda değer 0'a düşer, verilen taban
+     boşluk korunur. */
+  .pb-safe {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+
+  .pl-safe {
+    padding-left: max(0px, env(safe-area-inset-left));
+  }
+
+  .pr-safe {
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
   /* Hareketi azalt tercihini tek yerden karşıla. */
   @media (prefers-reduced-motion: reduce) {
     *,

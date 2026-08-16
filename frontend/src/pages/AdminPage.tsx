@@ -264,8 +264,10 @@ export default function AdminPage() {
             </h3>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          {/* `min-w`siz bir `w-full` tablo kaba sığmak için sıkışır, kaymaz:
+              sekiz sütun telefonda okunamaz hâle geliyordu. */}
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[720px] text-xs">
               <thead>
                 <tr className="text-content-faint border-b border-line">
                   <th className="text-left font-medium px-4 py-2.5 w-6"></th>
@@ -368,8 +370,8 @@ export default function AdminPage() {
             <CopyEmailsButton emails={waitlist.map((w) => w.email)} />
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[440px] text-xs">
               <thead>
                 <tr className="text-content-faint border-b border-line">
                   <th className="text-left font-medium px-4 py-2.5">E-posta</th>
@@ -497,8 +499,8 @@ function EventsPanel() {
           )}
 
           {events.length > 0 && (
-            <div className="overflow-x-auto max-h-[420px] overflow-y-auto custom-scrollbar">
-              <table className="w-full text-xs">
+            <div className="overflow-auto max-h-[420px] custom-scrollbar">
+              <table className="w-full min-w-[640px] text-xs">
                 <thead className="sticky top-0 bg-surface-raised">
                   <tr className="text-content-faint border-b border-line">
                     <th className="text-left font-medium px-4 py-2">Zaman</th>

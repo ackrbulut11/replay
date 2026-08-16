@@ -160,7 +160,27 @@ function sanitizeLists(lists: WatchlistGroup[]): WatchlistGroup[] {
 
 
 
+/**
+ * Panel açılışta kapalı mı başlamalı?
+ *
+ * Dar ekranda panel grafiğin yanına değil ÜSTÜNE açılıyor (bkz.
+ * WatchlistPanel). Kayıtlı `isOpen: true` ile açılan uygulama, telefonda
+ * kullanıcıyı grafiği tamamen örten bir listeyle karşılıyordu — ilk izlenim
+ * "hiçbir şey çalışmıyor" oluyordu. Bu yüzden dar ekranda panel kapalı
+ * başlar; kullanıcı araç çubuğundan açtığında normal şekilde çalışır ve
+ * masaüstünde kayıtlı tercih aynen korunur.
+ *
+ * Eşik, panelin yan yana durabildiği genişlikle (`lg`, 1024px) aynı.
+ */
+const DOCKED_PANEL_MIN_WIDTH = 1024;
+
+function prefersPanelClosed(): boolean {
+  return typeof window !== 'undefined' && window.innerWidth < DOCKED_PANEL_MIN_WIDTH;
+}
+
 function loadInitialState(): WatchlistState {
+  const startClosed = prefersPanelClosed();
+
   try {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (stored) {
@@ -169,7 +189,7 @@ function loadInitialState(): WatchlistState {
       lists = sanitizeLists(lists);
 
       return {
-        isOpen: parsed.isOpen !== undefined ? parsed.isOpen : true,
+        isOpen: startClosed ? false : parsed.isOpen !== undefined ? parsed.isOpen : true,
         panelWidth: parsed.panelWidth || DEFAULT_PANEL_WIDTH,
         activeRightTool: 'watchlist',
         activeListId: parsed.activeListId || 'favoriler',
@@ -181,7 +201,7 @@ function loadInitialState(): WatchlistState {
     console.error('Failed to load watchlist from localStorage', e);
   }
   return {
-    isOpen: true,
+    isOpen: !startClosed,
     panelWidth: DEFAULT_PANEL_WIDTH,
     activeRightTool: 'watchlist',
     activeListId: 'favoriler',

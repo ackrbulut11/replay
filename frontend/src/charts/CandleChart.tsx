@@ -544,6 +544,17 @@ export default function CandleChart({
   const [isDatesOpen, setIsDatesOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
+  /**
+   * Dar ekranda araç çubuğunun ikincil kontrolleri.
+   *
+   * Şerit tek satırda ~970px istiyor; 375px'lik bir telefonda Göstergeler,
+   * Tarih ve LOG düğmeleri ekranın 600px kadar sağında, yani hiç
+   * dokunulamayacak yerde kalıyordu. `lg`nin altında bu kontroller gizlenir ve
+   * bu düğmeyle şeridin altına açılır — aynı JSX, iki yerleşim; kopyalanmış
+   * ikinci bir menü değil.
+   */
+  const [isCompactToolsOpen, setIsCompactToolsOpen] = useState(false);
+
 
   // Reactive watchlist state — ensures bookmark button re-renders on add/remove
   const [watchlistState] = useWatchlistStore();
@@ -2511,12 +2522,25 @@ export default function CandleChart({
   
   return (
     <div className="relative w-full h-full border border-line rounded-xl overflow-hidden bg-canvas">
-      {/* Yüzen Kontrol Paneli Araç Çubuğu */}
-      <div className="absolute top-2 left-2 right-2 h-12 z-30 flex items-center justify-between bg-canvas border border-line rounded-xl px-3.5 shadow-2xl backdrop-blur-md text-content-strong">
+      {/* Yüzen Kontrol Paneli Araç Çubuğu.
+          `lg`nin altında tek satıra sığmıyor (etiketlerle birlikte ~970px
+          istiyor), bu yüzden sarmalanabilir: ikincil kontroller "Araçlar"
+          düğmesiyle şeridin altına açılır. Şerit `z-30` ve dolu zeminli
+          olduğu için açıldığında altındaki çizim araç çubuğunun üstünü
+          temiz şekilde örter. */}
+      <div
+        className={`absolute top-2 left-2 right-2 z-40 flex min-h-[3rem] flex-wrap items-center gap-y-2 bg-canvas border border-line rounded-xl px-2.5 py-1.5 shadow-2xl backdrop-blur-md text-content-strong lg:h-12 lg:flex-nowrap lg:justify-between lg:px-3.5 lg:py-0 ${
+          /* Açıkken sola yaslanır: satırlar sıkı dolar ve okuma sırası
+             bozulmaz. Kapalıyken iki uca yaslanır — sembol solda, "Araçlar"
+             sağda. */
+          isCompactToolsOpen ? 'justify-start' : 'justify-between'
+        }`}
+      >
         {/* Sol Taraf: Logo & Sembol & Sağlayıcı & Zaman Dilimi */}
-        <div className="flex items-center gap-3">
-          {/* Logo / Başlık */}
-          <div className="flex items-center gap-1.5 border-r border-line pr-3 h-5">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 lg:flex-nowrap lg:gap-x-3">
+          {/* Logo / Başlık — dar ekranda yer kaplamasın diye gizli; kimlik
+              zaten sol gezinme rayındaki logoda. */}
+          <div className="hidden xl:flex items-center gap-1.5 border-r border-line pr-3 h-5">
             {/* Landing'deki ikizi gibi bu wordmark de gradient metindi.
                 Grafik araç çubuğunda, mumların hemen üstünde duran mavi-yeşil-mor
                 bir geçiş, grafiğin kendi renkleriyle yarışıyordu. */}
@@ -2532,9 +2556,9 @@ export default function CandleChart({
               className="flex items-center gap-2 bg-white/[0.03] border border-line hover:border-accent-500/40 rounded-lg px-2.5 py-1 transition-all group"
               title="Sembol Ara (BIST 100, NASDAQ, Crypto)"
             >
-              <Search className="w-3.5 h-3.5 text-accent-400 group-hover:scale-110 transition-transform" />
+              <Search className="w-3.5 h-3.5 shrink-0 text-accent-400 group-hover:scale-110 transition-transform" />
               <div className="flex items-center gap-1">
-                <span className="font-mono text-2xs text-content-faint font-medium select-none">Symbol:</span>
+                <span className="hidden xl:inline font-mono text-2xs text-content-faint font-medium select-none">Symbol:</span>
                 <span className="text-xs font-medium text-content-strong font-mono tracking-tight group-hover:text-accent-400">
                   {/*
                     Kör modda sembol adı gizlenir: "bu BTC, 2021'de yükseldi"
@@ -2546,10 +2570,11 @@ export default function CandleChart({
               </div>
             </button>
 
-            {/* Quick Watchlist Bookmark Button — reactive via useWatchlistStore */}
+            {/* Quick Watchlist Bookmark Button — reactive via useWatchlistStore.
+                Dar ekranda ikincil: "Araçlar" satırında yerini alır. */}
             <button
               onClick={() => watchlistStore.toggleSymbol(symbol, provider)}
-              className={`p-1.5 rounded-lg border transition-all ${
+              className={`hidden lg:block p-1.5 rounded-lg border transition-all ${
                 isBookmarked
                   ? 'bg-warn-500/15 text-warn-300 border-warn-500/30 shadow-xs'
                   : 'bg-white/[0.03] border-line text-content-faint hover:text-warn-400 hover:bg-white/[0.06]'
@@ -2560,13 +2585,17 @@ export default function CandleChart({
             </button>
           </div>
 
-          {/* Zaman Dilimi Seçimi */}
+          {/* Zaman Dilimi Seçimi — sembolle birlikte, her genişlikte görünen
+              iki temel kontrolden biri. */}
           <div className="flex items-center gap-1 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1">
-            <span className="font-mono text-2xs text-content-faint font-medium select-none">Interval</span>
+            <span className="hidden xl:inline font-mono text-2xs text-content-faint font-medium select-none">Interval</span>
             <select
               value={timeframe}
               onChange={(e) => handleTimeframeChange(e.target.value)}
-              className="bg-transparent border-none outline-none text-xs font-medium text-content cursor-pointer focus:ring-0"
+              /* Dokunmatikte açılır listeler 18px yüksekliğinde kalıyordu —
+                 parmakla isabet ettirilemeyecek kadar ince. Dolgu şeridin
+                 yüksekliğini değiştirmez, yalnızca hedefi büyütür. */
+              className="bg-transparent border-none outline-none text-xs font-medium text-content cursor-pointer focus:ring-0 touch:py-1.5"
             >
               <option value="1m" className="bg-canvas text-content-strong">1m</option>
               <option value="5m" className="bg-canvas text-content-strong">5m</option>
@@ -2594,12 +2623,19 @@ export default function CandleChart({
           )}
 
           {/* Grafik Tipi Seçimi (Mum / Çizgi) */}
-          <div className="flex items-center gap-1 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1">
-            <span className="font-mono text-2xs text-content-faint font-medium select-none">Grafik</span>
+          <div
+            className={`${
+              isCompactToolsOpen ? 'flex' : 'hidden'
+            } lg:flex items-center gap-1 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1`}
+          >
+            <span className="hidden xl:inline font-mono text-2xs text-content-faint font-medium select-none">Grafik</span>
             <select
               value={chartType}
               onChange={(e) => setChartType(e.target.value as 'candlestick' | 'line')}
-              className="bg-transparent border-none outline-none text-xs font-medium text-content cursor-pointer focus:ring-0"
+              /* Dokunmatikte açılır listeler 18px yüksekliğinde kalıyordu —
+                 parmakla isabet ettirilemeyecek kadar ince. Dolgu şeridin
+                 yüksekliğini değiştirmez, yalnızca hedefi büyütür. */
+              className="bg-transparent border-none outline-none text-xs font-medium text-content cursor-pointer focus:ring-0 touch:py-1.5"
             >
               <option value="candlestick" className="bg-canvas text-content-strong">Mum Grafiği</option>
               <option value="line" className="bg-canvas text-content-strong">Çizgi Grafiği</option>
@@ -2609,7 +2645,9 @@ export default function CandleChart({
           {/* Replay Modu Butonu */}
           <button
             onClick={handleToggleReplayMode}
-            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none ${
+            className={`${
+              isCompactToolsOpen ? 'flex' : 'hidden'
+            } lg:flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none ${
               replayState.isReplayActive
                 ? 'bg-warn-500/15 text-warn-300 border-warn-500/40 shadow-xs'
                 : 'bg-white/[0.03] border-line text-content hover:bg-white/[0.06] hover:text-content-strong'
@@ -2630,13 +2668,21 @@ export default function CandleChart({
                   : undefined
               }
             >
-              <Zap className="w-3.5 h-3.5 text-accent-400" />
-              <span>
+              <Zap className="w-3.5 h-3.5 shrink-0 text-accent-400" />
+              {/* Dar ekranda aynı bilgi kısaltılır: rozet tam metniyle
+                  şeridi ikinci satıra taşırıp mumların üstünü kapatıyordu. */}
+              <span className="hidden lg:inline">
                 Strateji ({evaluateResult.total_trades ?? 0} İşlem ·{' '}
                 {shownSignalCount < evaluateResult.signals.length
                   ? `${shownSignalCount}/${evaluateResult.signals.length}`
                   : evaluateResult.signals.length}{' '}
                 Sinyal)
+              </span>
+              <span className="lg:hidden font-mono">
+                {evaluateResult.total_trades ?? 0}i ·{' '}
+                {shownSignalCount < evaluateResult.signals.length
+                  ? `${shownSignalCount}/${evaluateResult.signals.length}`
+                  : evaluateResult.signals.length}s
               </span>
               <button
                 onClick={() => strategyStore.clearEvaluateResult()}
@@ -2649,8 +2695,53 @@ export default function CandleChart({
           )}
         </div>
 
+        {/* Dar ekranda ikincil kontrolleri açan düğme. Masaüstünde hepsi zaten
+            şeritte durduğu için gizli.
+
+            Yükleme göstergesi burada da tekrar eder: açılır satır kapalıyken
+            asıl spinner gizli kalıyor ve "bir şey oluyor mu" sorusu
+            cevapsız kalıyordu. */}
+        <div className="flex items-center gap-1 lg:hidden">
+          {loading && <Loader2 className="w-4 h-4 animate-spin text-accent-400" />}
+          <button
+            onClick={() => setIsCompactToolsOpen((v) => !v)}
+            aria-expanded={isCompactToolsOpen}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ease-out ${
+              isCompactToolsOpen
+                ? 'border-accent-500/30 bg-accent-500/15 text-accent-400'
+                : 'border-line bg-white/[0.03] text-content hover:bg-white/[0.06] hover:text-content-strong'
+            }`}
+          >
+            {isCompactToolsOpen ? <X className="w-3.5 h-3.5" /> : <SlidersHorizontal className="w-3.5 h-3.5" />}
+            Araçlar
+          </button>
+        </div>
+
         {/* Sağ Taraf: Göstergeler popover, Tarih aralığı popover, Log scale, Loading spinner */}
-        <div className="flex items-center gap-2">
+        <div
+          className={`${
+            isCompactToolsOpen ? 'flex w-full border-t border-line-subtle pt-2' : 'hidden'
+          } lg:flex lg:w-auto lg:border-t-0 lg:pt-0 flex-wrap items-center gap-2`}
+        >
+          {/* İzleme listesi ve alarmlar — `lg`nin altında sağdaki dikey ray
+              gizli olduğu için bu iki araç buradan açılır. */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <button
+              onClick={() => watchlistStore.setActiveRightTool('watchlist')}
+              className="flex items-center gap-1.5 rounded-lg border border-line bg-white/[0.03] px-3 py-1 text-xs font-medium text-content transition-colors ease-out hover:bg-white/[0.06] hover:text-content-strong"
+            >
+              <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-warn-400 text-warn-400' : 'text-accent-400'}`} />
+              Liste
+            </button>
+            <button
+              onClick={() => watchlistStore.setActiveRightTool('alerts')}
+              className="flex items-center gap-1.5 rounded-lg border border-line bg-white/[0.03] px-3 py-1 text-xs font-medium text-content transition-colors ease-out hover:bg-white/[0.06] hover:text-content-strong"
+            >
+              <Bell className="w-3.5 h-3.5 text-accent-400" />
+              Alarm
+            </button>
+          </div>
+
           {/* Göstergeler Popover */}
           <div className="relative" id="indicators-popover">
             <button
@@ -2784,17 +2875,24 @@ export default function CandleChart({
             LOG
           </button>
 
-          {/* Loading Spinner */}
+          {/* Loading Spinner — dar ekranda "Araçlar" düğmesinin yanındaki
+              kopyası görünür (bu satır kapalıyken de haber verebilsin diye). */}
           {loading && (
-            <div className="ml-1 text-accent-400 animate-spin">
+            <div className="ml-1 hidden text-accent-400 animate-spin lg:block">
               <Loader2 className="w-4 h-4" />
             </div>
           )}
         </div>
       </div>
 
-      {/* Dikey Çizim Toolbarı - Yüzen Kontrol Paneli Araç Çubuğunun Altında Konumlandırılmıştır */}
-      <div className="absolute top-[62px] left-2 z-20 flex flex-col gap-1.5">
+      {/* Dikey Çizim Toolbarı - Yüzen Kontrol Paneli Araç Çubuğunun Altında
+          Konumlandırılmıştır.
+
+          Genişlik `max-w` ile sınırlanır, `right-2` ile DEĞİL: sağa kadar
+          uzatılan şeffaf bir sütun, grafiğin o yatay bandındaki sürükleme ve
+          yakınlaştırmayı yutardı. İçindeki şerit gerekirse kendi içinde
+          yatay kayar. */}
+      <div className="absolute top-[62px] left-2 z-20 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
         <DrawingToolbar
           activeTool={activeTool}
           snapEnabled={snapEnabled}
@@ -3011,7 +3109,10 @@ export default function CandleChart({
           Panel, araç çubuğunun tam altında ve ortalanmış başlar; başlıktan
           sürüklenerek istenen yere taşınabilir (bkz. ReplayTradePanel). */}
       {replayState.isReplayActive && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2">
+        /* Genişlik grafiğe göre sınırlanır: içerideki şeritler (kontroller,
+           işlem paneli, geçmiş) telefonda tek satıra sığmıyor ve ekranın
+           dışına taşıyordu — artık sarmalanıp ortalanıyorlar. */
+        <div className="absolute top-16 left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-col items-center gap-2">
           <ReplayControls
             totalBars={data.length}
             onStepForward={handleStepForward}
@@ -3053,7 +3154,7 @@ export default function CandleChart({
           (ör. replay konumu bu zaman diliminde yok, en eski muma taşındı).
           Grafiği kapatmaz; kullanıcı kapatabilir, sonraki yüklemede sıfırlanır. */}
       {notice && !loading && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 max-w-xl flex items-start gap-2.5 bg-warn-500/10 border border-warn-500/30 rounded-lg px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] max-w-xl flex items-start gap-2.5 bg-warn-500/10 border border-warn-500/30 rounded-lg px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
           <AlertCircle className="w-4 h-4 text-warn-400 shrink-0 mt-0.5" />
           <span className="text-warn-100/90 text-xs leading-relaxed">{notice}</span>
           <button
@@ -3147,7 +3248,7 @@ export default function CandleChart({
         <div
           id="plus-menu-popover"
           style={{ top: `${Math.max(10, plusMenu.y - 18)}px` }}
-          className="absolute right-[84px] z-40 bg-[#1e222d] border border-[#2a2e39] rounded-xl shadow-2xl py-1.5 min-w-[310px] text-xs animate-fadeIn select-none backdrop-blur-md"
+          className="absolute right-[84px] z-40 w-[310px] max-w-[calc(100%-5.5rem)] bg-[#1e222d] border border-[#2a2e39] rounded-xl shadow-2xl py-1.5 text-xs animate-fadeIn select-none backdrop-blur-md"
         >
           {/* Alarm Ekle Menü Seçeneği - Modal Açmadan Doğrudan Anında Ekler */}
           <button

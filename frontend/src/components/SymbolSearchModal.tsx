@@ -95,7 +95,9 @@ export default function SymbolSearchModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/70 backdrop-blur-xs animate-fadeIn">
+    /* `px-4`: paneller `w-full` olduğu için yatay boşluk olmadan telefonda
+       ekranın iki kenarına yapışıyordu. */
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16 bg-black/70 backdrop-blur-xs animate-fadeIn">
       {/* Modal Card */}
       <div 
         className="w-full max-w-2xl bg-canvas border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] text-content-strong"

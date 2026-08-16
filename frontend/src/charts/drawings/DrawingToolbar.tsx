@@ -59,15 +59,19 @@ export default function DrawingToolbar({
   onToggleSnap,
   onClearAll,
 }: DrawingToolbarProps) {
+  // Dar ekranda şerit sığmayabilir (320px'lik cihazlarda silgi düğmesiyle
+  // birlikte taşıyor): kesilmek yerine yatay kaydırılır. Dokunmatikte düğmeler
+  // bir tık büyür — yan yana durdukları için görünmez 44px'lik hedef katmanı
+  // komşunun dokunuşunu çalardı, çözüm gerçek boyut.
   return (
-    <div className="flex items-center gap-1">
-      <div className="flex items-center gap-0.5 bg-canvas border border-line rounded-lg p-0.5 shadow-2xl">
+    <div className="flex max-w-full items-center gap-1 overflow-x-auto custom-scrollbar">
+      <div className="flex shrink-0 items-center gap-0.5 bg-canvas border border-line rounded-lg p-0.5 shadow-2xl">
         {tools.map(({ tool, icon, label }) => (
           <button
             key={tool}
             onClick={() => onChangeTool(tool)}
             title={label}
-            className={`p-1.5 rounded-md transition-colors ${
+            className={`p-1.5 touch:p-2 rounded-md transition-colors ${
               activeTool === tool
                 ? 'bg-accent-500/15 text-accent-400 border border-accent-500/30'
                 : 'text-content-muted hover:text-content-strong hover:bg-white/[0.04] border border-transparent'

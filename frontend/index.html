@@ -4,7 +4,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/replay-logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: çentikli/yuvarlak köşeli telefonlarda arayüz ekranın
+         tamamına yayılır; kenar boşlukları CSS'te `env(safe-area-inset-*)` ile
+         geri verilir (bkz. index.css). Bunsuz alt köşelerdeki eylemler ana
+         ekran çizgisinin altında kalıyordu. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0b0e" />
     <title>REPLAY — Market replay and strategy research</title>
     <meta

@@ -8,7 +8,7 @@ import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
 import { getRange, getWindow } from './services/marketApi';
 import WatchlistPanel from './components/watchlist/WatchlistPanel';
-import { watchlistStore } from './store/watchlistStore';
+import { watchlistStore, useWatchlistStore } from './store/watchlistStore';
 import { useChartSettingsStore, chartSettingsStore, DEFAULT_ACTIVE_INDICATORS } from './store/chartSettingsStore';
 import { strategyStore } from './store/strategyStore';
 import RightActionBar from './components/watchlist/RightActionBar';
@@ -168,6 +168,7 @@ function MainApp() {
 
   const [replayState] = useReplayStore();
   const [alertState] = useAlertStore();
+  const [watchlistState] = useWatchlistStore();
 
   // İzleme listesi kullanıcıya bağlı olarak sunucuda tutuluyor; giriş
   // yapıldığında sunucudaki kopyayı yükle. Kullanıcı değişince tekrar çalışır.
@@ -715,6 +716,18 @@ function MainApp() {
                 onSelectTab={handleSelectTab}
               />
             </div>
+
+            {/* Dar ekranda yan paneller grafiğin ÜSTÜNE açılıyor (bkz.
+                WatchlistPanel/AlertsPanel); arkadaki grafiğe yanlışlıkla
+                dokunulmasın ve panel tek dokunuşla kapanabilsin diye zemin.
+                `lg`den itibaren paneller yan yana durduğu için zemin yok. */}
+            {watchlistState.isOpen && (
+              <div
+                aria-hidden
+                onClick={() => watchlistStore.togglePanel()}
+                className="sheet-backdrop absolute inset-0 z-30 animate-fadeIn lg:hidden"
+              />
+            )}
 
             {/* Açılır / Kapanır Favoriler Paneli */}
             <WatchlistPanel

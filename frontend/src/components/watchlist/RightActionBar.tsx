@@ -20,9 +20,14 @@ export default function RightActionBar(_props: RightActionBarProps) {
   const isWatchlistActive = state.isOpen && state.activeRightTool === 'watchlist';
   const isAlertsActive = state.isOpen && state.activeRightTool === 'alerts';
 
-  // Genişlik sol menü ile aynı (41px); buton boyutları korundu
+  // Genişlik sol menü ile aynı (41px); buton boyutları korundu.
+  //
+  // Dar ekranda gizli: 375px'lik bir telefonda bu ray + izleme listesi paneli
+  // + sol gezinme rayı grafiğe hiç yer bırakmıyordu. Aynı iki düğme (izleme
+  // listesi, alarmlar) orada grafik araç çubuğunun genişletilmiş satırında yer
+  // alır (bkz. CandleChart), yani işlev kaybolmaz — yerini değiştirir.
   return (
-    <div className="w-[41px] h-full bg-canvas border-l border-line flex flex-col items-center justify-between py-3 z-20 select-none shrink-0">
+    <div className="hidden w-[41px] h-full bg-canvas border-l border-line lg:flex flex-col items-center justify-between py-3 z-20 select-none shrink-0">
       {/* Top Action Tools */}
       <div className="flex flex-col items-center gap-2.5 w-full">
         {/* Toggle Collapse/Expand Button */}

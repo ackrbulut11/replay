@@ -58,7 +58,10 @@ export default function ReplayControls({
     'flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/[0.08] hover:text-content-strong disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer';
 
   return (
-    <div className="flex items-center gap-0.5 bg-canvas border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-content-strong animate-fadeIn select-none">
+    /* Dar ekranda sarmalanır: dokuz kontrol tek satırda ~330px istiyor ve
+       telefonda şeridin sağ ucu (mum sayacı, çıkış) ekranın dışında
+       kalıyordu. Sarmalanan satırlar ortalanır. */
+    <div className="flex max-w-full flex-wrap items-center justify-center gap-0.5 bg-canvas border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-content-strong animate-fadeIn select-none">
       {/* Durum noktası — "REPLAY ENGINE" başlığının yerini tutar. */}
       <span
         className="relative flex h-1.5 w-1.5 mx-1"

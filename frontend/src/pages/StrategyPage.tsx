@@ -10,6 +10,7 @@ import {
   Play,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowLeft,
   Zap,
   Layers,
   BarChart3,
@@ -320,12 +321,31 @@ export default function StrategyPage({
     }
   };
 
+  /**
+   * Sağ panelde gösterilecek bir şey var mı?
+   *
+   * Dar ekranda liste ve düzenleyici yan yana sığmıyor (288px'lik liste,
+   * 375px'lik bir telefonda içeriğe ~46px bırakıyordu), bu yüzden ikisi
+   * ana-detay olarak sırayla gösterilir: seçim yokken liste, seçim varken
+   * düzenleyici. `lg`den itibaren ikisi yine yan yana.
+   */
+  const isDetailOpen = !(mode === 'list' && !activeStrategy);
+
+  const handleBackToList = () => {
+    strategyStore.setActiveStrategy(null);
+    setMode('list');
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
       {/* Ana İçerik */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sol Panel — Strateji Listesi */}
-        <div className="w-72 flex-shrink-0 overflow-hidden border-r border-line">
+        <div
+          className={`${
+            isDetailOpen ? 'hidden' : 'flex'
+          } w-full min-h-0 flex-col overflow-hidden lg:flex lg:w-72 lg:flex-shrink-0 lg:border-r lg:border-line`}
+        >
           <StrategyList
             strategies={strategies}
             activeStrategyId={activeStrategy?.id || null}
@@ -336,7 +356,23 @@ export default function StrategyPage({
         </div>
 
         {/* Sağ İçerik — Builder / Editor / Result */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas">
+        <div
+          className={`${
+            isDetailOpen ? 'flex' : 'hidden'
+          } min-h-0 flex-1 flex-col overflow-hidden bg-canvas lg:flex`}
+        >
+          {/* Listeye dön — dar ekranda liste gizli olduğu için tek çıkış yolu.
+              Masaüstünde liste zaten solda duruyor, bu şerit orada yok. */}
+          {isDetailOpen && (
+            <button
+              onClick={handleBackToList}
+              className="flex flex-shrink-0 items-center gap-2 border-b border-line bg-surface px-3 py-2.5 text-left text-sm text-content transition-colors ease-out hover:bg-surface-hover lg:hidden"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0 text-content-muted" strokeWidth={1.75} />
+              <span className="truncate">{activeStrategy?.name ?? 'Yeni strateji'}</span>
+            </button>
+          )}
+
           {mode === 'list' && !activeStrategy ? (
             /* Boş durum. Sola dayalı ve ikon karesiz: ortalanmış rozet +
                başlık + buton kalıbı her boş ekranı birbirine benzetiyordu.
@@ -450,11 +486,14 @@ export default function StrategyPage({
               {/* Değerlendirme Paneli (Sadece Builder sekmesindeyken gösterilir) */}
               {activeSubTab === 'builder' && mode === 'edit' && activeStrategy && (
                 <>
-                  {/* Sürükle-Bırak Ayırıcı Çizgi (Terminal Paneli Ayırıcı) */}
+                  {/* Sürükle-Bırak Ayırıcı Çizgi (Terminal Paneli Ayırıcı).
+                      Fareyle sürüklenir; dokunmatikte hem tutamak çok ince hem
+                      de panel orada sabit yükseklikle değil, içeriğine göre
+                      ölçülüyor — bu yüzden dar ekranda gizli. */}
                   <div
                     onMouseDown={handleMouseDownResize}
                     onDoubleClick={() => setEvalPanelHeight(340)}
-                    className="group relative z-10 flex h-2.5 flex-shrink-0 cursor-row-resize select-none items-center justify-center border-y border-line bg-canvas transition-colors ease-out hover:bg-surface-hover"
+                    className="group relative z-10 hidden h-2.5 flex-shrink-0 cursor-row-resize select-none items-center justify-center border-y border-line bg-canvas transition-colors ease-out hover:bg-surface-hover lg:flex"
                     title="Yukarı / aşağı sürükleyerek panel boyutunu ayarlayın (çift tık: varsayılan)"
                   >
                     <GripHorizontal
@@ -463,10 +502,15 @@ export default function StrategyPage({
                     />
                   </div>
 
-                  {/* Değerlendirme Alt Paneli */}
+                  {/* Değerlendirme Alt Paneli.
+                      Yükseklik satır içi `style` yerine CSS değişkeniyle:
+                      satır içi değer sınıfları ezerdi ve sürüklenerek
+                      ayarlanmış masaüstü yüksekliği telefonda da dayatılırdı.
+                      Dar ekranda panel içeriğine göre büyür, ekranın %60'ında
+                      durur — altındaki kurallar bölümü tamamen kapanmasın. */}
                   <div
-                    style={{ height: `${evalPanelHeight}px` }}
-                    className="flex min-h-0 flex-shrink-0 flex-col bg-surface"
+                    style={{ ['--eval-h' as string]: `${evalPanelHeight}px` }}
+                    className="flex min-h-0 max-h-[60%] flex-shrink-0 flex-col border-t border-line bg-surface lg:max-h-none lg:h-[var(--eval-h)] lg:border-t-0"
                   >
                     {/* Değerlendirme formu.
                         Yedi kontrolün de görünür etiketi var. Öncesinde
@@ -728,8 +772,11 @@ export default function StrategyPage({
                           /* Sayısal sütunlar sağa dayalı: bir fiyat listesinde
                              basamaklar alt alta hizalanmazsa büyüklükleri gözle
                              karşılaştırmak mümkün olmuyor. */
-                          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-lg border border-line">
-                            <table className="w-full text-xs">
+                          /* Beş sütun dar ekranda okunaksız hâle gelecek kadar
+                             sıkışıyordu; tablo kendi kabında yatay kayar,
+                             sayfa gövdesi kaymaz. */
+                          <div className="custom-scrollbar min-h-0 flex-1 overflow-auto rounded-lg border border-line">
+                            <table className="w-full min-w-[560px] text-xs">
                               <thead className="sticky top-0 z-10 bg-surface-raised">
                                 <tr className="text-2xs text-content-faint">
                                   <th className="px-3 py-2 text-left font-normal">Zaman</th>

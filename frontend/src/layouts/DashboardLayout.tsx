@@ -17,15 +17,22 @@ export default function DashboardLayout({ children, activeTab, onSelectTab }: La
        farkından fazlası — CSS `text-transform:` İngilizce
        kurallarıyla "ısınma"yı "ISINMA" değil yanlış eşler, "İ"nin noktasını
        düşürür. Tarayıcının doğru harita için dili bilmesi gerekiyor. */
+    /* `h-dvh` / `w-full`: telefonda `100vh` adres çubuğunun kapladığı alanı da
+       sayıyor ve arayüzün alt şeridi (grafik altı, panel dipleri) ekranın
+       dışında kalıyordu. `w-screen` de kaydırma çubuğu olan masaüstünde yatay
+       taşma üretiyordu. */
     <div
       lang="tr"
-      className="flex h-screen w-screen flex-row overflow-hidden bg-canvas text-content antialiased"
+      className="flex h-dvh w-full flex-row overflow-hidden bg-canvas text-content antialiased"
     >
       {/* Sol Navigasyon Menüsü */}
       <Sidebar activeTab={activeTab} onSelectTab={onSelectTab} />
 
-      {/* Ana Ekran / İçerik Alanı */}
-      <main className="flex-1 h-full min-w-0 flex flex-col overflow-hidden">
+      {/* Ana Ekran / İçerik Alanı.
+          Güvenli alan payı tek yerden, burada veriliyor: `viewport-fit=cover`
+          ile arayüz ekranın tamamına yayıldığı için alttaki ana ekran çizgisi
+          ve yatay moddaki çentik, yoksa içeriğin üstüne biniyordu. */}
+      <main className="pb-safe pr-safe flex-1 h-full min-w-0 flex flex-col overflow-hidden">
         {children}
       </main>
     </div>

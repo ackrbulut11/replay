@@ -257,7 +257,7 @@ export default function StrategyList({
                     <button
                       onClick={(e) => handleDuplicate(e, strategy)}
                       aria-label="Stratejiyi kopyala"
-                      className="rounded p-1 text-content-faint opacity-0 transition-colors ease-out hover:bg-surface-hover hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
+                      className="rounded p-1 text-content-faint opacity-0 transition-colors ease-out hover:bg-surface-hover hover:text-content focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100"
                       title="Kopyala"
                     >
                       <Copy className="h-3 w-3" strokeWidth={1.75} />
@@ -268,7 +268,7 @@ export default function StrategyList({
                       className={`flex items-center gap-1 rounded px-1 py-1 transition-colors ease-out ${
                         isDeleting
                           ? 'bg-loss-900 text-loss-300'
-                          : 'text-content-faint opacity-0 hover:bg-loss-950 hover:text-loss-400 focus-visible:opacity-100 group-hover:opacity-100'
+                          : 'text-content-faint opacity-0 hover:bg-loss-950 hover:text-loss-400 focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100'
                       }`}
                     >
                       <Trash2 className="h-3 w-3" strokeWidth={1.75} />

@@ -66,8 +66,8 @@ UI (React)
 - ✅ Replay sırasında işlem açma, stop/take-profit belirleme
 - ✅ Trade Journal: işlem listesi, oturum bazlı kayıt
 - ✅ Performans Raporu: Win Rate, Loss Rate, Profit Factor, Sharpe, Drawdown, Net Profit
-- ⬜ **İşleme not ve ekran görüntüsü ekleme** — manuel backtest'in öğreten kısmı bu,
-  şu an hiçbir yere yazılmıyor
+- ⬜ **İşleme not / sebep yazma** — manuel backtest'in öğreten kısmı bu, şu an
+  hiçbir yere yazılmıyor
 
 ## Faz 4.5 — Hesap Modeli ✅
 - Komisyon + slipaj (`engines/execution.py`), iki motorda da ortak
@@ -139,7 +139,7 @@ Yukarıda ⬜ ile işaretlenenlerin tek listesi. Sıra bir öneridir, karar sizi
 2. **Scanner sekmesi.** Menüde duruyor, yer tutucu gösteriyor. Motor hazır, eksik olan
    kendi ekranı.
 3. **Pattern Search** (Faz 3'ten kalan).
-4. **İşleme not / ekran görüntüsü** (Faz 4'ten kalan) — manuel backtest'in "neden"i
+4. **İşleme not / sebep yazma** (Faz 4'ten kalan) — manuel backtest'in "neden"i
    şu an hiçbir yere yazılmıyor.
 5. **Faz 5** — optimizer, walk-forward, Monte Carlo.
 6. **Faz 6** — AI.

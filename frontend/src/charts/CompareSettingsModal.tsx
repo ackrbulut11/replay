@@ -42,20 +42,20 @@ export default function CompareSettingsModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm bg-[#0a0b0e] border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-scaleUp text-zinc-100"
+        className="w-full max-w-sm bg-canvas border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-scaleUp text-content-strong"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06] bg-[#0a0b0e]">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-line bg-canvas">
           <div className="flex items-center gap-2">
-            <Palette className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-bold text-zinc-100 truncate">
+            <Palette className="w-4 h-4 text-accent-400" />
+            <h3 className="text-sm font-medium text-content-strong truncate">
               {item.symbol} Kıyaslama Ayarları
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors"
+            className="p-1 rounded-lg text-content-muted hover:text-content-strong hover:bg-white/[0.06] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -65,10 +65,10 @@ export default function CompareSettingsModal({
         <div className="p-5 overflow-y-auto space-y-4 text-xs">
           <div className="flex flex-col gap-1.5 py-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-300">Çizgi Rengi</span>
+              <span className="text-xs font-medium text-content">Çizgi Rengi</span>
               <div className="flex items-center gap-2">
                 <span
-                  className="w-4 h-4 rounded-full border border-slate-600 shadow-xs"
+                  className="w-4 h-4 rounded-full border border-line-strong shadow-xs"
                   style={{ backgroundColor: item.color }}
                 />
                 <input
@@ -87,7 +87,7 @@ export default function CompareSettingsModal({
                   onClick={() => updateStyle({ color: c })}
                   style={{ backgroundColor: c }}
                   className={`w-5 h-5 rounded-md transition-transform hover:scale-110 flex items-center justify-center ${
-                    item.color === c ? 'ring-2 ring-indigo-400 scale-105' : 'opacity-80 hover:opacity-100'
+                    item.color === c ? 'ring-2 ring-accent-400 scale-105' : 'opacity-80 hover:opacity-100'
                   }`}
                 >
                   {item.color === c && <Check className="w-3 h-3 text-black drop-shadow-xs" />}
@@ -96,18 +96,18 @@ export default function CompareSettingsModal({
             </div>
           </div>
 
-          <div className="flex items-center justify-between py-1 text-xs text-slate-300">
+          <div className="flex items-center justify-between py-1 text-xs text-content">
             <span>Çizgi Kalınlığı</span>
-            <div className="flex items-center gap-1 bg-[#070b13] p-1 rounded-lg border border-slate-800">
+            <div className="flex items-center gap-1 bg-canvas p-1 rounded-lg border border-line">
               {[1, 2, 3, 4].map((w) => (
                 <button
                   key={w}
                   type="button"
                   onClick={() => updateStyle({ lineWidth: w })}
-                  className={`px-2 py-0.5 text-xs font-semibold rounded transition-all ${
+                  className={`px-2 py-0.5 text-xs font-medium rounded transition-all ${
                     item.lineWidth === w
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      ? 'bg-accent-400 text-ink-950 shadow-sm'
+                      : 'text-content-muted hover:text-content hover:bg-surface-hover'
                   }`}
                 >
                   {w}px
@@ -118,11 +118,11 @@ export default function CompareSettingsModal({
         </div>
 
         {/* Footer Controls */}
-        <div className="flex items-center justify-end px-5 py-3 border-t border-white/[0.06] bg-[#0a0b0e]">
+        <div className="flex items-center justify-end px-5 py-3 border-t border-line bg-canvas">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 text-xs font-medium text-zinc-900 bg-zinc-100 hover:bg-emerald-400 rounded-lg transition-colors shadow-xs"
+            className="px-4 py-1.5 text-xs font-medium text-ink-950 bg-ink-50 hover:bg-accent-300 rounded-lg transition-colors shadow-xs"
           >
             Tamam
           </button>

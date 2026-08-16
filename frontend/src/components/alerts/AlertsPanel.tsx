@@ -93,38 +93,38 @@ export default function AlertsPanel({
   return (
     <div
       style={{ width: watchlistState.panelWidth }}
-      className="h-full bg-[#0a0b0e] border-l border-white/[0.06] flex flex-col z-20 select-none shrink-0 shadow-2xl backdrop-blur-md animate-fadeIn relative overflow-hidden text-zinc-100"
+      className="h-full bg-canvas border-l border-line flex flex-col z-20 select-none shrink-0 shadow-2xl backdrop-blur-md animate-fadeIn relative overflow-hidden text-content-strong"
     >
       {/* Resize handle (left edge) */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-indigo-600/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <GripVertical className="w-3 h-3 text-slate-400 group-hover:text-indigo-300" />
+          <GripVertical className="w-3 h-3 text-content-muted group-hover:text-accent-300" />
         </div>
       </div>
       {/* Panel Header */}
-      <div className="p-3 border-b border-white/[0.06] flex items-center justify-between bg-[#0a0b0e]">
+      <div className="p-3 border-b border-line flex items-center justify-between bg-canvas">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+          <div className="p-1.5 rounded-lg bg-accent-500/10 border border-accent-500/30 text-accent-400">
             <Bell className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+            <h3 className="text-xs font-medium text-content-strong flex items-center gap-1.5">
               <span>Alarmlar</span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono px-1.5 rounded-full font-semibold">
+              <span className="text-2xs bg-accent-500/20 text-accent-400 border border-accent-500/30 font-mono px-1.5 rounded-full font-medium">
                 {alertState.alerts.length}
               </span>
             </h3>
-            <span className="text-[9px] text-zinc-500 font-medium">Canlı Fiyat & Koşul Uyarıları</span>
+            <span className="text-2xs text-content-faint font-medium">Canlı Fiyat & Koşul Uyarıları</span>
           </div>
         </div>
 
         <button
           onClick={onOpenCreateModal}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-100 text-zinc-900 text-xs font-medium hover:bg-emerald-400 transition-colors shadow-xs"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-ink-50 text-ink-950 text-xs font-medium hover:bg-accent-300 transition-colors shadow-xs"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Alarm Ekle</span>
@@ -134,17 +134,17 @@ export default function AlertsPanel({
       {/* Alerts Content */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-3 custom-scrollbar">
         {alertState.loading && alertState.alerts.length === 0 ? (
-          <div className="text-center py-8 text-xs text-slate-500">Alarmlar yükleniyor...</div>
+          <div className="text-center py-8 text-xs text-content-faint">Alarmlar yükleniyor...</div>
         ) : alertState.alerts.length === 0 ? (
-          <div className="text-center py-12 px-4 border border-dashed border-slate-800/80 rounded-2xl bg-[#070b13]/40">
-            <Bell className="w-8 h-8 mx-auto text-slate-600 mb-2" />
-            <p className="text-xs font-semibold text-slate-300">Henüz alarm yok</p>
-            <p className="text-[11px] text-slate-500 mt-1 mb-3">
+          <div className="text-center py-12 px-4 border border-dashed border-line rounded-2xl bg-canvas">
+            <Bell className="w-8 h-8 mx-auto text-content-faint mb-2" />
+            <p className="text-xs font-medium text-content">Henüz alarm yok</p>
+            <p className="text-2xs text-content-faint mt-1 mb-3">
               Fiyat veya indikatör seviyeleri için uyarı tanımlayabilirsiniz.
             </p>
             <button
               onClick={onOpenCreateModal}
-              className="px-3 py-1.5 text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl hover:bg-amber-500/20 transition"
+              className="px-3 py-1.5 text-xs font-medium text-warn-400 bg-warn-500/10 border border-warn-500/30 rounded-xl hover:bg-warn-500/20 transition"
             >
               + Alarm Ekle
             </button>
@@ -154,7 +154,7 @@ export default function AlertsPanel({
             {/* Active Alerts */}
             {activeAlerts.length > 0 && (
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
+                <div className="text-2xs font-medium text-content-muted px-1 flex items-center justify-between">
                   <span>Aktif Alarmlar ({activeAlerts.length})</span>
                 </div>
                 {activeAlerts.map(alert => (
@@ -172,8 +172,8 @@ export default function AlertsPanel({
 
             {/* Triggered Alerts */}
             {triggeredAlerts.length > 0 && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800/60">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 px-1 flex items-center justify-between">
+              <div className="space-y-1.5 pt-2 border-t border-line">
+                <div className="text-2xs font-medium text-warn-400 px-1 flex items-center justify-between">
                   <span>Tetiklenen Alarmlar ({triggeredAlerts.length})</span>
                 </div>
                 {triggeredAlerts.map(alert => (
@@ -191,8 +191,8 @@ export default function AlertsPanel({
 
             {/* Disabled Alerts */}
             {disabledAlerts.length > 0 && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800/60 opacity-60">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-1">
+              <div className="space-y-1.5 pt-2 border-t border-line opacity-60">
+                <div className="text-2xs font-medium text-content-faint px-1">
                   <span>Devre Dışı ({disabledAlerts.length})</span>
                 </div>
                 {disabledAlerts.map(alert => (
@@ -235,18 +235,18 @@ function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold, onSele
         }
       }}
       title={canNavigate ? `${alert.symbol} paritesine geç` : undefined}
-      className={`p-2.5 rounded-xl border transition-all ${canNavigate ? 'cursor-pointer hover:border-amber-500/50' : ''} ${
+      className={`p-2.5 rounded-xl border transition-all ${canNavigate ? 'cursor-pointer hover:border-warn-500/50' : ''} ${
         alert.status === 'TRIGGERED'
-          ? 'bg-amber-500/10 border-amber-500/40 shadow-md shadow-amber-500/10'
+          ? 'bg-warn-500/10 border-warn-500/40 shadow-md shadow-warn-500/10'
           : isMatchCurrent
-          ? 'bg-slate-800/60 border-slate-700/80'
-          : 'bg-[#070b13]/60 border-slate-800/80'
+          ? 'bg-surface-hover border-line-strong'
+          : 'bg-canvas border-line'
       }`}
     >
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-bold text-slate-100 font-mono">{alert.symbol}</span>
-          <span className="text-[9px] font-bold px-1 rounded bg-slate-900 text-slate-400 border border-slate-800">
+          <span className="text-xs font-medium text-content-strong font-mono">{alert.symbol}</span>
+          <span className="text-2xs font-medium px-1 rounded bg-surface-raised text-content-muted border border-line">
             {alert.target_type.toUpperCase()}
           </span>
         </div>
@@ -259,10 +259,10 @@ function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold, onSele
             }}
             className={`p-1 rounded-lg transition ${
               alert.status === 'ACTIVE'
-                ? 'text-emerald-400 hover:bg-emerald-500/20'
+                ? 'text-accent-400 hover:bg-accent-300/20'
                 : alert.status === 'TRIGGERED'
-                ? 'text-amber-400 hover:bg-amber-500/20'
-                : 'text-slate-600 hover:bg-slate-800'
+                ? 'text-warn-400 hover:bg-warn-500/20'
+                : 'text-content-faint hover:bg-surface-hover'
             }`}
             title={alert.status === 'ACTIVE' ? 'Devre Dışı Bırak' : 'Aktifleştir'}
           >
@@ -273,7 +273,7 @@ function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold, onSele
               e.stopPropagation();
               alertStore.deleteAlert(alert.id);
             }}
-            className="p-1 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
+            className="p-1 text-content-faint hover:text-loss-400 hover:bg-surface-hover rounded-lg transition"
             title="Alarmı Sil"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -282,25 +282,25 @@ function AlertCard({ alert, currentSymbol, formatTarget, formatThreshold, onSele
       </div>
 
       <div className="flex items-center justify-between mt-1">
-        <div className="flex items-center gap-1 text-xs font-semibold text-slate-200">
+        <div className="flex items-center gap-1 text-xs font-medium text-content">
           {isRises ? (
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <TrendingUp className="w-3.5 h-3.5 text-profit-400 shrink-0" />
           ) : (
-            <TrendingDown className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <TrendingDown className="w-3.5 h-3.5 text-loss-400 shrink-0" />
           )}
           <span>{formatTarget(alert)}</span>
-          <span className="font-mono text-amber-400 font-bold">
+          <span className="font-mono text-warn-400 font-medium">
             {isRises ? '>' : '<'} {formatThreshold(alert.threshold_value, alert.target_type)}
           </span>
         </div>
       </div>
 
       {alert.note && (
-        <p className="text-[10px] text-slate-400 mt-1 italic line-clamp-1">{alert.note}</p>
+        <p className="text-2xs text-content-muted mt-1 italic line-clamp-1">{alert.note}</p>
       )}
 
       {alert.status === 'TRIGGERED' && alert.triggered_at && (
-        <div className="flex items-center gap-1 mt-1.5 text-[9px] text-amber-400 font-mono">
+        <div className="flex items-center gap-1 mt-1.5 text-2xs text-warn-400 font-mono">
           <Clock className="w-3 h-3" />
           <span>Tetiklendi: {new Date(alert.triggered_at).toLocaleTimeString()}</span>
         </div>

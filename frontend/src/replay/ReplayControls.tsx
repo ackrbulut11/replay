@@ -55,10 +55,10 @@ export default function ReplayControls({
 
   // Simge düğmelerinin ortak sınıfı.
   const iconButton =
-    'flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/[0.08] hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer';
+    'flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/[0.08] hover:text-content-strong disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer';
 
   return (
-    <div className="flex items-center gap-0.5 bg-[#0a0b0e]/95 border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-zinc-100 animate-fadeIn select-none">
+    <div className="flex items-center gap-0.5 bg-canvas border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-content-strong animate-fadeIn select-none">
       {/* Durum noktası — "REPLAY ENGINE" başlığının yerini tutar. */}
       <span
         className="relative flex h-1.5 w-1.5 mx-1"
@@ -66,12 +66,12 @@ export default function ReplayControls({
       >
         <span
           className={`animate-ping absolute inline-flex h-full w-full rounded-full ${
-            isPlaying ? 'bg-emerald-400' : 'bg-amber-400'
+            isPlaying ? 'bg-accent-400' : 'bg-warn-400'
           } opacity-75`}
         />
         <span
           className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
-            isPlaying ? 'bg-emerald-400' : 'bg-amber-400'
+            isPlaying ? 'bg-accent-400' : 'bg-warn-400'
           }`}
         />
       </span>
@@ -81,7 +81,7 @@ export default function ReplayControls({
         onClick={onStartSelection}
         title="Mum Kes — grafikte son görünecek mumu seçmek için bir muma tıklayın (C)"
         className={`${iconButton} ${
-          isSelectingCutoff ? 'bg-amber-500/20 text-amber-300 animate-pulse' : 'text-amber-400'
+          isSelectingCutoff ? 'bg-warn-500/20 text-warn-300 animate-pulse' : 'text-warn-400'
         }`}
       >
         <Scissors className="w-3.5 h-3.5" />
@@ -97,8 +97,8 @@ export default function ReplayControls({
         title={isBlindMode ? 'Kör mod açık — sembol ve tarih gizli (B)' : 'Kör mod: sembolü ve tarihi gizle (B)'}
         className={`p-1.5 rounded-md border transition-all cursor-pointer ${
           isBlindMode
-            ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
-            : 'bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:text-zinc-200'
+            ? 'bg-accent-500/20 border-accent-500/50 text-accent-300'
+            : 'bg-white/[0.03] border-line text-content-muted hover:text-content'
         }`}
       >
         {isBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -110,8 +110,8 @@ export default function ReplayControls({
         title={isPlaying ? 'Durdur (P)' : 'Oynat / Başlat (P)'}
         className={`${iconButton} ${
           isPlaying
-            ? 'bg-emerald-500/20 text-emerald-400'
-            : 'bg-zinc-100 text-zinc-900 hover:bg-emerald-400 hover:text-zinc-900'
+            ? 'bg-accent-500/20 text-accent-400'
+            : 'bg-ink-50 text-ink-950 hover:bg-accent-300 hover:text-ink-950'
         }`}
       >
         {isPlaying ? (
@@ -126,7 +126,7 @@ export default function ReplayControls({
         onClick={onStepForward}
         disabled={isPlaying || isAtEnd}
         title="Tek tek 1 mum ilerlet (Space)"
-        className={`${iconButton} text-emerald-400`}
+        className={`${iconButton} text-accent-400`}
       >
         <SkipForward className="w-3.5 h-3.5" />
       </button>
@@ -135,7 +135,7 @@ export default function ReplayControls({
       <button
         onClick={onResetToCutoff}
         title="Kesim noktasına sıfırla (R)"
-        className={`${iconButton} text-zinc-400`}
+        className={`${iconButton} text-content-muted`}
       >
         <RotateCcw className="w-3.5 h-3.5" />
       </button>
@@ -144,14 +144,14 @@ export default function ReplayControls({
 
       {/* Oynatma hızı — dört ayrı düğme yerine tek açılır liste. */}
       <div className="flex items-center gap-0.5" title="Oynatma hızı (kısayollar: 1-4)">
-        <FastForward className="w-3 h-3 text-zinc-500" />
+        <FastForward className="w-3 h-3 text-content-faint" />
         <select
           value={speedMs}
           onChange={(e) => setReplayState({ speedMs: Number(e.target.value) })}
-          className="bg-transparent border-none outline-none text-[10px] font-mono font-medium text-emerald-400 cursor-pointer focus:ring-0 pr-0.5"
+          className="bg-transparent border-none outline-none text-2xs font-mono font-medium text-accent-400 cursor-pointer focus:ring-0 pr-0.5"
         >
           {SPEED_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-[#0a0b0e] text-zinc-100">
+            <option key={opt.value} value={opt.value} className="bg-canvas text-content-strong">
               {opt.label}
             </option>
           ))}
@@ -162,10 +162,10 @@ export default function ReplayControls({
 
       {/* Mum ilerleme bilgisi */}
       <span
-        className="flex items-center gap-1 px-1 text-[10px] font-mono text-zinc-400 tabular-nums"
+        className="flex items-center gap-1 px-1 text-2xs font-mono text-content-muted tabular-nums"
         title={`${currentBar}. mum / toplam ${totalBars}`}
       >
-        <Layers className="w-3 h-3 text-emerald-400" />
+        <Layers className="w-3 h-3 text-accent-400" />
         {currentBar}/{totalBars}
       </span>
 
@@ -173,7 +173,7 @@ export default function ReplayControls({
       <button
         onClick={onExitReplay}
         title="Replay Modundan Çık (X)"
-        className={`${iconButton} text-red-400 hover:bg-red-500/20 hover:text-red-300`}
+        className={`${iconButton} text-loss-400 hover:bg-loss-500/20 hover:text-loss-300`}
       >
         <X className="w-3.5 h-3.5" />
       </button>

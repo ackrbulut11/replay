@@ -172,32 +172,32 @@ export const ReplayPreview: React.FC = () => {
       onClick={handleReplay}
       role={done ? 'button' : undefined}
       aria-label={done ? 'Replay the chart preview' : undefined}
-      className={`select-none rounded-xl border bg-[#0c0d11] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] transition-colors ${
+      className={`select-none rounded-xl border bg-surface-raised shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] transition-colors ${
         done
-          ? 'cursor-pointer border-white/[0.07] hover:border-emerald-400/25'
-          : 'border-white/[0.07]'
+          ? 'cursor-pointer border-line hover:border-accent-400/25'
+          : 'border-line'
       }`}
     >
       {/* Başlık şeridi */}
-      <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] px-4 py-3">
+      <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="text-[13px] font-semibold tracking-tight text-zinc-100">
+          <span className="text-sm font-medium tracking-tight text-content-strong">
             BTCUSDT
           </span>
-          <span className="text-[11px] text-zinc-500">1h</span>
-          <span className="hidden items-center gap-1.5 rounded border border-emerald-400/20 bg-emerald-400/[0.07] px-2 py-0.5 sm:inline-flex">
-            <span className="h-1 w-1 rounded-full bg-emerald-400" />
-            <span className="text-[10px] font-medium tracking-wide text-emerald-300/90">
+          <span className="text-2xs text-content-faint">1h</span>
+          <span className="hidden items-center gap-1.5 rounded border border-accent-400/20 bg-accent-400/[0.07] px-2 py-0.5 sm:inline-flex">
+            <span className="h-1 w-1 rounded-full bg-accent-400" />
+            <span className="text-2xs font-medium text-accent-300/90">
               replay
             </span>
           </span>
         </div>
         <div className="flex items-baseline gap-2 tabular-nums">
-          <span className="text-[13px] font-semibold text-zinc-100">
+          <span className="text-sm font-medium text-content-strong">
             {formatPrice(lastBar.close)}
           </span>
           <span
-            className="text-[11px]"
+            className="text-2xs"
             style={{ color: changePct >= 0 ? UP : DOWN }}
           >
             {changePct >= 0 ? '+' : ''}
@@ -382,14 +382,14 @@ export const ReplayPreview: React.FC = () => {
       </svg>
 
       {/* Alt şerit: kaynak + ilerleme */}
-      <div className="border-t border-white/[0.06]">
+      <div className="border-t border-line">
         <div className="h-px w-full bg-white/[0.06]">
           <div
-            className="h-px bg-emerald-400/70"
+            className="h-px bg-accent-400/70"
             style={{ width: `${(revealed / BAR_COUNT) * 100}%` }}
           />
         </div>
-        <div className="flex items-center justify-between px-4 py-2.5 text-[10px] tracking-wide text-zinc-500">
+        <div className="flex items-center justify-between px-4 py-2.5 text-2xs text-content-faint">
           <span>Source: Binance · parquet cache</span>
           {/* Bar sayacı bittiğinde de kalır (son değerde donar); yalnızca
               "click to replay" gibi ekstra bir metin eklenmiyor. Tıklanabilirlik

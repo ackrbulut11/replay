@@ -9,7 +9,18 @@ interface LayoutProps {
 
 export default function DashboardLayout({ children, activeTab, onSelectTab }: LayoutProps) {
   return (
-    <div className="h-screen w-screen bg-[#0a0b0e] [background-image:radial-gradient(120%_100%_at_100%_0%,rgba(16,185,129,0.12),transparent_65%)] text-zinc-100 antialiased overflow-hidden flex flex-row">
+    /* Zemindeki yeşil radyal parıltı kaldırıldı: yeşil bu üründe kâr demek,
+       dekorasyon değil — üstelik grafiğin yeşil mumlarıyla aynı kadrajda
+       yarışıyordu. Zemin artık düz; derinlik panel kenarlarından geliyor. */
+    /* lang="tr": index.html'de `<html lang="en">` yazıyor çünkü herkese açık
+       landing sayfası İngilizce. Uygulamanın içi Türkçe ve bu bir yazım
+       farkından fazlası — CSS `text-transform:` İngilizce
+       kurallarıyla "ısınma"yı "ISINMA" değil yanlış eşler, "İ"nin noktasını
+       düşürür. Tarayıcının doğru harita için dili bilmesi gerekiyor. */
+    <div
+      lang="tr"
+      className="flex h-screen w-screen flex-row overflow-hidden bg-canvas text-content antialiased"
+    >
       {/* Sol Navigasyon Menüsü */}
       <Sidebar activeTab={activeTab} onSelectTab={onSelectTab} />
 

@@ -19,6 +19,7 @@ import {
   Settings2,
   Filter,
   Trophy,
+  AlertTriangle,
 } from 'lucide-react';
 import ConditionEditor from './ConditionEditor';
 import { logEvent, logError } from '../services/eventLog';
@@ -258,12 +259,12 @@ export default function StrategyBuilder({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#070b13] overflow-y-auto custom-scrollbar">
+    <div className="custom-scrollbar flex h-full flex-col overflow-y-auto bg-canvas">
       {/* Üst Başlık ve Aksiyon Barı */}
-      <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-2.5 bg-[#0a0e1a]/95 backdrop-blur-md border-b border-slate-800/80 gap-3 select-none">
-        <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2 flex-shrink-0">
-          <Settings2 className="w-4 h-4 text-indigo-400" />
-          {isEditing ? 'Strateji Düzenle' : 'Yeni Strateji'}
+      <div className="sticky top-0 z-20 flex select-none items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2.5">
+        <h2 className="flex flex-shrink-0 items-center gap-2 text-sm text-content-strong">
+          <Settings2 className="h-3.5 w-3.5 text-content-muted" strokeWidth={1.75} />
+          {isEditing ? 'Strateji düzenle' : 'Yeni strateji'}
         </h2>
 
         {/* Orta: Test Geçmişi (Sadece seçili stratejiye ait) — açılır liste */}
@@ -271,10 +272,10 @@ export default function StrategyBuilder({
           <button
             onClick={() => currentStrategyLogs.length > 0 && setShowHistory(!showHistory)}
             disabled={currentStrategyLogs.length === 0}
-            className={`flex items-center gap-2 w-full max-w-md px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
+            className={`flex w-full max-w-md items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors ease-out ${
               currentStrategyLogs.length === 0
-                ? 'border-slate-800 bg-slate-900/50 text-slate-500 cursor-default'
-                : 'border-slate-700/80 bg-slate-900/80 hover:bg-slate-800/80 text-slate-300'
+                ? 'cursor-default border-line bg-surface text-content-faint'
+                : 'border-line-strong bg-surface-raised text-content hover:border-ink-500 hover:bg-surface-hover'
             }`}
             title={
               currentStrategyLogs.length === 0
@@ -282,29 +283,31 @@ export default function StrategyBuilder({
                 : 'Test geçmişini aç/kapat'
             }
           >
-            <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider whitespace-nowrap flex-shrink-0">
-              📜 Test Geçmişi
+            {/* Emoji kaldırıldı — ikon setiyle aynı çizgide değildi ve
+                platforma göre bambaşka bir şekil çiziyordu. */}
+            <span className="flex-shrink-0 whitespace-nowrap text-2xs text-content-faint">
+              Test geçmişi
             </span>
 
             {currentStrategyLogs.length === 0 ? (
-              <span className="text-[11px] text-slate-500 italic truncate">
-                {strategy ? `"${strategy.name}" için kayıt yok` : 'Kayıt yok'}
+              <span className="truncate text-2xs text-content-faint">
+                kayıt yok
               </span>
             ) : (
               <>
-                <span className="text-[10px] text-slate-500 flex-shrink-0">
-                  ({currentStrategyLogs.length})
+                <span className="flex-shrink-0 font-mono text-2xs text-content-faint">
+                  {currentStrategyLogs.length}
                 </span>
                 {/* Önizleme: en başarılı test */}
                 {bestLog && (
-                  <span className="flex items-center gap-1.5 font-mono truncate">
-                    <Trophy className="w-3 h-3 text-amber-400 flex-shrink-0" />
-                    <span className="font-bold text-slate-200">{bestLog.symbol}</span>
-                    <span className="text-[10px] text-slate-400">({bestLog.timeframe})</span>
+                  <span className="flex items-center gap-1.5 truncate font-mono">
+                    <Trophy className="h-3 w-3 flex-shrink-0 text-warn-400" strokeWidth={1.75} />
+                    <span className="text-content-strong">{bestLog.symbol}</span>
+                    <span className="text-2xs text-content-faint">{bestLog.timeframe}</span>
                     <span
-                      className={`text-[11px] font-bold ${
-                        bestLog.total_pnl_percent >= 0 ? 'text-emerald-400' : 'text-red-400'
-                      }`}
+                      className={
+                        bestLog.total_pnl_percent >= 0 ? 'text-profit-400' : 'text-loss-400'
+                      }
                     >
                       {bestLog.total_pnl_percent >= 0 ? '+' : ''}
                       {bestLog.total_pnl_percent.toFixed(1)}%
@@ -312,17 +315,18 @@ export default function StrategyBuilder({
                   </span>
                 )}
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-slate-400 ml-auto flex-shrink-0 transition-transform ${
+                  className={`ml-auto h-3.5 w-3.5 flex-shrink-0 text-content-muted transition-transform ease-out ${
                     showHistory ? 'rotate-180' : ''
                   }`}
+                  strokeWidth={1.75}
                 />
               </>
             )}
           </button>
 
           {showHistory && currentStrategyLogs.length > 0 && (
-            <div className="absolute left-0 top-full mt-1.5 w-full max-w-md z-30 rounded-xl border border-slate-700/80 bg-[#0a0e1a] shadow-2xl shadow-black/60 overflow-hidden">
-              <div className="max-h-72 overflow-y-auto custom-scrollbar py-1">
+            <div className="absolute left-0 top-full z-30 mt-1.5 w-full max-w-md animate-scaleUp overflow-hidden rounded-lg border border-line-strong bg-surface-overlay shadow-lg">
+              <div className="custom-scrollbar max-h-72 overflow-y-auto py-1">
                 {/* En son test en üstte */}
                 {currentStrategyLogs.map((item) => {
                   const isCurrent =
@@ -339,29 +343,27 @@ export default function StrategyBuilder({
                         selectHistoryItem(item);
                         setShowHistory(false);
                       }}
-                      className={`flex items-center gap-2 px-3 py-2 text-xs font-mono cursor-pointer transition-all border-l-2 ${
+                      className={`group/row relative flex cursor-pointer items-center gap-2 px-3 py-2 font-mono text-xs transition-colors ease-out ${
                         isCurrent
-                          ? 'bg-indigo-950/80 border-l-indigo-500 text-white font-bold'
-                          : 'border-l-transparent hover:bg-slate-800/60 text-slate-300'
+                          ? 'bg-surface-hover text-content-strong'
+                          : 'text-content hover:bg-surface-hover'
                       }`}
                       title={`${item.strategy_name} • ${item.executed_at} tarihinde çalıştırıldı. Tıklayarak sonuçlarını inceleyin.`}
                     >
+                      {isCurrent && (
+                        <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-accent-400" />
+                      )}
                       <Trophy
-                        className={`w-3 h-3 flex-shrink-0 ${
-                          isBest ? 'text-amber-400' : 'text-transparent'
-                        }`}
+                        className={`h-3 w-3 flex-shrink-0 ${isBest ? 'text-warn-400' : 'text-transparent'}`}
+                        strokeWidth={1.75}
                       />
-                      <span className="font-bold text-slate-200">{item.symbol}</span>
-                      <span className="text-[10px] text-slate-400">({item.timeframe})</span>
-                      <span
-                        className={`text-[11px] font-bold ${
-                          isPositive ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
+                      <span className="text-content-strong">{item.symbol}</span>
+                      <span className="text-2xs text-content-faint">{item.timeframe}</span>
+                      <span className={isPositive ? 'text-profit-400' : 'text-loss-400'}>
                         {isPositive ? '+' : ''}
                         {item.total_pnl_percent.toFixed(1)}%
                       </span>
-                      <span className="text-[10px] text-slate-500 ml-auto whitespace-nowrap">
+                      <span className="ml-auto whitespace-nowrap text-2xs text-content-faint">
                         {item.executed_at}
                       </span>
                       <button
@@ -369,10 +371,11 @@ export default function StrategyBuilder({
                           e.stopPropagation();
                           strategyStore.deleteSingleEvalHistoryItem(item.id);
                         }}
-                        className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors flex-shrink-0"
+                        aria-label="Bu testi geçmişten sil"
+                        className="flex-shrink-0 rounded p-0.5 text-content-faint opacity-0 transition-colors ease-out hover:bg-loss-950 hover:text-loss-400 focus-visible:opacity-100 group-hover/row:opacity-100"
                         title="Bu testi geçmişten sil"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="h-3 w-3" strokeWidth={1.75} />
                       </button>
                     </div>
                   );
@@ -380,16 +383,16 @@ export default function StrategyBuilder({
               </div>
 
               {currentStrategyLogs.length > 1 && (
-                <div className="border-t border-slate-800 px-3 py-1.5">
+                <div className="border-t border-line px-3 py-2">
                   <button
                     onClick={() => {
                       strategyStore.clearSingleEvalHistory(strategy?.id);
                       setShowHistory(false);
                     }}
-                    className="text-[10px] text-slate-500 hover:text-red-400 underline"
+                    className="text-2xs text-content-faint underline decoration-line-strong underline-offset-2 transition-colors ease-out hover:text-loss-400"
                     title="Bu stratejiye ait tüm geçmişi temizle"
                   >
-                    Tümünü temizle
+                    Tüm geçmişi temizle
                   </button>
                 </div>
               )}
@@ -401,19 +404,20 @@ export default function StrategyBuilder({
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setShowJson(!showJson)}
-            className={`p-1.5 rounded-lg border transition-all ${
+            aria-pressed={showJson}
+            className={`rounded-md border p-1.5 transition-colors ease-out ${
               showJson
-                ? 'text-amber-300 bg-amber-500/15 border-amber-500/40'
-                : 'text-slate-400 hover:text-slate-200 border-slate-700/60 hover:bg-slate-800/60'
+                ? 'border-accent-600 bg-accent-950 text-accent-300'
+                : 'border-line-strong text-content-muted hover:border-ink-500 hover:bg-surface-hover hover:text-content'
             }`}
-            title="JSON Önizleme"
+            title="JSON önizleme"
           >
-            <Code className="w-4 h-4" />
+            <Code className="h-4 w-4" strokeWidth={1.75} />
           </button>
           {onCancel && (
             <button
               onClick={onCancel}
-              className="px-3.5 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 rounded-xl transition-all font-medium"
+              className="rounded-md border border-line-strong px-3 py-1.5 text-xs text-content transition-colors ease-out hover:border-ink-500 hover:bg-surface-hover"
             >
               İptal
             </button>
@@ -421,10 +425,10 @@ export default function StrategyBuilder({
           <button
             onClick={handleSave}
             disabled={isSaving || !name.trim()}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-lg shadow-indigo-500/20"
+            className="flex items-center gap-1.5 rounded-md bg-accent-400 px-3.5 py-1.5 text-xs font-medium text-ink-950 transition-colors ease-out hover:bg-accent-300 disabled:cursor-not-allowed disabled:bg-ink-650 disabled:text-content-disabled"
           >
-            <Save className="w-3.5 h-3.5" />
-            {isSaving ? 'Kaydediliyor...' : isEditing ? 'Güncelle' : 'Oluştur'}
+            <Save className="h-3.5 w-3.5" strokeWidth={1.75} />
+            {isSaving ? 'Kaydediliyor…' : isEditing ? 'Güncelle' : 'Oluştur'}
           </button>
         </div>
       </div>
@@ -432,37 +436,33 @@ export default function StrategyBuilder({
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
         {/* Hata mesajı */}
         {saveError && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 text-xs text-red-400">
+          <p role="alert" className="rounded-md border border-loss-600/50 bg-loss-950 px-3 py-2 text-xs text-loss-300">
             {saveError}
-          </div>
+          </p>
         )}
 
         {/* Ad ve Açıklama */}
         <div className="space-y-3">
-          <div>
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
-              Strateji Adı
-            </label>
+          <label className="block">
+            <span className="mb-1 block text-2xs text-content-faint">Strateji adı</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ör. EMA Cross + RSI Filter"
-              className="w-full bg-slate-900/80 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-colors placeholder:text-slate-600"
+              placeholder="Ör. EMA kesişimi + RSI filtresi"
+              className="w-full rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-sm text-content-strong outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
             />
-          </div>
-          <div>
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
-              Açıklama
-            </label>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-2xs text-content-faint">Açıklama</span>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Strateji açıklaması..."
+              placeholder="Bu kuralın ne aradığını kendinize bir cümleyle anlatın"
               rows={2}
-              className="w-full bg-slate-900/80 border border-slate-700 text-slate-200 text-sm rounded-xl px-3 py-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-colors resize-none placeholder:text-slate-600"
+              className="w-full resize-none rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-sm text-content outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
             />
-          </div>
+          </label>
         </div>
 
 
@@ -473,8 +473,7 @@ export default function StrategyBuilder({
           group={entryRules}
           onChange={setEntryRules}
           indicators={indicators}
-          title="Giriş Kuralları (BUY)"
-          accentColor="emerald"
+          title="Giriş kuralları — pozisyon açar"
         />
 
         {/* Exit Rules */}
@@ -482,152 +481,167 @@ export default function StrategyBuilder({
           group={exitRules}
           onChange={setExitRules}
           indicators={indicators}
-          title="Çıkış Kuralları (SELL)"
-          accentColor="red"
+          title="Çıkış kuralları — pozisyonu kapatır"
+          kind="exit"
         />
 
         {/* Kar Al % ve Zarar Durdur % (Çıkış Kurallarının Aşağısında) */}
-        <div className="bg-[#0d1321]/90 border border-slate-800/80 rounded-xl p-3.5 space-y-3 shadow-md">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-              🎯 Kar Al & Zarar Durdur (% Hedefler)
-            </span>
-          </div>
+        {/* Hedefler ve gerçekleşme.
+            Önceden her alan üç kat kutu içindeydi: kart → renkli çerçeve →
+            input çerçevesi. Şimdi tek bir bölüm, düz etiketli alanlar ve
+            açıklamalar `title` ipucunda saklanmak yerine alanın altında.
+            Renkli çerçeveler de kalktı — kâr al alanı yeşil olduğu için
+            "kârlı" olmuyor, sadece bir eşik değeri. */}
+        <section className="rounded-lg border border-line bg-surface">
+          <h3 className="border-b border-line-subtle px-3.5 py-2.5 text-xs font-medium text-content-strong">
+            Hedefler ve gerçekleşme
+          </h3>
 
-          <div className="flex items-center gap-6 flex-wrap">
-            {/* Kar Al % */}
-            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-emerald-500/30 rounded-lg px-3.5 py-2">
-              <span className="text-xs font-bold text-emerald-400">Kar Al (%):</span>
-              <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-700/80 rounded-md px-3 py-1.5">
-                <span className="text-xs font-bold text-emerald-400 font-mono">%</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={takeProfitPct ?? ''}
-                  onChange={(e) => setTakeProfitPct(e.target.value ? parseFloat(e.target.value) : null)}
-                  placeholder="Örn: 3.5"
-                  className="w-28 bg-transparent text-slate-100 font-mono text-sm font-semibold outline-none"
-                  title="Pozisyon bu % kâra ulaşınca otomatik satılır"
-                />
-              </div>
-            </div>
+          <div className="grid grid-cols-1 gap-x-5 gap-y-4 px-3.5 py-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="block">
+              <span className="mb-1 block text-2xs text-content-faint">Kâr al (%)</span>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={takeProfitPct ?? ''}
+                onChange={(e) => setTakeProfitPct(e.target.value ? parseFloat(e.target.value) : null)}
+                placeholder="3.5"
+                className="w-full rounded-md border border-line-strong bg-surface-raised px-2.5 py-1.5 font-mono text-sm text-content-strong outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
+              />
+              <span className="mt-1 block text-2xs leading-relaxed text-content-faint">
+                Pozisyon bu kâra ulaşınca kapanır. Boş bırakılırsa hedef yok.
+              </span>
+            </label>
 
-            {/* Zarar Durdur % */}
-            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-red-500/30 rounded-lg px-3.5 py-2">
-              <span className="text-xs font-bold text-red-400">Zarar Durdur (%):</span>
-              <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-700/80 rounded-md px-3 py-1.5">
-                <span className="text-xs font-bold text-red-400 font-mono">%</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={stopLossPct ?? ''}
-                  onChange={(e) => setStopLossPct(e.target.value ? parseFloat(e.target.value) : null)}
-                  placeholder="Örn: 2.0"
-                  className="w-28 bg-transparent text-slate-100 font-mono text-sm font-semibold outline-none"
-                  title="Pozisyon bu % zarara düşerse otomatik satılır"
-                />
-              </div>
-            </div>
-          </div>
+            <label className="block">
+              <span className="mb-1 block text-2xs text-content-faint">Zarar durdur (%)</span>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={stopLossPct ?? ''}
+                onChange={(e) => setStopLossPct(e.target.value ? parseFloat(e.target.value) : null)}
+                placeholder="2.0"
+                className="w-full rounded-md border border-line-strong bg-surface-raised px-2.5 py-1.5 font-mono text-sm text-content-strong outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
+              />
+              <span className="mt-1 block text-2xs leading-relaxed text-content-faint">
+                Bu zarara düşünce kapanır. Kural değil, bekleyen emirdir —
+                gecikmeye tabi değil.
+              </span>
+            </label>
 
-          {/* Gerçekleşme ayarları — sonucun gerçekçiliğini belirleyen kısım */}
-          <div className="flex items-center gap-6 flex-wrap mt-3 pt-3 border-t border-slate-800/60">
-            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-slate-700/50 rounded-lg px-3.5 py-2">
-              <span className="text-xs font-bold text-slate-300">Emir Gecikmesi:</span>
+            <label className="block">
+              <span className="mb-1 block text-2xs text-content-faint">Emir gecikmesi</span>
               <select
                 value={barDelay}
                 onChange={(e) => setBarDelay(parseInt(e.target.value, 10))}
-                title="Sinyal kapanan mumdan üretilir. 1 bar gecikme gerçekçidir; 0 (intrabar) sonuçları iyimserleştirir."
-                className="bg-slate-950 border border-slate-700/80 rounded-md px-2 py-1.5 text-sm text-slate-100 font-semibold outline-none cursor-pointer"
+                className="w-full cursor-pointer rounded-md border border-line-strong bg-surface-raised px-2 py-1.5 text-sm text-content outline-none transition-colors ease-out hover:border-ink-500 focus:border-accent-500"
               >
-                <option value={1}>1 bar sonra (gerçekçi)</option>
-                <option value={0}>Aynı mumda (intrabar)</option>
+                <option value={1}>1 bar sonra — gerçekçi</option>
+                <option value={0}>Aynı mumda — iyimser</option>
               </select>
-            </div>
-
-            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-amber-500/30 rounded-lg px-3.5 py-2">
-              <span className="text-xs font-bold text-amber-400">Komisyon (bps):</span>
-              <input
-                type="number"
-                step="1"
-                min="0"
-                value={commissionBps}
-                onChange={(e) => setCommissionBps(e.target.value ? parseFloat(e.target.value) : 0)}
-                placeholder="Örn: 10"
-                title="Her bacak için komisyon. 1 bps = %0,01. Binance spot taker ≈ 10 bps."
-                className="w-24 bg-slate-950 border border-slate-700/80 rounded-md px-2 py-1.5 text-slate-100 font-mono text-sm font-semibold outline-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2.5 bg-slate-900/90 border border-amber-500/30 rounded-lg px-3.5 py-2">
-              <span className="text-xs font-bold text-amber-400">Slipaj (bps):</span>
-              <input
-                type="number"
-                step="1"
-                min="0"
-                value={slippageBps}
-                onChange={(e) => setSlippageBps(e.target.value ? parseFloat(e.target.value) : 0)}
-                placeholder="Örn: 5"
-                title="Emrin istenen fiyattan ne kadar kötü dolduğu. Alışta yukarı, satışta aşağı."
-                className="w-24 bg-slate-950 border border-slate-700/80 rounded-md px-2 py-1.5 text-slate-100 font-mono text-sm font-semibold outline-none"
-              />
-            </div>
-
-            {commissionBps === 0 && slippageBps === 0 && (
-              <span className="text-[11px] text-amber-400/80 italic">
-                Maliyet sıfır: sonuçlar gerçekte alınabilecekten iyimser çıkar.
+              <span className="mt-1 block text-2xs leading-relaxed text-content-faint">
+                Sinyal kapanan mumdan gelir; emri aynı mumda doldurmak
+                gerçekte olamayacak bir fiyat verir.
               </span>
-            )}
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-2xs text-content-faint">Komisyon (bps)</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={commissionBps}
+                  onChange={(e) => setCommissionBps(e.target.value ? parseFloat(e.target.value) : 0)}
+                  placeholder="10"
+                  className="w-full rounded-md border border-line-strong bg-surface-raised px-2.5 py-1.5 font-mono text-sm text-content-strong outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-2xs text-content-faint">Slipaj (bps)</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={slippageBps}
+                  onChange={(e) => setSlippageBps(e.target.value ? parseFloat(e.target.value) : 0)}
+                  placeholder="5"
+                  className="w-full rounded-md border border-line-strong bg-surface-raised px-2.5 py-1.5 font-mono text-sm text-content-strong outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
+                />
+              </label>
+              <span className="col-span-2 -mt-1 block text-2xs leading-relaxed text-content-faint">
+                Her iki bacakta da uygulanır. 1 bps = %0,01; Binance spot
+                taker ≈ 10 bps.
+              </span>
+            </div>
           </div>
-        </div>
+
+          {commissionBps === 0 && slippageBps === 0 && (
+            <p className="flex items-start gap-2 border-t border-line-subtle px-3.5 py-2.5 text-2xs leading-relaxed text-warn-300">
+              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              Komisyon ve slipaj sıfır. Sonuçlar gerçekte alınabilecek olandan
+              iyimser çıkar — özellikle çok işlem üreten kurallarda.
+            </p>
+          )}
+        </section>
 
 
 
 
-        {/* Timeframe Filtreleri */}
-        <div className="border border-amber-600/30 bg-amber-950/15 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setShowTfFilters(!showTfFilters)}
-            className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800/20 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              {showTfFilters ? (
-                <ChevronDown className="w-3.5 h-3.5 text-amber-400/60" />
-              ) : (
-                <ChevronRight className="w-3.5 h-3.5 text-amber-400/60" />
-              )}
-              <Filter className="w-3.5 h-3.5 text-amber-400/60" />
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-300/80">
-                Timeframe Filtreleri
-              </span>
-              <span className="text-[10px] text-slate-500">{timeframeFilters.length}</span>
-            </div>
+        {/* Timeframe Filtreleri.
+            Önceden aç/kapa butonunun İÇİNDE "Filtre Ekle" butonu vardı —
+            geçersiz HTML ve tıklama hedefleri iç içeydi. İkisi artık kardeş.
+            Bölümün amber çerçevesi de kalktı: bir filtre uyarı değil. */}
+        <section className="overflow-hidden rounded-lg border border-line bg-surface">
+          <div className="flex items-center justify-between gap-2 px-3.5 py-2.5">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                addTimeframeFilter();
-              }}
-              className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-200 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 rounded-lg px-2 py-0.5 transition-all"
+              onClick={() => setShowTfFilters(!showTfFilters)}
+              aria-expanded={showTfFilters}
+              className="flex min-w-0 items-center gap-2 text-left"
             >
-              <Plus className="w-3 h-3" />
-              Filtre Ekle
+              {showTfFilters ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-content-muted" strokeWidth={1.75} />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-content-muted" strokeWidth={1.75} />
+              )}
+              <Filter className="h-3.5 w-3.5 shrink-0 text-content-faint" strokeWidth={1.75} />
+              <span className="text-xs font-medium text-content-strong">Zaman dilimi filtreleri</span>
+              <span className="font-mono text-2xs text-content-faint">{timeframeFilters.length}</span>
             </button>
-          </button>
+
+            <button
+              onClick={addTimeframeFilter}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-2xs text-content-muted transition-colors ease-out hover:border-ink-500 hover:bg-surface-hover hover:text-content"
+            >
+              <Plus className="h-3 w-3" strokeWidth={2} />
+              Filtre ekle
+            </button>
+          </div>
+
+          {showTfFilters && timeframeFilters.length === 0 && (
+            <p className="border-t border-line-subtle px-3.5 py-3 text-2xs leading-relaxed text-content-faint">
+              Filtre yok. Bir filtre eklerseniz giriş kuralları yalnızca o
+              zaman diliminin koşulu da sağlandığında çalışır — örneğin 1
+              saatlik sinyali günlük trendle onaylamak için.
+            </p>
+          )}
 
           {showTfFilters && timeframeFilters.length > 0 && (
-            <div className="px-3 pb-3 space-y-3 border-t border-amber-800/30 pt-3">
+            <div className="space-y-4 border-t border-line-subtle px-3.5 py-3.5">
               {timeframeFilters.map((filter, index) => (
                 <div key={index} className="relative">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-2">
+                      <span className="text-2xs text-content-faint">Zaman dilimi</span>
                       <select
                         value={filter.timeframe}
                         onChange={(e) =>
                           updateTimeframeFilter(index, { ...filter, timeframe: e.target.value })
                         }
-                        className="bg-slate-900 border border-amber-700/40 text-amber-300 text-xs rounded-lg px-2 py-1 focus:border-amber-500 outline-none font-semibold"
+                        className="rounded-md border border-line-strong bg-surface-raised px-2 py-1 text-xs text-content outline-none transition-colors ease-out hover:border-ink-500 focus:border-accent-500"
                       >
                         {TIMEFRAMES.map((tf) => (
                           <option key={tf} value={tf}>
@@ -635,13 +649,13 @@ export default function StrategyBuilder({
                           </option>
                         ))}
                       </select>
-                      <span className="text-[10px] text-slate-500">timeframe filtresi</span>
-                    </div>
+                    </label>
                     <button
                       onClick={() => deleteTimeframeFilter(index)}
-                      className="p-1 text-red-400/50 hover:text-red-400 transition-colors"
+                      aria-label="Filtreyi sil"
+                      className="rounded p-1 text-content-faint transition-colors ease-out hover:bg-loss-950 hover:text-loss-400"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="h-3 w-3" strokeWidth={1.75} />
                     </button>
                   </div>
                   <ConditionEditor
@@ -654,25 +668,22 @@ export default function StrategyBuilder({
                       })
                     }
                     indicators={indicators}
-                    title={`${filter.timeframe} Filtre`}
-                    accentColor="amber"
+                    title={`${filter.timeframe} filtresi`}
                   />
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
 
         {/* JSON Önizleme */}
         {showJson && (
-          <div className="border border-amber-600/30 bg-[#0d1117] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/60">
-              <Code className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                JSON Önizleme
-              </span>
+          <div className="overflow-hidden rounded-lg border border-line bg-surface">
+            <div className="flex items-center gap-2 border-b border-line-subtle px-3.5 py-2.5">
+              <Code className="h-3.5 w-3.5 text-content-faint" strokeWidth={1.75} />
+              <span className="text-xs font-medium text-content-strong">JSON önizleme</span>
             </div>
-            <pre className="p-3 text-[11px] text-slate-300 font-mono overflow-x-auto max-h-80 overflow-y-auto custom-scrollbar leading-relaxed">
+            <pre className="custom-scrollbar max-h-80 overflow-auto p-3.5 font-mono text-xs leading-relaxed text-content-muted">
               {getJsonPreview()}
             </pre>
           </div>

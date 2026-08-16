@@ -91,25 +91,25 @@ export default function CreateAlarmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[#0d1321] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+      <div className="bg-surface-raised border border-line rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800/80 bg-[#070b13]/60">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line bg-canvas">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+            <div className="p-2 rounded-xl bg-warn-500/10 border border-warn-500/30 text-warn-400">
               <Bell className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+              <h3 className="text-sm font-medium text-content-strong flex items-center gap-2">
                 Fiyat & İndikatör Alarmı Ekle
               </h3>
-              <p className="text-[11px] text-slate-400 font-mono">
+              <p className="text-2xs text-content-muted font-mono">
                 {currentSymbol} • {currentProvider.toUpperCase()}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-xl transition"
+            className="p-1.5 text-content-muted hover:text-content hover:bg-surface-hover rounded-xl transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -118,7 +118,7 @@ export default function CreateAlarmModal({
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-2 text-xs text-red-400">
+            <div className="p-3 rounded-xl bg-loss-500/10 border border-loss-500/30 flex items-center gap-2 text-xs text-loss-400">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
@@ -126,13 +126,13 @@ export default function CreateAlarmModal({
 
           {/* Target Type Selector */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+            <label className="block text-2xs font-medium text-content-muted mb-1.5">
               Alarm Hedefi (Target)
             </label>
             <select
               value={targetType}
               onChange={e => setTargetType(e.target.value as any)}
-              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-medium focus:outline-none focus:border-amber-500/60 transition"
+              className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content font-medium focus:outline-none focus:border-warn-500/60 transition"
             >
               <option value="price">Fiyat (Price Level)</option>
               <option value="EMA_CROSS">EMA Kesişimi (Golden / Death Cross)</option>
@@ -150,7 +150,7 @@ export default function CreateAlarmModal({
           {targetType === 'EMA_CROSS' && (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className="block text-2xs font-medium text-content-muted mb-1.5">
                   Hızlı EMA (Fast)
                 </label>
                 <input
@@ -159,11 +159,11 @@ export default function CreateAlarmModal({
                   max="500"
                   value={indicatorPeriodFast}
                   onChange={e => setIndicatorPeriodFast(parseInt(e.target.value) || 20)}
-                  className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500/60 transition"
+                  className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content font-mono focus:outline-none focus:border-warn-500/60 transition"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className="block text-2xs font-medium text-content-muted mb-1.5">
                   Yavaş EMA (Slow)
                 </label>
                 <input
@@ -172,7 +172,7 @@ export default function CreateAlarmModal({
                   max="500"
                   value={indicatorPeriodSlow}
                   onChange={e => setIndicatorPeriodSlow(parseInt(e.target.value) || 50)}
-                  className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500/60 transition"
+                  className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content font-mono focus:outline-none focus:border-warn-500/60 transition"
                 />
               </div>
             </div>
@@ -181,7 +181,7 @@ export default function CreateAlarmModal({
           {/* Indicator Period (if standard indicator) */}
           {targetType !== 'price' && targetType !== 'EMA_CROSS' && targetType !== 'PERCENT_CHANGE' && (
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              <label className="block text-2xs font-medium text-content-muted mb-1.5">
                 İndikatör Periyodu (Period)
               </label>
               <input
@@ -190,24 +190,24 @@ export default function CreateAlarmModal({
                 max="500"
                 value={indicatorPeriod}
                 onChange={e => setIndicatorPeriod(parseInt(e.target.value) || 14)}
-                className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500/60 transition"
+                className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content font-mono focus:outline-none focus:border-warn-500/60 transition"
               />
             </div>
           )}
 
           {/* Condition Selector */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+            <label className="block text-2xs font-medium text-content-muted mb-1.5">
               Tetiklenme Koşulu (Condition)
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setCondition('rises_above')}
-                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition ${
+                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-medium transition ${
                   condition === 'rises_above'
-                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                    : 'bg-[#070b13] border-slate-800 text-slate-400 hover:text-slate-200'
+                    ? 'bg-accent-500/20 border-accent-500/50 text-accent-400'
+                    : 'bg-canvas border-line text-content-muted hover:text-content'
                 }`}
               >
                 <TrendingUp className="w-4 h-4" />
@@ -217,10 +217,10 @@ export default function CreateAlarmModal({
               <button
                 type="button"
                 onClick={() => setCondition('falls_below')}
-                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition ${
+                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-medium transition ${
                   condition === 'falls_below'
-                    ? 'bg-red-500/20 border-red-500/50 text-red-400'
-                    : 'bg-[#070b13] border-slate-800 text-slate-400 hover:text-slate-200'
+                    ? 'bg-loss-500/20 border-loss-500/50 text-loss-400'
+                    : 'bg-canvas border-line text-content-muted hover:text-content'
                 }`}
               >
                 <TrendingDown className="w-4 h-4" />
@@ -233,14 +233,14 @@ export default function CreateAlarmModal({
           {targetType !== 'EMA_CROSS' && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <label className="text-2xs font-medium text-content-muted">
                   {targetType === 'PERCENT_CHANGE' ? 'Yüzdelik Değişim Oranı (%)' : 'Hedef Seviye / Fiyat (Threshold)'}
                 </label>
                 {currentPrice && targetType === 'price' && (
                   <button
                     type="button"
                     onClick={() => setThresholdValue(currentPrice.toString())}
-                    className="text-[10px] text-amber-400 hover:underline font-mono"
+                    className="text-2xs text-warn-400 hover:underline font-mono"
                   >
                     Son Fiyatı Kullan ({currentPrice})
                   </button>
@@ -253,14 +253,14 @@ export default function CreateAlarmModal({
                 value={thresholdValue}
                 onChange={e => setThresholdValue(e.target.value)}
                 placeholder={targetType === 'PERCENT_CHANGE' ? 'Örn: 2 (%2 değişim)' : 'Örn: 70000 veya 70'}
-                className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-sm font-bold text-slate-100 font-mono focus:outline-none focus:border-amber-500/60 transition"
+                className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-sm font-medium text-content-strong font-mono focus:outline-none focus:border-warn-500/60 transition"
               />
             </div>
           )}
 
           {/* Note / Description */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+            <label className="block text-2xs font-medium text-content-muted mb-1.5">
               Not / Açıklama (İsteğe Bağlı)
             </label>
             <input
@@ -268,23 +268,23 @@ export default function CreateAlarmModal({
               value={note}
               onChange={e => setNote(e.target.value)}
               placeholder="Örn: Direnç kırılımı takibi"
-              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500/60 transition"
+              className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content focus:outline-none focus:border-warn-500/60 transition"
             />
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-xl transition"
+              className="px-4 py-2 text-xs font-medium text-content-muted hover:text-content hover:bg-surface-hover rounded-xl transition"
             >
               İptal
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl shadow-lg shadow-amber-600/20 transition disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-warn-600 hover:bg-warn-500 rounded-xl shadow-lg shadow-warn-600/20 transition disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
               <span>Alarmı Oluştur</span>

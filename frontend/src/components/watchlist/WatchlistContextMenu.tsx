@@ -109,13 +109,13 @@ function WatchlistContextMenu({
   }, [onClose, symbolItem]);
 
   const itemClass =
-    'w-full flex items-center gap-3 px-3 py-2 text-[13px] text-zinc-200 hover:bg-white/[0.06] rounded-lg transition-colors text-left';
+    'w-full flex items-center gap-3 px-3 py-2 text-sm text-content hover:bg-white/[0.06] rounded-lg transition-colors text-left';
 
   return (
     <div
       ref={menuRef}
       style={{ left: pos.left, top: pos.top, width: MENU_WIDTH }}
-      className="fixed z-[100] bg-[#0d1117] border border-white/[0.1] rounded-xl shadow-2xl p-1.5 select-none"
+      className="fixed z-[100] bg-surface-raised border border-white/[0.1] rounded-xl shadow-2xl p-1.5 select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
       {symbolItem && (
@@ -132,7 +132,7 @@ function WatchlistContextMenu({
             <span className="flex-1">
               {label} sembolünü {isMarked ? 'işaretini kaldır' : 'işaretle'}
             </span>
-            <span className="text-[11px] text-zinc-500 font-mono shrink-0">Alt + ↵</span>
+            <span className="text-2xs text-content-faint font-mono shrink-0">Alt + ↵</span>
           </button>
 
           <div className="flex items-center gap-2 px-3 py-2">
@@ -179,13 +179,13 @@ function WatchlistContextMenu({
               gecikmeyle tepki verilmesine yol açıyordu. */}
           <div className="relative group">
             <button type="button" className={itemClass}>
-              <ListPlus className="w-4 h-4 text-zinc-400 shrink-0" />
+              <ListPlus className="w-4 h-4 text-content-muted shrink-0" />
               <span className="flex-1">{label} İzleme Listesine Ekle</span>
-              <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />
+              <ChevronRight className="w-4 h-4 text-content-faint shrink-0" />
             </button>
 
             <div
-              className="absolute left-[calc(100%-6px)] -top-1 hidden w-56 bg-[#0d1117] border border-white/[0.1] rounded-xl shadow-2xl p-1.5 z-10 group-hover:block"
+              className="absolute left-[calc(100%-6px)] -top-1 hidden w-56 bg-surface-raised border border-white/[0.1] rounded-xl shadow-2xl p-1.5 z-10 group-hover:block"
               style={
                 // Alt menü sağa sığmıyorsa sola aç.
                 pos.left + MENU_WIDTH + 224 > window.innerWidth
@@ -213,7 +213,7 @@ function WatchlistContextMenu({
                   >
                     <span
                       className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                        checked ? 'bg-indigo-500 border-indigo-500' : 'border-zinc-600'
+                        checked ? 'bg-accent-500 border-accent-500' : 'border-line-strong'
                       }`}
                     >
                       {checked && <Check className="w-3 h-3 text-white" />}
@@ -247,7 +247,7 @@ function WatchlistContextMenu({
               onClose();
             }}
           >
-            <PlusCircle className="w-4 h-4 text-zinc-400 shrink-0" />
+            <PlusCircle className="w-4 h-4 text-content-muted shrink-0" />
             <span>
               {isCompared
                 ? `${label} sembolünü kıyaslamadan kaldır`
@@ -264,7 +264,7 @@ function WatchlistContextMenu({
               onClose();
             }}
           >
-            <SquarePen className="w-4 h-4 text-zinc-400 shrink-0" />
+            <SquarePen className="w-4 h-4 text-content-muted shrink-0" />
             <span>
               {symbolItem.note ? `${label} notunu düzenle` : `${label} için not ekle`}
             </span>
@@ -284,12 +284,12 @@ function WatchlistContextMenu({
               onClose();
             }}
           >
-            <Type className="w-4 h-4 text-zinc-400 shrink-0" />
+            <Type className="w-4 h-4 text-content-muted shrink-0" />
             <span>Bölümü yeniden adlandır</span>
           </button>
           <button
             type="button"
-            className={`${itemClass} text-red-400 hover:bg-red-500/10`}
+            className={`${itemClass} text-loss-400 hover:bg-loss-500/10`}
             onClick={() => {
               watchlistStore.removeSection(listId, item.id);
               onClose();
@@ -311,7 +311,7 @@ function WatchlistContextMenu({
           onClose();
         }}
       >
-        <Rows3 className="w-4 h-4 text-zinc-400 shrink-0" />
+        <Rows3 className="w-4 h-4 text-content-muted shrink-0" />
         <span>Bölüm ekle</span>
       </button>
 
@@ -323,7 +323,7 @@ function WatchlistContextMenu({
           onClose();
         }}
       >
-        <Plus className="w-4 h-4 text-zinc-400 shrink-0" />
+        <Plus className="w-4 h-4 text-content-muted shrink-0" />
         <span>Sembol ekle</span>
       </button>
 
@@ -332,7 +332,7 @@ function WatchlistContextMenu({
           <div className="h-px bg-white/[0.08] my-1.5" />
           <button
             type="button"
-            className={`${itemClass} text-red-400 hover:bg-red-500/10`}
+            className={`${itemClass} text-loss-400 hover:bg-loss-500/10`}
             onClick={() => {
               watchlistStore.removeSymbolFromList(listId, symbolItem.symbol, symbolItem.provider);
               onClose();
@@ -346,7 +346,7 @@ function WatchlistContextMenu({
 
       {/* Menüdeki işaret renginin satırda göründüğü yer için görsel ipucu */}
       {symbolItem?.markColor && (
-        <div className="px-3 pt-1.5 pb-1 text-[11px] text-zinc-500 flex items-center gap-2">
+        <div className="px-3 pt-1.5 pb-1 text-2xs text-content-faint flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ backgroundColor: markColorHex(symbolItem.markColor) ?? undefined }}

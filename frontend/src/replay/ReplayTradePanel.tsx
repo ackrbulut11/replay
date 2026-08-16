@@ -219,8 +219,8 @@ export default function ReplayTradePanel({
   const levelSuffix = levelMode === 'percent' ? '%' : '';
   // Alanlar dar tutulur: şerit tek satırda kaldığı sürece mumları örtmez.
   const inputClass =
-    'w-14 bg-slate-950 border border-slate-700/80 text-zinc-200 text-[10px] rounded px-1 py-0.5 focus:border-indigo-500 outline-none font-mono';
-  const fieldLabel = 'text-[8px] uppercase tracking-wider text-zinc-500';
+    'w-14 bg-canvas border border-line-strong text-content text-2xs rounded px-1 py-0.5 focus:border-accent-500 outline-none font-mono';
+  const fieldLabel = 'text-2xs text-content-faint';
 
   return (
     // transform JSX'te verilmez; sürükleme sırasında doğrudan DOM'a yazılır ve
@@ -231,43 +231,43 @@ export default function ReplayTradePanel({
     // hâlde kalıyordu. Şerit artık sol altta, cetvelden uzakta durur.
     <div
       ref={panelRef}
-      className="flex items-center gap-1.5 bg-[#0a0b0e]/95 border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-zinc-100 select-none"
+      className="flex items-center gap-1.5 bg-canvas border border-white/[0.1] rounded-lg px-1.5 py-1 shadow-2xl backdrop-blur-md text-content-strong select-none"
     >
       {/* Sürükleme tutamacı + anlık fiyat */}
       <div
         onMouseDown={handleDragStart}
         title="Sürükleyerek taşı"
-        className="flex items-center gap-1 pr-1.5 border-r border-white/[0.08] cursor-grab active:cursor-grabbing"
+        className="flex items-center gap-1 pr-1.5 border-r border-line cursor-grab active:cursor-grabbing"
       >
-        <GripHorizontal className="w-3 h-3 text-zinc-600" />
-        <span className="text-[10px] font-mono text-zinc-400 tabular-nums">
+        <GripHorizontal className="w-3 h-3 text-content-faint" />
+        <span className="text-2xs font-mono text-content-muted tabular-nums">
           {formatPrice(currentPrice)}
         </span>
       </div>
 
       {position ? (
         <>
-          <span className="flex items-center gap-1 text-[10px] font-semibold">
+          <span className="flex items-center gap-1 text-2xs font-medium">
             {position.side === 'long' ? (
-              <TrendingUp className="w-3 h-3 text-emerald-400" />
+              <TrendingUp className="w-3 h-3 text-profit-400" />
             ) : (
-              <TrendingDown className="w-3 h-3 text-red-400" />
+              <TrendingDown className="w-3 h-3 text-loss-400" />
             )}
-            <span className={position.side === 'long' ? 'text-emerald-400' : 'text-red-400'}>
+            <span className={position.side === 'long' ? 'text-profit-400' : 'text-loss-400'}>
               {position.side === 'long' ? 'LONG' : 'SHORT'}
             </span>
-            <span className="text-zinc-500 font-mono text-[9px]">x{position.quantity ?? 1}</span>
+            <span className="text-content-faint font-mono text-2xs">x{position.quantity ?? 1}</span>
           </span>
 
-          <span className="flex items-center gap-1.5 text-[9px] font-mono text-zinc-500 tabular-nums">
+          <span className="flex items-center gap-1.5 text-2xs font-mono text-content-faint tabular-nums">
             <span title="Giriş fiyatı">
-              G <span className="text-zinc-300">{formatPrice(position.entry_price)}</span>
+              G <span className="text-content">{formatPrice(position.entry_price)}</span>
             </span>
             <span title="Stop seviyesi">
-              S <span className="text-red-400/90">{formatPrice(position.stop_loss)}</span>
+              S <span className="text-loss-400/90">{formatPrice(position.stop_loss)}</span>
             </span>
             <span title="Hedef seviyesi">
-              H <span className="text-emerald-400/90">{formatPrice(position.take_profit)}</span>
+              H <span className="text-profit-400/90">{formatPrice(position.take_profit)}</span>
             </span>
           </span>
 
@@ -276,7 +276,7 @@ export default function ReplayTradePanel({
             onClick={handleClose}
             disabled={disabled}
             title="Pozisyonu kapat (K)"
-            className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded bg-zinc-100 text-zinc-900 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded bg-ink-50 text-ink-950 hover:bg-ink-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
             Kapat
@@ -285,17 +285,17 @@ export default function ReplayTradePanel({
       ) : (
         <>
           {/* Seviye birimi: mutlak fiyat mı, yüzde mi */}
-          <div className="flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.06] rounded p-0.5">
+          <div className="flex items-center gap-0.5 bg-white/[0.03] border border-line rounded p-0.5">
             {(['price', 'percent'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setLevelMode(mode)}
                 title={mode === 'price' ? 'Seviyeleri fiyat olarak gir' : 'Seviyeleri yüzde olarak gir'}
-                className={`px-1.5 py-0.5 text-[9px] font-semibold rounded transition-colors cursor-pointer ${
+                className={`px-1.5 py-0.5 text-2xs font-medium rounded transition-colors cursor-pointer ${
                   levelMode === mode
-                    ? 'bg-indigo-500/20 text-indigo-300'
-                    : 'text-zinc-500 hover:text-zinc-300'
+                    ? 'bg-accent-500/20 text-accent-300'
+                    : 'text-content-faint hover:text-content'
                 }`}
               >
                 {mode === 'price' ? 'Fiyat' : 'Yüzde'}
@@ -346,7 +346,7 @@ export default function ReplayTradePanel({
             onClick={() => handleOpen('long')}
             disabled={disabled}
             title="Long pozisyon aç (L)"
-            className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-semibold rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="flex items-center gap-0.5 px-2 py-1 text-2xs font-medium rounded bg-accent-500/15 text-accent-400 border border-accent-500/40 hover:bg-accent-300/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <TrendingUp className="w-3 h-3" />
             Long
@@ -356,7 +356,7 @@ export default function ReplayTradePanel({
             onClick={() => handleOpen('short')}
             disabled={disabled}
             title="Short pozisyon aç (S)"
-            className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-semibold rounded bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="flex items-center gap-0.5 px-2 py-1 text-2xs font-medium rounded bg-loss-500/15 text-loss-400 border border-loss-500/40 hover:bg-loss-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <TrendingDown className="w-3 h-3" />
             Short
@@ -369,7 +369,7 @@ export default function ReplayTradePanel({
           (bkz. ReplayHistoryPanel). */}
 
       {error && (
-        <span className="flex items-center gap-1 pl-1.5 border-l border-white/[0.08] text-[9px] text-red-400 max-w-[220px]">
+        <span className="flex items-center gap-1 pl-1.5 border-l border-line text-2xs text-loss-400 max-w-[220px]">
           <AlertTriangle className="w-3 h-3 flex-shrink-0" />
           <span className="truncate" title={error}>
             {error}

@@ -43,8 +43,8 @@ interface DrawingToolbarProps {
 const tools: { tool: DrawingTool; icon: React.ReactNode; label: string }[] = [
   { tool: 'pointer', icon: <MousePointer2 className="w-4 h-4" />, label: 'İşaretçi (Pointer)' },
   { tool: 'ruler', icon: <Ruler className="w-4 h-4" />, label: 'Cetvel (Tarih ve Fiyat Aralığı)' },
-  { tool: 'longPosition', icon: <ArrowUpRight className="w-4 h-4 text-emerald-400" />, label: 'Long Pozisyon (Alış)' },
-  { tool: 'shortPosition', icon: <ArrowDownRight className="w-4 h-4 text-rose-400" />, label: 'Short Pozisyon (Satış)' },
+  { tool: 'longPosition', icon: <ArrowUpRight className="w-4 h-4 text-profit-400" />, label: 'Long Pozisyon (Alış)' },
+  { tool: 'shortPosition', icon: <ArrowDownRight className="w-4 h-4 text-loss-400" />, label: 'Short Pozisyon (Satış)' },
   { tool: 'trendLine', icon: <TrendingUp className="w-4 h-4" />, label: 'Trend Çizgisi' },
   { tool: 'horizontalRay', icon: <Minus className="w-4 h-4" />, label: 'Yatay Işın' },
   { tool: 'rectangle', icon: <Square className="w-4 h-4" />, label: 'Dikdörtgen' },
@@ -61,7 +61,7 @@ export default function DrawingToolbar({
 }: DrawingToolbarProps) {
   return (
     <div className="flex items-center gap-1">
-      <div className="flex items-center gap-0.5 bg-[#0a0b0e] border border-white/[0.08] rounded-lg p-0.5 shadow-2xl">
+      <div className="flex items-center gap-0.5 bg-canvas border border-line rounded-lg p-0.5 shadow-2xl">
         {tools.map(({ tool, icon, label }) => (
           <button
             key={tool}
@@ -69,8 +69,8 @@ export default function DrawingToolbar({
             title={label}
             className={`p-1.5 rounded-md transition-colors ${
               activeTool === tool
-                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] border border-transparent'
+                ? 'bg-accent-500/15 text-accent-400 border border-accent-500/30'
+                : 'text-content-muted hover:text-content-strong hover:bg-white/[0.04] border border-transparent'
             }`}
           >
             {icon}
@@ -84,8 +84,8 @@ export default function DrawingToolbar({
           title={snapEnabled ? 'Snap to bar: ON' : 'Snap to bar: OFF'}
           className={`p-1.5 rounded-md transition-colors border ${
             snapEnabled
-              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] border-transparent'
+              ? 'bg-accent-500/15 text-accent-400 border-accent-500/30'
+              : 'text-content-faint hover:text-content hover:bg-white/[0.04] border-transparent'
           }`}
         >
           <Magnet className="w-4 h-4" />
@@ -97,7 +97,7 @@ export default function DrawingToolbar({
             <button
               onClick={onClearAll}
               title="Clear all drawings"
-              className="p-1.5 rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors border border-transparent"
+              className="p-1.5 rounded-md text-loss-400 hover:text-loss-300 hover:bg-loss-500/10 transition-colors border border-transparent"
             >
               <Eraser className="w-4 h-4" />
             </button>

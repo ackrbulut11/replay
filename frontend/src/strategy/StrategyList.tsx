@@ -11,11 +11,8 @@ import {
   Trash2,
   Copy,
   Clock,
-  ChevronRight,
-  Layers,
   ArrowUpRight,
   ArrowDownRight,
-  Zap,
   GripVertical,
 } from 'lucide-react';
 import type { Strategy } from '../types/strategy';
@@ -110,56 +107,66 @@ export default function StrategyList({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#070b13]">
+    <div className="flex h-full flex-col bg-surface">
       {/* Başlık */}
-      <div className="px-4 py-3 border-b border-slate-800/60">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-indigo-400" />
-            <h2 className="text-sm font-bold text-slate-100">Stratejiler</h2>
-            <span className="text-[10px] text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded font-mono">
-              {strategies.length}
-            </span>
+      <div className="border-b border-line px-3 py-3">
+        <div className="mb-2.5 flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-sm font-medium text-content-strong">Stratejiler</h2>
+            <span className="font-mono text-2xs text-content-faint">{strategies.length}</span>
           </div>
           <button
             onClick={onNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-all shadow-lg shadow-indigo-500/20"
+            className="flex items-center gap-1.5 rounded-md bg-accent-400 px-2.5 py-1.5 text-xs font-medium text-ink-950 transition-colors ease-out hover:bg-accent-300"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
             Yeni
           </button>
         </div>
 
         {/* Arama */}
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-content-faint"
+            strokeWidth={1.75}
+          />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Strateji ara..."
-            className="w-full bg-slate-900/80 border border-slate-700/60 text-slate-200 text-xs rounded-lg pl-8 pr-3 py-2 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-colors placeholder:text-slate-600"
+            placeholder="Strateji ara"
+            aria-label="Strateji ara"
+            className="w-full rounded-md border border-line-strong bg-surface-raised py-1.5 pl-8 pr-3 text-xs text-content outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
           />
         </div>
       </div>
 
-      {/* Liste */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+      {/* Liste.
+          Kart yerine düz satır: panel zaten bir kart, içine kart koymak ikinci
+          bir çerçeve demekti. Satır yüksekliği düştü, aynı ekranda iki kat
+          strateji görünüyor. */}
+      <div className="custom-scrollbar flex-1 overflow-y-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-6 h-6 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+          /* Spinner yerine iskelet: liste satırlarının nereye geleceğini
+             gösterir, boşluk zıplamaz. */
+          <div className="space-y-px p-3">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="animate-pulse py-2.5">
+                <div className="h-3 w-2/3 rounded-sm bg-ink-750" />
+                <div className="mt-2 h-2.5 w-1/3 rounded-sm bg-ink-800" />
+              </div>
+            ))}
           </div>
         ) : filteredStrategies.length === 0 ? (
-          <div className="text-center py-12">
-            <Zap className="w-8 h-8 text-slate-700 mx-auto mb-3" />
-            <p className="text-xs text-slate-500 mb-1">
-              {searchQuery ? 'Sonuç bulunamadı' : 'Henüz strateji yok'}
+          <div className="px-4 py-10">
+            <p className="text-sm text-content-muted">
+              {searchQuery ? 'Eşleşen strateji yok' : 'Henüz strateji yok'}
             </p>
-            {!searchQuery && (
-              <p className="text-[10px] text-slate-600">
-                "Yeni" butonuna tıklayarak ilk stratejinizi oluşturun
-              </p>
-            )}
+            <p className="mt-1.5 text-xs leading-relaxed text-content-faint">
+              {searchQuery
+                ? 'Arama terimini kısaltmayı deneyin.'
+                : 'Yukarıdaki “Yeni” ile bir kural ağacı oluşturun; kaydettikten sonra geçmiş veride test edebilirsiniz.'}
+            </p>
           </div>
         ) : (
           filteredStrategies.map((strategy, index) => {
@@ -184,93 +191,88 @@ export default function StrategyList({
                   setDragOverIndex(null);
                 }}
                 onClick={() => onSelect(strategy)}
-                className={`w-full text-left p-3 rounded-xl border transition-all group relative cursor-pointer ${
-                  isDragged ? 'opacity-40 scale-95 border-dashed border-indigo-500/80' : ''
-                } ${
-                  isDragOver ? 'border-t-2 border-t-indigo-400 bg-indigo-950/20' : ''
-                } ${
-                  isActive
-                    ? 'bg-indigo-950/40 border-indigo-600/50 shadow-lg shadow-indigo-500/10'
-                    : 'bg-slate-900/40 border-slate-800/40 hover:bg-slate-800/40 hover:border-slate-700/60'
+                className={`group relative cursor-pointer border-b border-line-subtle py-2.5 pl-4 pr-2.5 text-left transition-colors ease-out ${
+                  isDragged ? 'opacity-40' : ''
+                } ${isDragOver ? 'shadow-[inset_0_2px_0_0_theme(colors.accent.400)]' : ''} ${
+                  isActive ? 'bg-surface-raised' : 'hover:bg-surface-hover'
                 }`}
               >
-                <div className="flex items-start justify-between mb-1.5 gap-1.5">
+                {isActive && (
+                  <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-accent-400" />
+                )}
+
+                <div className="flex items-start gap-1.5">
                   <div
-                    className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 mt-0.5 p-0.5 rounded transition-colors"
+                    className="-ml-1.5 mt-px cursor-grab text-content-faint opacity-0 transition-opacity ease-out hover:text-content-muted active:cursor-grabbing group-hover:opacity-100"
                     title="Sürükleyip bırakarak yerini değiştirin"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <GripVertical className="w-3.5 h-3.5" />
+                    <GripVertical className="h-3.5 w-3.5" strokeWidth={1.75} />
                   </div>
-                  <div className="flex-1 min-w-0">
+
+                  <div className="min-w-0 flex-1">
                     <h3
-                      className={`text-xs font-semibold truncate ${
-                        isActive ? 'text-indigo-200' : 'text-slate-200'
+                      className={`truncate text-xs ${
+                        isActive ? 'text-content-strong' : 'text-content'
                       }`}
                     >
                       {strategy.name}
                     </h3>
                     {strategy.description && (
-                      <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                      <p className="mt-0.5 truncate text-2xs text-content-faint">
                         {strategy.description}
                       </p>
                     )}
+
+                    {/* Kural sayıları.
+                        Yeşil/kırmızı kaldırıldı: "giriş" kâr, "çıkış" zarar
+                        demek değil — o iki renk bu üründe yalnızca para
+                        anlamına geliyor. Yön bilgisini oklar taşıyor. */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-content-faint">
+                      {entryCount > 0 && (
+                        <span className="flex items-center gap-0.5">
+                          <ArrowUpRight className="h-3 w-3" strokeWidth={1.75} />
+                          {entryCount} giriş
+                        </span>
+                      )}
+                      {exitCount > 0 && (
+                        <span className="flex items-center gap-0.5">
+                          <ArrowDownRight className="h-3 w-3" strokeWidth={1.75} />
+                          {exitCount} çıkış
+                        </span>
+                      )}
+                      {paramCount > 0 && <span>{paramCount} parametre</span>}
+                      {tfCount > 0 && <span>{tfCount} TF filtresi</span>}
+                      <span className="flex items-center gap-0.5">
+                        <Clock className="h-3 w-3" strokeWidth={1.75} />
+                        {formatDate(strategy.updated_at)}
+                      </span>
+                    </div>
                   </div>
-                  <ChevronRight
-                    className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 transition-transform ${
-                      isActive ? 'text-indigo-400 rotate-90' : 'text-slate-600 group-hover:text-slate-400'
-                    }`}
-                  />
-                </div>
 
-                {/* Metrikler */}
-                <div className="flex items-center gap-3 mb-2">
-                  {entryCount > 0 && (
-                    <span className="flex items-center gap-1 text-[10px] text-emerald-400/70">
-                      <ArrowUpRight className="w-3 h-3" />
-                      {entryCount} giriş
-                    </span>
-                  )}
-                  {exitCount > 0 && (
-                    <span className="flex items-center gap-1 text-[10px] text-red-400/70">
-                      <ArrowDownRight className="w-3 h-3" />
-                      {exitCount} çıkış
-                    </span>
-                  )}
-                  {paramCount > 0 && (
-                    <span className="text-[10px] text-slate-500">{paramCount} param</span>
-                  )}
-                  {tfCount > 0 && (
-                    <span className="text-[10px] text-amber-400/60">{tfCount} TF filtre</span>
-                  )}
-                </div>
-
-                {/* Alt bilgi */}
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1 text-[10px] text-slate-600">
-                    <Clock className="w-3 h-3" />
-                    {formatDate(strategy.updated_at)}
-                  </span>
-
-                  {/* Aksiyonlar */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Aksiyonlar. Silme iki tıklamalı; ilk tıklamadan sonra
+                      butonun kendisi "Sil?" yazıyor — ikinci tıklamanın ne
+                      yapacağı ipucu balonunda saklı kalmıyor. */}
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <button
                       onClick={(e) => handleDuplicate(e, strategy)}
-                      className="p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-700/60 rounded transition-all"
+                      aria-label="Stratejiyi kopyala"
+                      className="rounded p-1 text-content-faint opacity-0 transition-colors ease-out hover:bg-surface-hover hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
                       title="Kopyala"
                     >
-                      <Copy className="w-3 h-3" />
+                      <Copy className="h-3 w-3" strokeWidth={1.75} />
                     </button>
                     <button
                       onClick={(e) => handleDelete(e, strategy.id)}
-                      className={`p-1 rounded transition-all ${
+                      aria-label={isDeleting ? 'Silmeyi onayla' : 'Stratejiyi sil'}
+                      className={`flex items-center gap-1 rounded px-1 py-1 transition-colors ease-out ${
                         isDeleting
-                          ? 'text-red-400 bg-red-500/20'
-                          : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
+                          ? 'bg-loss-900 text-loss-300'
+                          : 'text-content-faint opacity-0 hover:bg-loss-950 hover:text-loss-400 focus-visible:opacity-100 group-hover:opacity-100'
                       }`}
-                      title={isDeleting ? 'Silmek için tekrar tıkla' : 'Sil'}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="h-3 w-3" strokeWidth={1.75} />
+                      {isDeleting && <span className="text-2xs">Sil?</span>}
                     </button>
                   </div>
                 </div>

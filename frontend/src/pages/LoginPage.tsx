@@ -44,15 +44,38 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
     return <Navigate to="/app" replace />;
   }
 
-  const handleSuccess = async (credentialResponse: any) => {
-    if (credentialResponse.credential) {
-      try {
-        setError(null);
-        await loginWithGoogle(credentialResponse.credential);
-        navigate('/app', { replace: true });
-      } catch (err: any) {
-        setError(err.message || 'Something went wrong while signing in.');
+  /**
+   * `viaDev` yalnızca hata metnini seçmek için var.
+   *
+   * Dev girişi başarısız olduğunda backend, Google akışına düşüp "Sunucu
+   * Google kimlik doğrulaması için yapılandırılmamış" diyordu — oysa
+   * kullanıcı Google'a değil dev butonuna basmıştı ve gerçek sebep hemen
+   * her zaman token uyuşmazlığı ya da kapalı backend oluyordu.
+   */
+  const handleSuccess = async (credentialResponse: any, viaDev = false) => {
+    if (!credentialResponse.credential) {
+      setError(
+        viaDev
+          ? 'VITE_DEV_LOGIN_TOKEN tanımlı değil. frontend/.env.local dosyasına ekleyip dev sunucusunu yeniden başlatın.'
+          : 'Google did not return a credential. Please try again.'
+      );
+      return;
+    }
+    try {
+      setError(null);
+      await loginWithGoogle(credentialResponse.credential);
+      navigate('/app', { replace: true });
+    } catch (err: any) {
+      const raw = err?.message || '';
+      if (viaDev && raw.includes('Google')) {
+        setError(
+          'Dev girişi reddedildi: frontend/.env.local içindeki VITE_DEV_LOGIN_TOKEN ile ' +
+            "backend/.env içindeki DEV_LOGIN_TOKEN birebir aynı olmalı. Değiştirdiyseniz " +
+            'her iki sunucuyu da yeniden başlatın.'
+        );
+        return;
       }
+      setError(raw || 'Something went wrong while signing in.');
     }
   };
 
@@ -61,7 +84,10 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center bg-[#0a0b0e] [background-image:radial-gradient(120%_100%_at_100%_0%,rgba(16,185,129,0.22),transparent_65%)] text-zinc-100 antialiased">
+    /* Zemindeki parıltı yeşilden vurgu rengine alındı: yeşil bu üründe kâr
+       demek ve hemen yanındaki "+68.4% Win Rate" rozetiyle aynı renk olunca
+       ikisi birbirine karışıyordu. */
+    <div className="flex min-h-screen items-center bg-canvas [background-image:radial-gradient(120%_100%_at_100%_0%,rgba(47,136,184,0.20),transparent_65%)] text-content-strong antialiased">
       <section className="relative w-full">
         <Container className="relative grid grid-cols-1 items-center gap-14 py-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] lg:gap-12">
           <div>
@@ -72,15 +98,15 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                 className="h-9 w-9 rounded-md object-cover opacity-90"
               />
             </Link>
-            <h1 className="mt-5 text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-zinc-100 sm:text-[36px]">
+            <h1 className="mt-5 text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-content-strong sm:text-[36px]">
               Sign in to REPLAY.
             </h1>
-            <p className="mt-4 max-w-[380px] text-[14px] leading-[1.75] text-zinc-400">
+            <p className="mt-4 max-w-[380px] text-base leading-[1.75] text-content-muted">
               Test strategies, replay the market and review your data.
             </p>
 
             {error && (
-              <p className="mt-5 max-w-[380px] rounded-md border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-[13px] text-red-400/90">
+              <p className="mt-5 max-w-[380px] rounded-md border border-loss-500/20 bg-loss-500/[0.06] px-3 py-2 text-sm text-loss-400/90">
                 {error}
               </p>
             )}
@@ -103,8 +129,10 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                 build'inde bu buton hiç render edilmez. */}
             {import.meta.env.DEV && import.meta.env.VITE_DEV_LOGIN_TOKEN && (
               <button
-                onClick={() => handleSuccess({ credential: import.meta.env.VITE_DEV_LOGIN_TOKEN })}
-                className="mt-3 w-full max-w-[280px] rounded-full border border-dashed border-amber-500/40 bg-amber-500/[0.06] px-4 py-2 text-[12px] font-medium text-amber-400/90 hover:bg-amber-500/10"
+                onClick={() =>
+                  handleSuccess({ credential: import.meta.env.VITE_DEV_LOGIN_TOKEN }, true)
+                }
+                className="mt-3 w-full max-w-[280px] rounded-md border border-dashed border-warn-500/40 px-4 py-2 text-xs font-medium text-warn-300 transition-colors ease-out hover:bg-warn-950"
               >
                 Dev test girişi
               </button>
@@ -114,18 +142,18 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                 landing page'in tek cümlelik açıklamalarına göre daha "cool"
                 bir görünüm istendiği için düz metin yerine ikon+etiket
                 kartlarına dönüldü. */}
-            <div className="mt-8 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-6">
-              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.03] p-2 text-center">
-                <BarChart2 size={13} className="shrink-0 text-emerald-400" />
-                <span className="text-[10.5px] text-zinc-400">Replay</span>
+            <div className="mt-8 grid grid-cols-3 gap-2 border-t border-line pt-6">
+              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-line bg-white/[0.03] p-2 text-center">
+                <BarChart2 size={13} className="shrink-0 text-accent-400" />
+                <span className="text-2xs text-content-muted">Replay</span>
               </div>
-              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.03] p-2 text-center">
-                <Zap size={13} className="shrink-0 text-emerald-400" />
-                <span className="text-[10.5px] text-zinc-400">Strategies</span>
+              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-line bg-white/[0.03] p-2 text-center">
+                <Zap size={13} className="shrink-0 text-accent-400" />
+                <span className="text-2xs text-content-muted">Strategies</span>
               </div>
-              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.03] p-2 text-center">
-                <ShieldCheck size={13} className="shrink-0 text-emerald-400" />
-                <span className="text-[10.5px] text-zinc-400">Secure</span>
+              <div className="flex items-center justify-center gap-1.5 rounded-lg border border-line bg-white/[0.03] p-2 text-center">
+                <ShieldCheck size={13} className="shrink-0 text-accent-400" />
+                <span className="text-2xs text-content-muted">Secure</span>
               </div>
             </div>
           </div>
@@ -152,23 +180,23 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                 }
               `}</style>
 
-              <div className="absolute -top-3 left-2 z-20 flex items-center gap-2.5 rounded-2xl border border-emerald-500/25 bg-[#0c0d11]/90 px-3 py-2 shadow-xl backdrop-blur-md transform -rotate-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
+              <div className="absolute -top-3 left-2 z-20 flex items-center gap-2.5 rounded-2xl border border-accent-500/25 bg-surface-raised px-3 py-2 shadow-xl backdrop-blur-md transform -rotate-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent-500/15 text-accent-400">
                   <TrendingUp size={16} />
                 </div>
                 <div>
-                  <div className="text-[10px] font-medium text-zinc-400">Backtest Performance</div>
-                  <div className="text-xs font-bold text-emerald-400">+68.4% Win Rate</div>
+                  <div className="text-2xs font-medium text-content-muted">Backtest Performance</div>
+                  <div className="text-xs font-medium text-profit-400">+68.4% Win Rate</div>
                 </div>
               </div>
 
-              <div className="absolute -bottom-2 right-2 z-20 flex items-center gap-2.5 rounded-2xl border border-emerald-500/25 bg-[#0c0d11]/90 px-3 py-2 shadow-xl backdrop-blur-md transform rotate-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
+              <div className="absolute -bottom-2 right-2 z-20 flex items-center gap-2.5 rounded-2xl border border-accent-500/25 bg-surface-raised px-3 py-2 shadow-xl backdrop-blur-md transform rotate-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent-500/15 text-accent-400">
                   <CheckCircle2 size={16} />
                 </div>
                 <div>
-                  <div className="text-[10px] font-medium text-zinc-400">Data Processed</div>
-                  <div className="text-xs font-bold text-emerald-300">10,000+ Bars / Second</div>
+                  <div className="text-2xs font-medium text-content-muted">Data Processed</div>
+                  <div className="text-xs font-medium text-accent-300">10,000+ Bars / Second</div>
                 </div>
               </div>
 

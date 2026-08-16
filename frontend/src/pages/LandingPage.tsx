@@ -74,13 +74,13 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
   if (status === 'done') {
     return (
       <div
-        className={`flex items-center gap-2.5 rounded-md border px-4 py-3 text-[13px] ${
+        className={`flex items-center gap-2.5 rounded-md border px-4 py-3 text-sm ${
           alreadyRegistered
-            ? 'border-zinc-600/30 bg-white/[0.03] text-zinc-400'
-            : 'border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-400'
+            ? 'border-line-strong bg-white/[0.03] text-content-muted'
+            : 'border-accent-500/20 bg-accent-500/[0.06] text-accent-400'
         }`}
       >
-        <Check size={16} className={`shrink-0 ${alreadyRegistered ? 'text-zinc-500' : 'text-emerald-400'}`} />
+        <Check size={16} className={`shrink-0 ${alreadyRegistered ? 'text-content-faint' : 'text-accent-400'}`} />
         <span>{message}</span>
       </div>
     );
@@ -99,12 +99,12 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           autoComplete="email"
-          className="h-11 w-full rounded-md border border-white/10 bg-white/[0.03] px-3.5 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-zinc-500/60 focus:bg-white/[0.05] sm:max-w-[290px]"
+          className="h-11 w-full rounded-md border border-line bg-white/[0.03] px-3.5 text-sm text-content-strong outline-none transition placeholder:text-content-faint focus:border-accent-500 focus:bg-white/[0.05] sm:max-w-[290px]"
         />
         <button
           type="submit"
           disabled={status === 'sending'}
-          className="group inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-md bg-zinc-100 px-5 text-[13px] font-medium text-zinc-900 transition-colors hover:bg-emerald-400 disabled:opacity-50"
+          className="group inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-md bg-ink-50 px-5 text-sm font-medium text-ink-950 transition-colors ease-out hover:bg-white disabled:opacity-50"
         >
           {status === 'sending' ? 'Sending' : 'Join the list'}
           <ArrowRight
@@ -114,9 +114,9 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
         </button>
       </form>
       {status === 'error' && (
-        <p className="mt-2.5 text-[12px] text-red-400/90">{message}</p>
+        <p className="mt-2.5 text-xs text-loss-400/90">{message}</p>
       )}
-      {note && <p className="mt-3 text-[12px] leading-relaxed text-zinc-600">{note}</p>}
+      {note && <p className="mt-3 text-xs leading-relaxed text-content-faint">{note}</p>}
     </div>
   );
 };
@@ -128,16 +128,6 @@ const Container: React.FC<{ children: React.ReactNode; className?: string }> = (
   className = '',
 }) => (
   <div className={`mx-auto w-full max-w-[1080px] px-6 ${className}`}>{children}</div>
-);
-
-/**
- * Bölüm üstü küçük etiket. Metin doğrudan büyük harf yazılır; sayfada
- * `text-transform: uppercase` kullanılmıyor.
- */
-const Eyebrow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span className="font-mono text-[10px] tracking-[0.22em] text-zinc-500">
-    {children}
-  </span>
 );
 
 const STEPS = [
@@ -199,10 +189,10 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0b0e] text-zinc-100 antialiased">
+    <div className="min-h-screen bg-canvas text-content-strong antialiased">
       {/* Üst çubuk bilerek sticky değil: aşağı kaydırınca sayfayla birlikte
           kaybolur, boş yere ekranda yer kaplamaz. */}
-      <header className="border-b border-white/[0.06]">
+      <header className="border-b border-line">
         <Container className="flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
             <img
@@ -210,12 +200,10 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               alt=""
               className="h-7 w-7 rounded-md object-cover opacity-90"
             />
-            <span
-              className="text-[13px] font-extrabold tracking-[0.14em] bg-clip-text text-transparent"
-              style={{
-                backgroundImage: 'linear-gradient(90deg, rgba(42, 123, 155, 1) 0%, rgba(87, 199, 133, 1) 30%, rgba(151, 79, 196, 1) 88%)',
-              }}
-            >
+            {/* Gradient metin kaldırıldı: mavi-yeşil-mor geçiş sayfanın geri
+                kalanıyla hiçbir renk paylaşmıyordu ve küçük puntoda okunması
+                zorlaşıyordu. Vurgu artık ağırlık ve harf aralığından geliyor. */}
+            <span className="text-sm font-medium tracking-[0.16em] text-content-strong">
               REPLAY
             </span>
           </Link>
@@ -225,7 +213,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               {emailSubmitted ? (
                 <button
                   onClick={handleSignInClick}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 px-4 py-1.5 text-[12.5px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/30"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent-500/20 border border-accent-500/40 px-4 py-1.5 text-xs font-medium text-accent-400 transition-colors hover:bg-accent-300/30"
                 >
                   Go to App
                   <ArrowRight size={14} />
@@ -233,7 +221,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               ) : (
                 <button
                   onClick={handleSignInClick}
-                  className="text-[12.5px] font-medium text-zinc-400 transition-colors hover:text-zinc-100"
+                  className="text-xs font-medium text-content-muted transition-colors hover:text-content-strong"
                 >
                   Sign in
                 </button>
@@ -248,11 +236,10 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
         {/* Grafiğin arkasında tek bir ışık; sayfanın geri kalanı düz. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute right-[-10%] top-[-10%] h-[520px] w-[620px] rounded-full bg-emerald-500/[0.14] blur-[120px]"
+          className="pointer-events-none absolute right-[-10%] top-[-10%] h-[520px] w-[620px] rounded-full bg-accent-500/[0.14] blur-[120px]"
         />
         <Container className="relative grid grid-cols-1 items-center gap-14 pb-20 pt-16 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] lg:gap-12 lg:pb-28 lg:pt-24">
           <div>
-            <Eyebrow>EARLY ACCESS · IN DEVELOPMENT</Eyebrow>
             <h1 className="mt-5 text-[34px] font-semibold leading-[1.06] tracking-[-0.03em] sm:text-[44px] lg:text-[50px]">
               One rule.
               <br />
@@ -260,13 +247,13 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               <br />
               {/* Satır sonu bilinçli: cümle zaten bu genişlikte iki satıra
                   düşüyor, kırılma yerini şansa bırakmamak için sabitlendi. */}
-              <span className="text-zinc-500">
+              <span className="text-content-faint">
                 Tested on history,
                 <br />
                 not on your money.
               </span>
             </h1>
-            <p className="mt-6 max-w-[440px] text-[14px] leading-[1.75] text-zinc-400">
+            <p className="mt-6 max-w-[440px] text-base leading-[1.75] text-content-muted">
               {/* Piyasa adları bilinçli olarak sayfanın hiçbir yerinde yok:
                   sabit bir liste kapanmış bir set gibi okunuyor, halbuki yeni
                   piyasalar eklenecek. */}
@@ -290,7 +277,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
       </section>
 
       {/* ─── Gerçek sayılar şeridi ─────────────────────────────────────── */}
-      <section className="border-y border-white/[0.06]">
+      <section className="border-y border-line">
         <Container className="grid grid-cols-2 divide-white/[0.06] sm:grid-cols-4 sm:divide-x">
           {[
             ['Every symbol', 'One rule across your whole watchlist'],
@@ -304,10 +291,10 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
                 i === 3 ? 'sm:pr-0' : ''
               }`}
             >
-              <div className="text-[15px] font-medium tracking-tight text-zinc-100">
+              <div className="text-[15px] font-medium tracking-tight text-content-strong">
                 {title}
               </div>
-              <div className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">
+              <div className="mt-1.5 text-xs leading-relaxed text-content-faint">
                 {sub}
               </div>
             </div>
@@ -316,9 +303,8 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
       </section>
 
       {/* ─── Nasıl çalışır ─────────────────────────────────────────────── */}
-      <section className="border-b border-white/[0.06] py-20 lg:py-28">
+      <section className="border-b border-line py-20 lg:py-28">
         <Container>
-          <Eyebrow>HOW IT WORKS</Eyebrow>
           <h2 className="mt-5 max-w-[560px] text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
             Write the rule once. Run it on everything you follow.
           </h2>
@@ -331,13 +317,13 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
                   i === STEPS.length - 1 ? 'lg:pr-0' : ''
                 }`}
               >
-                <span className="font-mono text-[11px] tracking-[0.1em] text-zinc-600">
+                <span className="font-mono text-2xs tracking-[0.1em] text-content-faint">
                   {step.no}
                 </span>
-                <h3 className="mt-4 text-[15px] font-medium tracking-tight text-zinc-100">
+                <h3 className="mt-4 text-[15px] font-medium tracking-tight text-content-strong">
                   {step.title}
                 </h3>
-                <p className="mt-2.5 text-[13.5px] leading-[1.7] text-zinc-400">
+                <p className="mt-2.5 text-sm leading-[1.7] text-content-muted">
                   {step.body}
                 </p>
               </div>
@@ -347,14 +333,13 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
       </section>
 
       {/* ─── Strateji testi + toplu tarama ─────────────────────────────── */}
-      <section className="border-b border-white/[0.06] py-20 lg:py-28">
+      <section className="border-b border-line py-20 lg:py-28">
         <Container className="grid grid-cols-1 items-start gap-14 lg:grid-cols-2 lg:gap-16">
           <div>
-            <Eyebrow>STRATEGY ENGINE</Eyebrow>
             <h2 className="mt-5 text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
               Backtest one symbol. Scan them all.
             </h2>
-            <p className="mt-6 max-w-[440px] text-[14px] leading-[1.75] text-zinc-400">
+            <p className="mt-6 max-w-[440px] text-base leading-[1.75] text-content-muted">
               Backtest on one symbol, then send the same rule across your whole
               watchlist in one batch. Each symbol returns its own trades, win rate,
               PnL and latest signal.
@@ -364,16 +349,16 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
           {/* Gerçek batch-evaluate yanıt şekli; alan adları
               BatchEvaluateResultItem (backend/app/rules/strategy_models.py)
               ile birebir aynı. Sayılar temsilîdir, gerçek çalışma değildir. */}
-          <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0c0d11]">
-            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
-              <span className="font-mono text-[10px] tracking-[0.18em] text-zinc-500">
+          <div className="overflow-hidden rounded-xl border border-line bg-surface-raised">
+            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+              <span className="font-mono text-2xs tracking-[0.18em] text-content-faint">
                 BATCH SCAN
               </span>
-              <span className="text-[10px] text-zinc-600">4 symbols · 1h</span>
+              <span className="text-2xs text-content-faint">4 symbols · 1h</span>
             </div>
-            <table className="w-full border-collapse text-[11.5px]">
+            <table className="w-full border-collapse text-2xs">
               <thead>
-                <tr className="border-b border-white/[0.06] text-left text-zinc-600">
+                <tr className="border-b border-line text-left text-content-faint">
                   <th className="px-4 py-2 font-normal">Symbol</th>
                   <th className="px-3 py-2 text-right font-normal">Trades</th>
                   <th className="px-3 py-2 text-right font-normal">Win rate</th>
@@ -381,15 +366,15 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
                   <th className="px-4 py-2 text-right font-normal">Last signal</th>
                 </tr>
               </thead>
-              <tbody className="font-mono text-zinc-300">
+              <tbody className="font-mono text-content">
                 {[
                   ['BTCUSDT', 14, 64.3, 18.9, 'BUY'],
                   ['ETHUSDT', 11, 45.5, -3.2, 'FLAT'],
                   ['SOLUSDT', 19, 57.9, 26.4, 'BUY'],
                   ['XRPUSDT', 9, 33.3, -8.1, 'FLAT'],
                 ].map(([symbol, trades, winRate, pnl, signal]) => (
-                  <tr key={symbol as string} className="border-b border-white/[0.04] last:border-0">
-                    <td className="px-4 py-2.5 text-zinc-100">{symbol}</td>
+                  <tr key={symbol as string} className="border-b border-line last:border-0">
+                    <td className="px-4 py-2.5 text-content-strong">{symbol}</td>
                     <td className="px-3 py-2.5 text-right">{trades}</td>
                     <td className="px-3 py-2.5 text-right">{(winRate as number).toFixed(1)}%</td>
                     <td
@@ -399,12 +384,12 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
                       {(pnl as number) >= 0 ? '+' : ''}
                       {pnl}%
                     </td>
-                    <td className="px-4 py-2.5 text-right text-zinc-500">{signal}</td>
+                    <td className="px-4 py-2.5 text-right text-content-faint">{signal}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="border-t border-white/[0.06] px-4 py-2.5 text-[10.5px] leading-relaxed text-zinc-600">
+            <div className="border-t border-line px-4 py-2.5 text-2xs leading-relaxed text-content-faint">
               Example output shape &mdash; your numbers depend on the rule and the
               range you run it over.
             </div>
@@ -413,14 +398,13 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
       </section>
 
       {/* ─── Lookahead bias ────────────────────────────────────────────── */}
-      <section className="border-b border-white/[0.06] py-20 lg:py-28">
+      <section className="border-b border-line py-20 lg:py-28">
         <Container className="grid grid-cols-1 items-start gap-14 lg:grid-cols-2 lg:gap-16">
           <div>
-            <Eyebrow>DESIGN DECISION</Eyebrow>
             <h2 className="mt-5 text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
               A backtest that cannot see the future.
             </h2>
-            <p className="mt-6 max-w-[440px] text-[14px] leading-[1.75] text-zinc-400">
+            <p className="mt-6 max-w-[440px] text-base leading-[1.75] text-content-muted">
               Forward-looking access is banned by design: indicators stay blank
               until warm-up, signals only ever come from a closed bar. Backtest,
               scan and replay share one engine.
@@ -428,36 +412,36 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
           </div>
 
           {/* Gerçek kural ağacı; alan adları motorun okuduklarıyla birebir aynı. */}
-          <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0c0d11]">
-            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
-              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <div className="overflow-hidden rounded-xl border border-line bg-surface-raised">
+            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+              <span className="font-mono text-2xs uppercase tracking-[0.18em] text-content-faint">
                 entry_rules
               </span>
-              <span className="text-[10px] text-zinc-600">RSI reversal + trend filter</span>
+              <span className="text-2xs text-content-faint">RSI reversal + trend filter</span>
             </div>
-            <pre className="overflow-x-auto px-4 py-4 font-mono text-[11.5px] leading-[1.85] text-zinc-500">
+            <pre className="overflow-x-auto px-4 py-4 font-mono text-2xs leading-[1.85] text-content-faint">
               <code>
                 {'{\n'}
-                {'  '}<span className="text-zinc-300">"logic"</span>{': '}<span className="text-emerald-300/80">"AND"</span>{',\n'}
-                {'  '}<span className="text-zinc-300">"conditions"</span>{': [\n'}
+                {'  '}<span className="text-content">"logic"</span>{': '}<span className="text-accent-300/80">"AND"</span>{',\n'}
+                {'  '}<span className="text-content">"conditions"</span>{': [\n'}
                 {'    {\n'}
-                {'      '}<span className="text-zinc-300">"left"</span>{':     { '}<span className="text-zinc-400">"type"</span>{': '}<span className="text-emerald-300/80">"indicator"</span>{', '}<span className="text-zinc-400">"name"</span>{': '}<span className="text-emerald-300/80">"RSI"</span>{',\n'}
-                {'                   '}<span className="text-zinc-400">"period"</span>{': '}<span className="text-amber-200/70">"$rsi_period"</span>{' },\n'}
-                {'      '}<span className="text-zinc-300">"operator"</span>{': '}<span className="text-emerald-300/80">"cross_above"</span>{',\n'}
-                {'      '}<span className="text-zinc-300">"right"</span>{':    { '}<span className="text-zinc-400">"type"</span>{': '}<span className="text-emerald-300/80">"value"</span>{', '}<span className="text-zinc-400">"value"</span>{': '}<span className="text-sky-300/80">30</span>{' }\n'}
+                {'      '}<span className="text-content">"left"</span>{':     { '}<span className="text-content-muted">"type"</span>{': '}<span className="text-accent-300/80">"indicator"</span>{', '}<span className="text-content-muted">"name"</span>{': '}<span className="text-accent-300/80">"RSI"</span>{',\n'}
+                {'                   '}<span className="text-content-muted">"period"</span>{': '}<span className="text-warn-200/70">"$rsi_period"</span>{' },\n'}
+                {'      '}<span className="text-content">"operator"</span>{': '}<span className="text-accent-300/80">"cross_above"</span>{',\n'}
+                {'      '}<span className="text-content">"right"</span>{':    { '}<span className="text-content-muted">"type"</span>{': '}<span className="text-accent-300/80">"value"</span>{', '}<span className="text-content-muted">"value"</span>{': '}<span className="text-sky-300/80">30</span>{' }\n'}
                 {'    },\n'}
                 {'    {\n'}
-                {'      '}<span className="text-zinc-300">"left"</span>{':     { '}<span className="text-zinc-400">"type"</span>{': '}<span className="text-emerald-300/80">"price"</span>{', '}<span className="text-zinc-400">"field"</span>{': '}<span className="text-emerald-300/80">"close"</span>{' },\n'}
-                {'      '}<span className="text-zinc-300">"operator"</span>{': '}<span className="text-emerald-300/80">"&gt;"</span>{',\n'}
-                {'      '}<span className="text-zinc-300">"right"</span>{':    { '}<span className="text-zinc-400">"type"</span>{': '}<span className="text-emerald-300/80">"indicator"</span>{', '}<span className="text-zinc-400">"name"</span>{': '}<span className="text-emerald-300/80">"EMA"</span>{',\n'}
-                {'                   '}<span className="text-zinc-400">"period"</span>{': '}<span className="text-sky-300/80">200</span>{' }\n'}
+                {'      '}<span className="text-content">"left"</span>{':     { '}<span className="text-content-muted">"type"</span>{': '}<span className="text-accent-300/80">"price"</span>{', '}<span className="text-content-muted">"field"</span>{': '}<span className="text-accent-300/80">"close"</span>{' },\n'}
+                {'      '}<span className="text-content">"operator"</span>{': '}<span className="text-accent-300/80">"&gt;"</span>{',\n'}
+                {'      '}<span className="text-content">"right"</span>{':    { '}<span className="text-content-muted">"type"</span>{': '}<span className="text-accent-300/80">"indicator"</span>{', '}<span className="text-content-muted">"name"</span>{': '}<span className="text-accent-300/80">"EMA"</span>{',\n'}
+                {'                   '}<span className="text-content-muted">"period"</span>{': '}<span className="text-sky-300/80">200</span>{' }\n'}
                 {'    }\n'}
                 {'  ]\n'}
                 {'}'}
               </code>
             </pre>
-            <div className="border-t border-white/[0.06] px-4 py-2.5 text-[10.5px] leading-relaxed text-zinc-600">
-              <span className="text-amber-200/60">$rsi_period</span> is a strategy
+            <div className="border-t border-line px-4 py-2.5 text-2xs leading-relaxed text-content-faint">
+              <span className="text-warn-200/60">$rsi_period</span> is a strategy
               parameter &mdash; the value changes in the UI, the rule stays the same.
             </div>
           </div>
@@ -465,25 +449,24 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
       </section>
 
       {/* ─── Durum ─────────────────────────────────────────────────────── */}
-      <section className="border-b border-white/[0.06] py-20 lg:py-28">
+      <section className="border-b border-line py-20 lg:py-28">
         <Container>
-          <Eyebrow>WHERE IT STANDS</Eyebrow>
           <h2 className="mt-5 max-w-[560px] text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
             Half of it is built. Here is exactly which half.
           </h2>
 
           <div className="mt-14 grid grid-cols-1 gap-12 md:grid-cols-2 md:gap-16">
             <div>
-              <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span className="text-[12px] font-medium tracking-wide text-zinc-300">
+              <div className="flex items-center gap-2.5 border-b border-line pb-3">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-400" />
+                <span className="text-xs font-medium tracking-wide text-content">
                   Working today
                 </span>
               </div>
               <ul className="mt-5 space-y-3">
                 {SHIPPED.map((item) => (
-                  <li key={item} className="flex items-start gap-3 text-[13.5px] text-zinc-300">
-                    <Check size={14} className="mt-[3px] shrink-0 text-emerald-400/80" />
+                  <li key={item} className="flex items-start gap-3 text-sm text-content">
+                    <Check size={14} className="mt-[3px] shrink-0 text-accent-400/80" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -491,16 +474,16 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
             </div>
 
             <div>
-              <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
-                <span className="h-1.5 w-1.5 rounded-full border border-zinc-600" />
-                <span className="text-[12px] font-medium tracking-wide text-zinc-500">
+              <div className="flex items-center gap-2.5 border-b border-line pb-3">
+                <span className="h-1.5 w-1.5 rounded-full border border-line-strong" />
+                <span className="text-xs font-medium tracking-wide text-content-faint">
                   Roadmap
                 </span>
               </div>
               <ul className="mt-5 space-y-3">
                 {PLANNED.map((item) => (
-                  <li key={item} className="flex items-start gap-3 text-[13.5px] text-zinc-500">
-                    <span className="mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full border border-zinc-700" />
+                  <li key={item} className="flex items-start gap-3 text-sm text-content-faint">
+                    <span className="mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full border border-line-strong" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -516,7 +499,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
           <h2 className="text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
             Early access list
           </h2>
-          <p className="mx-auto mt-4 max-w-[420px] text-[14px] leading-[1.75] text-zinc-400">
+          <p className="mx-auto mt-4 max-w-[420px] text-base leading-[1.75] text-content-muted">
             The engine, replay and batch scans are already available. We&rsquo;ll
             email you when the rest is ready.
           </p>
@@ -527,7 +510,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
       </section>
 
       {/* ─── Alt bilgi ─────────────────────────────────────────────────── */}
-      <footer className="border-t border-white/[0.06] py-8">
+      <footer className="border-t border-line py-8">
         <Container className="flex flex-col items-center justify-between gap-4 sm:flex-row">
           <div className="flex items-center gap-2.5">
             <img
@@ -535,11 +518,11 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               alt=""
               className="h-5 w-5 rounded object-cover opacity-60"
             />
-            <span className="text-[11.5px] text-zinc-600">
+            <span className="text-2xs text-content-faint">
               REPLAY · Trading Research Platform
             </span>
           </div>
-          <div className="flex items-center gap-6 text-[11.5px] text-zinc-600">
+          <div className="flex items-center gap-6 text-2xs text-content-faint">
             <span>
               Chart prices are illustrative. Nothing here is investment advice.
             </span>
@@ -554,14 +537,14 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               // sayfada bırakırdı.
               <button
                 onClick={handleSignInClick}
-                className="shrink-0 text-emerald-400 font-medium underline decoration-emerald-500/30 underline-offset-4 transition-colors hover:text-emerald-300 cursor-pointer"
+                className="shrink-0 text-accent-400 font-medium underline decoration-accent-500/30 underline-offset-4 transition-colors hover:text-accent-300 cursor-pointer"
               >
                 Go to App →
               </button>
             ) : (
               <button
                 onClick={handleSignInClick}
-                className="shrink-0 text-zinc-600 underline decoration-zinc-800 underline-offset-4 transition-colors hover:text-zinc-400 cursor-pointer"
+                className="shrink-0 text-content-faint underline decoration-line-strong underline-offset-4 transition-colors hover:text-content-muted cursor-pointer"
               >
                 Sign in
               </button>

@@ -35,65 +35,82 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
     navItems.push({ id: 'admin', label: 'Admin Paneli', icon: ShieldCheck });
   }
 
-  // Genişlik buton boyutuna (40px) sabitlendi; yanlardaki boşluk kaldırıldı
+  // Genişlik buton boyutuna (40px) sabitlendi; grafik alanı pahalı, ray dar
+  // kalıyor. Aktif sekme bu yüzden dolgu değil, sol kenardaki 2px'lik bir
+  // çubukla işaretleniyor — dar rayda dolgu, ikonu boğuyordu.
   return (
-    <aside className="w-[41px] bg-[#0a0b0e] border-r border-white/[0.06] flex flex-col justify-between items-center py-3 px-0 select-none shrink-0 z-30">
-      {/* Brand Logo & Nav Items List */}
-      <div className="w-full flex flex-col items-center">
-        {/* Brand Logo Icon */}
-        <div className="w-8 h-8 mb-3.5 rounded-lg overflow-hidden border border-white/[0.1] shadow-xs flex items-center justify-center bg-white/[0.02] pointer-events-none select-none">
-          <img src={logoImg} alt="REPLAY Logo" className="w-full h-full object-cover opacity-90" />
-        </div>
+    <aside className="z-30 flex w-[41px] shrink-0 select-none flex-col justify-between items-center border-r border-line bg-surface py-3">
+      <div className="flex w-full flex-col items-center">
+        <img
+          src={logoImg}
+          alt="REPLAY"
+          className="pointer-events-none mb-4 h-8 w-8 rounded-md object-cover opacity-90"
+        />
 
-        {/* Nav Items List */}
-        <nav className="space-y-2 w-full flex flex-col items-center">
+        <nav aria-label="Ana gezinme" className="flex w-full flex-col items-center gap-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 
             return (
-              <div key={item.id} className="relative group w-full flex justify-center">
+              <div key={item.id} className="group relative flex w-full justify-center">
                 <button
                   onClick={() => onSelectTab(item.id)}
-                  title={item.label}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.label}
+                  className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ease-out ${
                     isActive
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-xs'
-                      : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] border border-transparent'
+                      ? 'bg-accent-950 text-accent-300'
+                      : 'text-content-faint hover:bg-surface-hover hover:text-content'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className="absolute -left-[6.5px] h-4 w-0.5 rounded-full bg-accent-400"
+                    />
+                  )}
+                  <Icon className="h-4 w-4" strokeWidth={1.75} />
                 </button>
 
-                {/* Hover Tooltip (Görsel İpucu) */}
-                <div className="absolute left-full ml-2.5 top-1/2 -translate-y-1/2 px-3 py-1 bg-[#0a0b0e] text-zinc-100 text-[11px] font-medium rounded-md border border-white/[0.1] shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
+                {/* Ray ikon-only; etiket yalnızca hover'da görünür. Bu yüzden
+                    butonun kendisinde aria-label var — tooltip erişilebilirlik
+                    için yeterli değil. */}
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute left-full top-1/2 z-50 ml-2.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-line bg-surface-overlay px-2.5 py-1 text-2xs text-content opacity-0 shadow-md transition-opacity ease-out group-hover:opacity-100"
+                >
                   {item.label}
-                </div>
+                </span>
               </div>
             );
           })}
         </nav>
       </div>
 
-      {/* Footer Controls: Logout & Status Indicator */}
-      <div className="flex flex-col items-center gap-2.5">
+      {/* Alt: çıkış.
+          Kalıcı kırmızı bir buton rayın dibinde sürekli alarm veriyordu; çıkış
+          yıkıcı değil, geri alınabilir bir eylem. Nötr duruyor, niyeti
+          hover'da kırmızıya dönerek gösteriyor.
+
+          Buradaki "Engine Status: Online" göstergesi kaldırıldı: sabit kodlu
+          yeşil bir noktaydı, hiçbir şeyi ölçmüyordu ve her koşulda "çevrimiçi"
+          diyordu. Gerçek bir sağlık sinyali bağlanana kadar yokluğu, yanlış
+          olmasından iyi. */}
+      <div className="group relative flex w-full justify-center">
         <button
           onClick={() => logout()}
-          className="w-8 h-8 rounded-lg bg-red-500/[0.06] hover:bg-red-500/15 text-red-400/90 border border-red-500/20 flex items-center justify-center transition-all cursor-pointer group relative"
-          title="Çıkış Yap / Giriş Ekranına Dön"
+          aria-label="Çıkış yap"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-content-faint transition-colors ease-out hover:bg-loss-950 hover:text-loss-400"
         >
-          <LogOut className="w-3.5 h-3.5" />
-          <div className="absolute left-full ml-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-[#0a0b0e] text-red-300 text-[11px] font-medium rounded-md border border-red-500/20 shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap">
-            Çıkış Yap
-          </div>
+          <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
         </button>
-
-        <div
-          className="w-8 h-8 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-center"
-          title="Engine Status: Online"
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute left-full top-1/2 z-50 ml-2.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-line bg-surface-overlay px-2.5 py-1 text-2xs text-content opacity-0 shadow-md transition-opacity ease-out group-hover:opacity-100"
         >
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-xs shadow-emerald-400/50" />
-        </div>
+          Çıkış yap
+        </span>
       </div>
     </aside>
   );

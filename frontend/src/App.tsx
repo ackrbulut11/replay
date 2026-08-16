@@ -77,6 +77,23 @@ const REPLAY_FORWARD_BARS = 2000;
 const INTRADAY_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h'];
 
 /**
+ * Henüz yazılmamış sekmelerin boş durum metinleri.
+ *
+ * Her biri kullanıcıyı bugün aynı işi gören ekrana yönlendirir — yol haritası
+ * maddesini tekrar etmek, o an bir şey yapmak isteyen birine yardım etmiyor.
+ */
+const PENDING_TABS: Record<string, { title: string; body: string }> = {
+  scanner: {
+    title: 'Scanner henüz burada değil',
+    body: 'Tüm listeyi tek kuralla taramak için şimdilik Strateji Motoru içindeki toplu tarama sekmesini kullanabilirsiniz.',
+  },
+  backtest: {
+    title: 'Backtest raporları hazırlanıyor',
+    body: 'Özkaynak eğrisi ve drawdown grafikleri bu sekmeye gelecek. Bir kuralın geçmiş performansını bugün Strateji Motoru üzerinden ölçebilirsiniz.',
+  },
+};
+
+/**
  * Bir mumun zamanını kullanıcıya yazdırır.
  *
  * UTC kullanılır: lightweight-charts zaman eksenini varsayılan olarak UTC
@@ -669,7 +686,7 @@ function MainApp() {
           />
         </ErrorBoundary>
       ) : activeTab === 'chart' || activeTab === 'replay' ? (
-        <div className="h-full w-full flex flex-col p-2 space-y-2 overflow-hidden bg-[#070b13]">
+        <div className="flex h-full w-full flex-col gap-2 overflow-hidden bg-canvas p-2">
           {/* Ana İçerik Alanı: Grafik + Favoriler (Watchlist) Yan Paneli + Sağ Araç Çubuğu */}
           <div className="flex-1 min-h-0 w-full flex relative overflow-hidden rounded-xl">
             {/* Grafik Alanı */}
@@ -757,140 +774,159 @@ function MainApp() {
             }
           />
 
-          {/* Tetiklenen Alarm Ekran Uyarı Modalı ve Ses Kapatma */}
+          {/* Tetiklenen Alarm Ekran Uyarı Modalı ve Ses Kapatma.
+              Kesintiye uğratan bir bildirim zaten dikkat çekiyor; zıplayan
+              ikon, emoji ve renkli hale onu daha okunur yapmıyor. Bilgi
+              hiyerarşisi: hangi sembol, hangi koşul, şu an ne durumda. */}
           {alertState.latestTriggeredAlert && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fadeIn select-none">
-              <div className="bg-[#0d1321] border-2 border-amber-500/80 shadow-2xl shadow-amber-500/30 rounded-2xl p-6 max-w-sm w-full flex flex-col items-center text-center space-y-4 animate-scaleUp">
-                <div className="p-3.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/20 animate-bounce">
-                  <Bell className="w-8 h-8" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-amber-400 uppercase tracking-wide">
-                    🔔 Alarm Tetiklendi!
+            <div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="triggered-alert-title"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn"
+            >
+              <div className="w-full max-w-[380px] rounded-xl border border-warn-500/40 bg-surface-overlay shadow-xl animate-scaleUp">
+                <div className="flex items-center gap-2.5 border-b border-line px-5 py-3.5">
+                  <Bell className="h-4 w-4 shrink-0 text-warn-400" strokeWidth={1.75} />
+                  <h3 id="triggered-alert-title" className="text-sm font-medium text-warn-300">
+                    Alarm tetiklendi
                   </h3>
-                  <p className="text-sm font-bold text-slate-100 font-mono mt-1">
-                    {alertState.latestTriggeredAlert.symbol} • {alertState.latestTriggeredAlert.target_type}{' '}
+                </div>
+
+                <div className="px-5 py-4">
+                  <p className="font-mono text-lg text-content-strong">
+                    {alertState.latestTriggeredAlert.symbol}
+                  </p>
+                  <p className="mt-1 font-mono text-sm text-content-muted">
+                    {alertState.latestTriggeredAlert.target_type}{' '}
                     {alertState.latestTriggeredAlert.condition === 'rises_above' ? '>' : '<'}{' '}
                     {typeof alertState.latestTriggeredAlert.threshold_value === 'number'
                       ? alertState.latestTriggeredAlert.threshold_value.toFixed(2)
                       : alertState.latestTriggeredAlert.threshold_value}
                   </p>
+
                   {alertState.latestTriggeredAlert.last_value && (
-                    <p className="text-xs text-slate-400 font-mono mt-1">
-                      Mevcut Fiyat:{' '}
-                      <span className="text-amber-400 font-bold">{alertState.latestTriggeredAlert.last_value}</span>
-                    </p>
+                    <div className="mt-4 flex items-baseline justify-between border-t border-line-subtle pt-3">
+                      <span className="text-xs text-content-faint">Mevcut fiyat</span>
+                      <span className="font-mono text-sm text-content-strong">
+                        {alertState.latestTriggeredAlert.last_value}
+                      </span>
+                    </div>
                   )}
+
                   {alertState.latestTriggeredAlert.note && (
-                    <p className="text-xs text-slate-300 italic mt-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                      "{alertState.latestTriggeredAlert.note}"
+                    <p className="mt-3 border-l border-line-strong pl-3 text-xs leading-relaxed text-content-muted">
+                      {alertState.latestTriggeredAlert.note}
                     </p>
                   )}
                 </div>
 
-                <button
-                  onClick={() => alertStore.dismissTriggeredAlert()}
-                  className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold rounded-xl shadow-lg transition-all text-sm cursor-pointer"
-                >
-                  Tamam (Sesi Kapat)
-                </button>
+                <div className="border-t border-line px-5 py-3">
+                  <button
+                    autoFocus
+                    onClick={() => alertStore.dismissTriggeredAlert()}
+                    className="w-full rounded-md bg-accent-400 px-4 py-2 text-sm font-medium text-ink-950 transition-colors ease-out hover:bg-accent-300"
+                  >
+                    Kapat ve sesi durdur
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
 
-          {/* İstatistik Paneli Bileşenleri (Açılır-Kapanır Çekmece) */}
+          {/* Yüklü veri özeti (açılır-kapanır şerit).
+              Eskiden açıldığında beş özdeş kart açılıyordu; kartın taşıdığı
+              tek şey bir etiket ve bir sayıydı. Ayraçla bölünmüş tek satır
+              hem daha az yer kaplıyor hem de sayıları aynı taban çizgisinde
+              tuttuğu için gözle karşılaştırılabilir kılıyor. */}
           {stats && !loading && (
-            <div className="bg-[#0d1321]/90 border border-slate-900/60 rounded-xl overflow-hidden shadow-xl transition-all duration-300">
+            <div className="overflow-hidden rounded-lg border border-line bg-surface">
               <button
                 onClick={() => setIsStatsOpen(!isStatsOpen)}
-                className="w-full flex items-center justify-between px-4 py-2 hover:bg-slate-800/30 transition-colors"
+                aria-expanded={isStatsOpen}
+                className="flex w-full items-center justify-between gap-4 px-3.5 py-2 text-left transition-colors ease-out hover:bg-surface-hover"
               >
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-indigo-400" />
-                  <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider select-none">
-                    İstatistikler & Veri Analizi
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium font-mono select-none">
-                    ({stats.count} mum verisi)
-                  </span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <BarChart3 className="h-3.5 w-3.5 shrink-0 text-content-faint" strokeWidth={1.75} />
+                  <span className="text-xs font-medium text-content">Yüklü veri</span>
+                  <span className="font-mono text-2xs text-content-faint">{stats.count} mum</span>
                   {isBackgroundLoading && (
-                    <span className="text-[10px] text-indigo-400 font-medium select-none animate-pulse">
-                      geçmiş veri yükleniyor…
-                    </span>
+                    <span className="text-2xs text-content-faint">· geçmiş yükleniyor</span>
                   )}
                 </div>
-                
-                <div className="flex items-center gap-4">
+
+                <div className="flex items-center gap-3.5">
                   {!isStatsOpen && (
-                    <div className="flex items-center gap-4 text-[11px] font-medium text-slate-400 font-sans">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 font-semibold select-none">Fiyat Değişimi (1Y):</span>
-                        <span className={`${parseFloat(stats.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {parseFloat(stats.change) >= 0 ? '+' : ''}{stats.change}%
-                        </span>
-                      </div>
-                      <div className="w-px h-3 bg-slate-800" />
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 font-semibold select-none">En Yüksek:</span>
-                        <span className="text-slate-200 font-mono">{stats.highest}</span>
-                      </div>
-                      <div className="w-px h-3 bg-slate-800" />
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 font-semibold select-none">En Düşük:</span>
-                        <span className="text-slate-200 font-mono">{stats.lowest}</span>
-                      </div>
+                    <div className="hidden items-center gap-3.5 text-xs sm:flex">
+                      <span className="text-content-faint">1 yıl</span>
+                      <span
+                        className={`font-mono ${
+                          parseFloat(stats.change) >= 0 ? 'text-profit-400' : 'text-loss-400'
+                        }`}
+                      >
+                        {parseFloat(stats.change) >= 0 ? '+' : ''}
+                        {stats.change}%
+                      </span>
+                      <span className="h-3 w-px bg-line-strong" />
+                      <span className="text-content-faint">En yüksek</span>
+                      <span className="font-mono text-content">{stats.highest}</span>
+                      <span className="h-3 w-px bg-line-strong" />
+                      <span className="text-content-faint">En düşük</span>
+                      <span className="font-mono text-content">{stats.lowest}</span>
                     </div>
                   )}
-                  <div className="p-0.5 rounded hover:bg-slate-800/40">
-                    {isStatsOpen ? (
-                      <ChevronDown className="w-4 h-4 text-slate-400" />
-                    ) : (
-                      <ChevronUp className="w-4 h-4 text-slate-400" />
-                    )}
-                  </div>
+                  {isStatsOpen ? (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-content-muted" strokeWidth={1.75} />
+                  ) : (
+                    <ChevronUp className="h-3.5 w-3.5 shrink-0 text-content-muted" strokeWidth={1.75} />
+                  )}
                 </div>
               </button>
 
               {isStatsOpen && (
-                <div className="px-4 pb-3 grid grid-cols-2 md:grid-cols-5 gap-3 border-t border-slate-900/60 pt-3 animate-fadeIn">
-                  <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Total Bars</span>
-                    <span className="text-sm font-bold text-slate-100 font-mono">{stats.count}</span>
-                  </div>
-                  <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Price Change (1Y)</span>
-                    <span className={`text-sm font-bold font-mono ${parseFloat(stats.change) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {parseFloat(stats.change) >= 0 ? '+' : ''}{stats.change}%
-                    </span>
-                  </div>
-                  <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Highest Price</span>
-                    <span className="text-sm font-bold text-slate-100 font-mono">{stats.highest}</span>
-                  </div>
-                  <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5">
-                    <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Lowest Price</span>
-                    <span className="text-sm font-bold text-slate-100 font-mono">{stats.lowest}</span>
-                  </div>
-                  <div className="bg-[#070b13]/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-0.5 col-span-2 md:col-span-1">
-                    <span className="text-[10px] text-slate-500 font-medium uppercase select-none">Average Volume</span>
-                    <span className="text-sm font-bold text-slate-100 font-mono">{stats.avgVolume}</span>
-                  </div>
-                </div>
+                <dl className="grid animate-fadeIn grid-cols-2 border-t border-line-subtle sm:grid-cols-3 lg:grid-cols-5">
+                  {[
+                    ['Mum sayısı', stats.count, ''],
+                    [
+                      'Değişim (1 yıl)',
+                      `${parseFloat(stats.change) >= 0 ? '+' : ''}${stats.change}%`,
+                      parseFloat(stats.change) >= 0 ? 'text-profit-400' : 'text-loss-400',
+                    ],
+                    ['En yüksek', stats.highest, ''],
+                    ['En düşük', stats.lowest, ''],
+                    ['Ortalama hacim', stats.avgVolume, ''],
+                  ].map(([label, value, tone]) => (
+                    <div
+                      key={label as string}
+                      className="border-b border-r border-line-subtle px-3.5 py-2.5 last:border-r-0 sm:border-b-0"
+                    >
+                      <dt className="text-2xs text-content-faint">{label}</dt>
+                      <dd
+                        className={`mt-1 font-mono text-sm ${
+                          (tone as string) || 'text-content-strong'
+                        }`}
+                      >
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               )}
             </div>
           )}
         </div>
       ) : (
-        /* Gelecek fazlar için placeholder modüller */
-        <div className="flex-1 flex items-center justify-center p-8 bg-[#070b13]">
-          <div className="text-center max-w-sm border border-slate-800/80 bg-[#0d1321]/60 p-8 rounded-2xl shadow-xl">
-            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mx-auto mb-4 text-indigo-400">
-              <BarChart3 className="w-6 h-6" />
-            </div>
-            <h3 className="text-sm font-bold text-slate-200 capitalize mb-1">{activeTab} Modülü</h3>
-            <p className="text-xs text-slate-500">
-              Bu özellik Yol Haritası (Roadmap) üzerindeki gelecek fazlarda aktive edilecektir.
+        /* Henüz yazılmamış sekmeler.
+           Boş durum "burada bir şey yok" demez: neyin eksik olduğunu ve şu an
+           hangi ekranın aynı işi gördüğünü söyler. Sekme adı ham anahtar
+           (`backtest`) yerine kullanıcının menüde gördüğü adla yazılır. */
+        <div className="flex h-full w-full items-center justify-center bg-canvas p-8">
+          <div className="max-w-[340px]">
+            <h3 className="text-lg text-content-strong">{PENDING_TABS[activeTab]?.title ?? 'Bu modül'}</h3>
+            <p className="mt-2.5 text-sm leading-relaxed text-content-muted">
+              {PENDING_TABS[activeTab]?.body ??
+                'Bu bölüm yol haritasındaki sonraki fazda açılacak.'}
             </p>
           </div>
         </div>

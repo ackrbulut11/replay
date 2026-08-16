@@ -321,11 +321,11 @@ export default function StrategyPage({
   };
 
   return (
-    <div className="h-full w-full flex flex-col bg-[#070b13] overflow-hidden">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
       {/* Ana İçerik */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sol Panel — Strateji Listesi */}
-        <div className="w-72 flex-shrink-0 border-r border-slate-800/60 overflow-hidden">
+        <div className="w-72 flex-shrink-0 overflow-hidden border-r border-line">
           <StrategyList
             strategies={strategies}
             activeStrategyId={activeStrategy?.id || null}
@@ -336,58 +336,64 @@ export default function StrategyPage({
         </div>
 
         {/* Sağ İçerik — Builder / Editor / Result */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#070b13]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas">
           {mode === 'list' && !activeStrategy ? (
-            <div className="flex-1 flex items-center justify-center p-8 text-center bg-gradient-to-b from-[#0a0e1a]/50 to-[#070b13]">
-              <div className="max-w-md space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto text-indigo-400 shadow-xl shadow-indigo-500/10">
-                  <Layers className="w-8 h-8" />
-                </div>
-                <h2 className="text-base font-bold text-slate-100">
-                  {strategies.length > 0 ? 'Bir Strateji Seçin veya Yeni Oluşturun' : 'İlk Stratejinizi Oluşturun'}
+            /* Boş durum. Sola dayalı ve ikon karesiz: ortalanmış rozet +
+               başlık + buton kalıbı her boş ekranı birbirine benzetiyordu.
+               Hiç stratejisi olmayan biri "yeni oluştur" demeden önce bir
+               stratejinin ne olduğunu bilmeli — metin onu anlatıyor. */
+            <div className="flex flex-1 items-center justify-center p-8">
+              <div className="max-w-[420px]">
+                <h2 className="text-xl text-content-strong">
+                  {strategies.length > 0 ? 'Bir strateji seçin' : 'Henüz stratejiniz yok'}
                 </h2>
-                <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+                <p className="mt-3 text-sm leading-relaxed text-content-muted">
                   {strategies.length > 0
-                    ? 'Sol menüden incelemek istediğiniz stratejiye tıklayın veya "+ Yeni" butonu ile sıfırdan yeni bir indikatör stratejisi tasarlayın.'
-                    : 'Henüz kayıtlı bir stratejiniz bulunmuyor. Yeni bir strateji ekleyerek backtest yapmaya başlayabilirsiniz.'}
+                    ? 'Soldaki listeden bir stratejiye tıklayın; kurallarını düzenleyebilir, tek sembolde test edebilir veya tüm izleme listenizde tarayabilirsiniz.'
+                    : 'Bir strateji, giriş ve çıkış koşullarından oluşan bir kural ağacıdır — kod değil. Örneğin “RSI 30’u yukarı keserse ve fiyat EMA200 üzerindeyse al”. Kaydettikten sonra aynı kuralı geçmiş veride test edebilir ve tüm listenizde tarayabilirsiniz.'}
                 </p>
                 <button
                   onClick={handleNewStrategy}
-                  className="flex items-center gap-2 px-5 py-2.5 mx-auto text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-lg shadow-indigo-500/25 cursor-pointer"
+                  className="mt-6 inline-flex items-center gap-2 rounded-md bg-accent-400 px-4 py-2 text-sm font-medium text-ink-950 transition-colors ease-out hover:bg-accent-300"
                 >
-                  <Zap className="w-4 h-4 text-indigo-200" />
-                  {strategies.length > 0 ? 'Yeni Strateji Oluştur' : 'İlk Stratejinizi Oluşturun'}
+                  <Zap className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  Yeni strateji oluştur
                 </button>
               </div>
             </div>
           ) : (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Alt Sekmeler Barı (Kurallar / Çoklu Sembol Taraması) */}
+              {/* Alt sekmeler. Kenarlıklı hap yerine alt çizgi göstergesi:
+                  standart sekme davranışı, daha az gürültü ve aktif olanın
+                  hangi içeriğe bağlı olduğu net. */}
               {mode === 'edit' && activeStrategy && (
-                <div className="flex items-center gap-1 px-4 py-2 bg-[#0a0e1a] border-b border-slate-800/80 flex-shrink-0">
-                  <button
-                    onClick={() => setActiveSubTab('builder')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeSubTab === 'builder'
-                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    Kurallar & Tekli Test
-                  </button>
-
-                  <button
-                    onClick={() => setActiveSubTab('batch_scanner')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeSubTab === 'batch_scanner'
-                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    <BarChart3 className="w-3.5 h-3.5" />
-                    Çoklu Sembol Taraması (Batch Scanner)
-                  </button>
+                <div
+                  role="tablist"
+                  className="flex flex-shrink-0 items-center gap-5 border-b border-line bg-surface px-4"
+                >
+                  {([
+                    ['builder', 'Kurallar & test', Layers],
+                    ['batch_scanner', 'Toplu tarama', BarChart3],
+                  ] as const).map(([id, label, Icon]) => {
+                    const isActive = activeSubTab === id;
+                    return (
+                      <button
+                        key={id}
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveSubTab(id)}
+                        className={`-mb-px flex items-center gap-2 border-b-2 py-2.5 text-sm transition-colors ease-out ${
+                          isActive
+                            ? 'border-accent-400 text-content-strong'
+                            : 'border-transparent text-content-muted hover:text-content'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -448,264 +454,270 @@ export default function StrategyPage({
                   <div
                     onMouseDown={handleMouseDownResize}
                     onDoubleClick={() => setEvalPanelHeight(340)}
-                    className="group relative h-2.5 bg-[#070b13] hover:bg-indigo-600/40 border-t border-b border-slate-800/80 cursor-row-resize flex items-center justify-center transition-colors select-none z-10 flex-shrink-0"
-
-                    title="Yukarı / Aşağı sürükleyerek panel boyutunu ayarlayın (Çift tık: Varsayılan boyut)"
+                    className="group relative z-10 flex h-2.5 flex-shrink-0 cursor-row-resize select-none items-center justify-center border-y border-line bg-canvas transition-colors ease-out hover:bg-surface-hover"
+                    title="Yukarı / aşağı sürükleyerek panel boyutunu ayarlayın (çift tık: varsayılan)"
                   >
-                    <div className="w-16 h-1 rounded-full bg-slate-700/80 group-hover:bg-indigo-400 transition-colors flex items-center justify-center">
-                      <GripHorizontal className="w-3.5 h-3.5 text-slate-400 group-hover:text-white" />
-                    </div>
+                    <GripHorizontal
+                      className="h-3 w-3 text-content-faint transition-colors ease-out group-hover:text-content-muted"
+                      strokeWidth={1.75}
+                    />
                   </div>
 
                   {/* Değerlendirme Alt Paneli */}
                   <div
                     style={{ height: `${evalPanelHeight}px` }}
-                    className="flex flex-col min-h-0 bg-[#0a0e1a]/95 flex-shrink-0"
+                    className="flex min-h-0 flex-shrink-0 flex-col bg-surface"
                   >
-                    {/* Değerlendirme Formu */}
-                    <div className="flex items-center gap-2 px-4 py-2 flex-wrap flex-shrink-0 border-b border-slate-800/40">
-                      <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                        Değerlendir:
-                      </span>
-                      <input
-                        type="text"
-                        value={evalSymbol}
-                        onChange={(e) => {
-                          const newSym = e.target.value.toUpperCase();
-                          setEvalSymbol(newSym);
-                          if (setSymbol && newSym.trim().length >= 2) setSymbol(newSym);
-                          if (setProvider && newSym.trim().length >= 2) setProvider(autoDetectProvider(newSym));
-                        }}
-                        placeholder="Parite (ör: BTCUSDT)"
-                        className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1 w-28 focus:border-indigo-500 outline-none font-mono font-semibold"
-                      />
-                      <select
-                        value={evalTimeframe}
-                        onChange={(e) => {
-                          setEvalTimeframe(e.target.value);
-                          if (setTimeframe) setTimeframe(e.target.value);
-                        }}
-                        className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:border-indigo-500 outline-none"
-                      >
-                        {TIMEFRAMES.map((tf) => (
-                          <option key={tf} value={tf}>
-                            {tf}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={evalLimitBars}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          setEvalLimitBars(isNaN(val) ? 1000 : val);
-                        }}
-                        className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 focus:border-indigo-500 outline-none"
-                        title="Test Edilecek Mum Aralığı"
-                      >
-                        <option value={1000}>Son 1000 Mum (Varsayılan)</option>
-                        <option value={365}>Son 365 Mum</option>
-                        <option value={100}>Son 100 Mum</option>
-                        <option value={0}>Tüm Veri (Sınırsız)</option>
-                      </select>
-                      <select
-                        value={evalAllowShort ? 'short' : 'long'}
-                        onChange={(e) => setEvalAllowShort(e.target.value === 'short')}
-                        className={`border text-xs rounded-lg px-2 py-1 outline-none font-medium transition-colors ${
-                          evalAllowShort
-                            ? 'bg-amber-950/40 border-amber-500/50 text-amber-300'
-                            : 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
-                        }`}
-                        title="Pozisyon Yönetimi: SELL sinyalinde elindekini mi satsın, Short'a da dönsün mü?"
-                      >
-                        <option value="long" className="bg-[#0d1321] text-emerald-400">🟢 Sadece Long (Elindekini Sat)</option>
-                        <option value="short" className="bg-[#0d1321] text-amber-400">🔄 Long & Short (Short'a Dön)</option>
-                      </select>
-                      <input
-                        type="date"
-                        value={evalStart}
-                        onChange={(e) => setEvalStart(e.target.value)}
-                        className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1 focus:border-indigo-500 outline-none"
-                        title="Başlangıç Tarihi (Opsiyonel)"
-                      />
-                      <input
-                        type="date"
-                        value={evalEnd}
-                        onChange={(e) => setEvalEnd(e.target.value)}
-                        className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1 focus:border-indigo-500 outline-none"
-                        title="Bitiş Tarihi (Opsiyonel)"
-                      />
+                    {/* Değerlendirme formu.
+                        Yedi kontrolün de görünür etiketi var. Öncesinde
+                        anlamları yalnızca `title` ipucundaydı — fareyle
+                        beklemeden hangi kutunun ne olduğu anlaşılmıyordu ve
+                        klavyeyle gezen birine hiç ulaşmıyordu. */}
+                    <div className="flex flex-shrink-0 flex-wrap items-end gap-x-3 gap-y-2.5 border-b border-line-subtle px-4 py-2.5">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-2xs text-content-faint">Sembol</span>
+                        <input
+                          type="text"
+                          value={evalSymbol}
+                          onChange={(e) => {
+                            const newSym = e.target.value.toUpperCase();
+                            setEvalSymbol(newSym);
+                            if (setSymbol && newSym.trim().length >= 2) setSymbol(newSym);
+                            if (setProvider && newSym.trim().length >= 2) setProvider(autoDetectProvider(newSym));
+                          }}
+                          placeholder="BTCUSDT"
+                          className="w-28 rounded-md border border-line-strong bg-surface-raised px-2.5 py-1.5 font-mono text-sm text-content-strong outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
+                        />
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-2xs text-content-faint">Zaman dilimi</span>
+                        <select
+                          value={evalTimeframe}
+                          onChange={(e) => {
+                            setEvalTimeframe(e.target.value);
+                            if (setTimeframe) setTimeframe(e.target.value);
+                          }}
+                          className="rounded-md border border-line-strong bg-surface-raised px-2 py-1.5 text-sm text-content outline-none transition-colors ease-out hover:border-ink-500 focus:border-accent-500"
+                        >
+                          {TIMEFRAMES.map((tf) => (
+                            <option key={tf} value={tf}>
+                              {tf}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-2xs text-content-faint">Test aralığı</span>
+                        <select
+                          value={evalLimitBars}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            setEvalLimitBars(isNaN(val) ? 1000 : val);
+                          }}
+                          className="rounded-md border border-line-strong bg-surface-raised px-2 py-1.5 text-sm text-content outline-none transition-colors ease-out hover:border-ink-500 focus:border-accent-500"
+                        >
+                          <option value={1000}>Son 1000 mum</option>
+                          <option value={365}>Son 365 mum</option>
+                          <option value={100}>Son 100 mum</option>
+                          <option value={0}>Tüm veri</option>
+                        </select>
+                      </label>
+
+                      {/* Emoji kaldırıldı: seçeneğin anlamı zaten metinde.
+                          Renkli kenarlık da kaldırıldı — yeşil "sadece long"
+                          demek değil, kâr demek. */}
+                      <label className="flex flex-col gap-1">
+                        <span className="text-2xs text-content-faint">Pozisyon yönü</span>
+                        <select
+                          value={evalAllowShort ? 'short' : 'long'}
+                          onChange={(e) => setEvalAllowShort(e.target.value === 'short')}
+                          className="rounded-md border border-line-strong bg-surface-raised px-2 py-1.5 text-sm text-content outline-none transition-colors ease-out hover:border-ink-500 focus:border-accent-500"
+                        >
+                          <option value="long">Sadece long — sat ve nakde geç</option>
+                          <option value="short">Long &amp; short — ters pozisyona dön</option>
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-2xs text-content-faint">Başlangıç</span>
+                        <input
+                          type="date"
+                          value={evalStart}
+                          onChange={(e) => setEvalStart(e.target.value)}
+                          className="rounded-md border border-line-strong bg-surface-raised px-2 py-1.5 text-sm text-content outline-none transition-colors ease-out hover:border-ink-500 focus:border-accent-500"
+                        />
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-2xs text-content-faint">Bitiş</span>
+                        <input
+                          type="date"
+                          value={evalEnd}
+                          onChange={(e) => setEvalEnd(e.target.value)}
+                          className="rounded-md border border-line-strong bg-surface-raised px-2 py-1.5 text-sm text-content outline-none transition-colors ease-out hover:border-ink-500 focus:border-accent-500"
+                        />
+                      </label>
+
                       <button
                         onClick={handleEvaluate}
                         disabled={isLoading}
-                        className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg transition-all cursor-pointer shadow-md shadow-emerald-600/20"
+                        className="flex items-center gap-1.5 rounded-md bg-accent-400 px-3.5 py-1.5 text-sm font-medium text-ink-950 transition-colors ease-out hover:bg-accent-300 disabled:cursor-not-allowed disabled:bg-ink-650 disabled:text-content-disabled"
                       >
-                        <Play className="w-3.5 h-3.5" />
-                        Çalıştır
+                        <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        {isLoading ? 'Çalışıyor…' : 'Çalıştır'}
                       </button>
+
                       {showEvalPanel && evaluateResult && (
                         <button
                           onClick={handleNavigateToChart}
-                          className="flex items-center gap-1.5 px-3.5 py-1 text-xs font-semibold text-indigo-300 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 rounded-lg transition-all cursor-pointer shadow-md shadow-indigo-600/20"
+                          className="flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-sm text-content transition-colors ease-out hover:border-ink-500 hover:bg-surface-hover"
                         >
-                          <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
-                          Grafikte Göster
+                          <BarChart3 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                          Grafikte göster
                         </button>
                       )}
                     </div>
 
                     {/* Hata */}
                     {error && (
-                      <div className="px-4 py-1.5 flex-shrink-0">
-                        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-1.5 text-[11px] text-red-400">
+                      <div className="flex-shrink-0 px-4 py-2">
+                        <p
+                          role="alert"
+                          className="rounded-md border border-loss-600/50 bg-loss-950 px-3 py-2 text-xs text-loss-300"
+                        >
                           {error}
-                        </div>
+                        </p>
                       </div>
                     )}
 
                     {/* Sonuçlar */}
                     {showEvalPanel && evaluateResult && (
                       <div className="flex-1 min-h-0 flex flex-col px-4 py-2 overflow-hidden">
-                        {/* Özet Metrikler */}
-                        <div className="grid grid-cols-5 gap-2 mb-2 flex-shrink-0">
-                          <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
-                            <span className="text-[9px] text-slate-500 uppercase block">
-                              Test Edilen Mum
-                            </span>
-                            <span className="text-sm font-bold text-slate-100 font-mono">
-                              {evaluateResult.total_bars}
-                            </span>
-                          </div>
-                          <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
-                            <span className="text-[9px] text-slate-400/80 uppercase block">
-                              Tamamlanan İşlem
-                            </span>
-                            <span className="text-sm font-bold text-slate-200 font-mono">
-                              {evaluateResult.total_trades || 0}
-                            </span>
-                          </div>
-                          <div className="bg-emerald-950/40 border border-emerald-800/40 rounded-lg p-2">
-                            <span className="text-[9px] text-emerald-400/70 uppercase block">
-                              Başarı Oranı (Win Rate)
-                            </span>
-                            <span className="text-sm font-bold text-emerald-400 font-mono">
-                              {(evaluateResult.win_rate || 0).toFixed(1)}%
-                            </span>
-                          </div>
-                          <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
-                            <span className="text-[9px] text-slate-400/80 uppercase block">
-                              Kazanan / Kaybeden
-                            </span>
-                            <span className="text-sm font-bold font-mono text-slate-200">
-                              <span className="text-emerald-400">{evaluateResult.winning_trades || 0}</span>
-                              {' / '}
-                              <span className="text-red-400">{evaluateResult.losing_trades || 0}</span>
-                            </span>
-                          </div>
-                          <div className={`rounded-lg p-2 border ${
-                            (evaluateResult.total_pnl_percent || 0) >= 0
-                              ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-400'
-                              : 'bg-red-950/40 border-red-800/50 text-red-400'
-                          }`}>
-                            <span className="text-[9px] uppercase block opacity-80">
-                              Toplam Net Kar/Zarar
-                            </span>
-                            <span className="text-sm font-bold font-mono">
-                              {(evaluateResult.total_pnl_percent || 0) >= 0 ? '+' : ''}
-                              {(evaluateResult.total_pnl_percent || 0).toFixed(2)}%
-                            </span>
-                          </div>
+                        {/* Özet metrikler.
+                            Önceden dokuz ayrı kart vardı (5 + 4); her biri bir
+                            etiket ve bir sayı taşıyordu, aralarındaki boşluk
+                            sayıları karşılaştırmayı zorlaştırıyordu. Tek bir
+                            ızgara, ayraçlarla bölünmüş: aynı bilgi, aynı taban
+                            çizgisi, yarısı kadar yer.
+
+                            Getiri tek başına yanıltıcıdır — aynı getiriyi %60
+                            düşüşle alan strateji aynı strateji değildir — bu
+                            yüzden risk metrikleri sonuçla aynı blokta durur. */}
+                        <div className="mb-2.5 flex-shrink-0 overflow-hidden rounded-lg border border-line">
+                          <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                            {[
+                              ['Test edilen mum', String(evaluateResult.total_bars), ''],
+                              ['Tamamlanan işlem', String(evaluateResult.total_trades || 0), ''],
+                              ['Kazanma oranı', `${(evaluateResult.win_rate || 0).toFixed(1)}%`, ''],
+                              [
+                                'Kazanan / kaybeden',
+                                `${evaluateResult.winning_trades || 0} / ${evaluateResult.losing_trades || 0}`,
+                                '',
+                              ],
+                              [
+                                'Net kâr / zarar',
+                                `${(evaluateResult.total_pnl_percent || 0) >= 0 ? '+' : ''}${(
+                                  evaluateResult.total_pnl_percent || 0
+                                ).toFixed(2)}%`,
+                                (evaluateResult.total_pnl_percent || 0) >= 0
+                                  ? 'text-profit-400'
+                                  : 'text-loss-400',
+                              ],
+                            ].map(([label, value, tone]) => (
+                              <div
+                                key={label}
+                                className="border-b border-r border-line-subtle px-3 py-2 last:border-r-0"
+                              >
+                                <dt className="text-2xs text-content-faint">{label}</dt>
+                                <dd className={`mt-1 font-mono text-sm ${tone || 'text-content-strong'}`}>
+                                  {value}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+
+                          {evaluateResult.performance && (
+                            <dl className="grid grid-cols-2 border-t border-line sm:grid-cols-4">
+                              {[
+                                [
+                                  'Max düşüş',
+                                  formatMetric(evaluateResult.performance.max_drawdown_pct, '%'),
+                                  'text-loss-400',
+                                  'Zirveden dibe en büyük özkaynak kaybı.',
+                                ],
+                                [
+                                  'Profit factor',
+                                  formatMetric(evaluateResult.performance.profit_factor),
+                                  '',
+                                  "Brüt kâr / brüt zarar. 1'in üstü kârlı.",
+                                ],
+                                [
+                                  'Sharpe',
+                                  formatMetric(evaluateResult.performance.sharpe_ratio),
+                                  '',
+                                  'Getirinin oynaklığa oranı; işlem bazlı, yıllıklandırılmamış.',
+                                ],
+                                [
+                                  'Son bakiye',
+                                  evaluateResult.performance.ending_balance.toLocaleString('tr-TR', {
+                                    maximumFractionDigits: 0,
+                                  }),
+                                  '',
+                                  '',
+                                ],
+                              ].map(([label, value, tone, hint]) => (
+                                <div
+                                  key={label}
+                                  title={hint || undefined}
+                                  className="border-r border-line-subtle px-3 py-2 last:border-r-0"
+                                >
+                                  <dt className="text-2xs text-content-faint">{label}</dt>
+                                  <dd className={`mt-1 font-mono text-sm ${tone || 'text-content-strong'}`}>
+                                    {value}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )}
+
+                          {/* Al-tut kıyası. Sembol zaten %60 yükseldiyse
+                              stratejinin %40 getirisi bir başarı değil. */}
+                          {evaluateResult.buy_and_hold?.return_pct != null && (
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line bg-surface-raised px-3 py-2 text-xs">
+                              <span className="text-content-muted">
+                                Aynı dönemde al-tut{' '}
+                                <span className="font-mono text-content">
+                                  {evaluateResult.buy_and_hold.return_pct >= 0 ? '+' : ''}
+                                  {evaluateResult.buy_and_hold.return_pct.toFixed(2)}%
+                                </span>{' '}
+                                getirdi
+                              </span>
+                              <span
+                                className={`font-mono ${
+                                  (evaluateResult.outperformance_pct ?? 0) >= 0
+                                    ? 'text-profit-400'
+                                    : 'text-loss-400'
+                                }`}
+                              >
+                                {(evaluateResult.outperformance_pct ?? 0) >= 0
+                                  ? `Strateji ${(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% önde`
+                                  : `Strateji ${Math.abs(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% geride`}
+                              </span>
+                            </div>
+                          )}
                         </div>
-
-                        {/*
-                          Risk metrikleri ve al-tut kıyası.
-
-                          Getiriyi tek başına göstermek yanıltıcıydı: aynı getiriyi
-                          %60 düşüşle alan bir strateji aynı strateji değildir ve
-                          sembol zaten %60 yükseldiyse strateji kaybettirmiştir.
-                        */}
-                        {evaluateResult.performance && (
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
-                              <span className="text-[9px] text-slate-400/80 uppercase block">
-                                Max Düşüş (Drawdown)
-                              </span>
-                              <span className="text-sm font-bold text-red-400 font-mono">
-                                {formatMetric(evaluateResult.performance.max_drawdown_pct, '%')}
-                              </span>
-                            </div>
-                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
-                              <span
-                                className="text-[9px] text-slate-400/80 uppercase block"
-                                title="Brüt kâr / brüt zarar. 1'in üstü kârlı."
-                              >
-                                Profit Factor
-                              </span>
-                              <span className="text-sm font-bold text-slate-200 font-mono">
-                                {formatMetric(evaluateResult.performance.profit_factor)}
-                              </span>
-                            </div>
-                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
-                              <span
-                                className="text-[9px] text-slate-400/80 uppercase block"
-                                title="Getirinin oynaklığa oranı; işlem bazlı, yıllıklandırılmamış."
-                              >
-                                Sharpe
-                              </span>
-                              <span className="text-sm font-bold text-slate-200 font-mono">
-                                {formatMetric(evaluateResult.performance.sharpe_ratio)}
-                              </span>
-                            </div>
-                            <div className="bg-slate-900/60 border border-slate-800/60 rounded-lg p-2">
-                              <span className="text-[9px] text-slate-400/80 uppercase block">
-                                Son Bakiye
-                              </span>
-                              <span className="text-sm font-bold text-slate-200 font-mono">
-                                {evaluateResult.performance.ending_balance.toLocaleString('tr-TR', {
-                                  maximumFractionDigits: 0,
-                                })}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        {evaluateResult.buy_and_hold?.return_pct != null && (
-                          <div
-                            className={`flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded-lg border text-xs ${
-                              (evaluateResult.outperformance_pct ?? 0) >= 0
-                                ? 'bg-emerald-950/30 border-emerald-800/40'
-                                : 'bg-amber-950/30 border-amber-800/40'
-                            }`}
-                          >
-                            <span className="text-slate-300 font-semibold">
-                              Al-Tut Karşılaştırması
-                            </span>
-                            <span className="font-mono text-slate-400">
-                              Al-tut: {evaluateResult.buy_and_hold.return_pct >= 0 ? '+' : ''}
-                              {evaluateResult.buy_and_hold.return_pct.toFixed(2)}%
-                            </span>
-                            <span
-                              className={`font-mono font-bold ${
-                                (evaluateResult.outperformance_pct ?? 0) >= 0
-                                  ? 'text-emerald-400'
-                                  : 'text-amber-400'
-                              }`}
-                            >
-                              {(evaluateResult.outperformance_pct ?? 0) >= 0
-                                ? `Strateji ${(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% önde`
-                                : `Strateji ${Math.abs(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% geride`}
-                            </span>
-                          </div>
-                        )}
 
                         {/* Sinyal listesini dışa aktar */}
                         {Array.isArray(evaluateResult.signals) && evaluateResult.signals.length > 0 && (
-                          <div className="flex justify-end mb-2">
+                          <div className="mb-2 flex justify-end">
                             <button
                               onClick={() => exportSignalsCsv(evaluateResult)}
-                              className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
+                              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-content-muted transition-colors ease-out hover:bg-surface-hover hover:text-content"
                               title="Sinyal listesini CSV olarak indir (Excel uyumlu)"
                             >
-                              <Download className="w-3.5 h-3.5" />
+                              <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
                               CSV indir
                             </button>
                           </div>
@@ -713,15 +725,18 @@ export default function StrategyPage({
 
                         {/* Sinyal Listesi Tablosu */}
                         {Array.isArray(evaluateResult.signals) && evaluateResult.signals.length > 0 && (
-                          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar border border-slate-800/40 rounded-lg">
+                          /* Sayısal sütunlar sağa dayalı: bir fiyat listesinde
+                             basamaklar alt alta hizalanmazsa büyüklükleri gözle
+                             karşılaştırmak mümkün olmuyor. */
+                          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto rounded-lg border border-line">
                             <table className="w-full text-xs">
-                              <thead className="sticky top-0 bg-[#0d1321]">
-                                <tr className="text-[10px] text-slate-500 uppercase">
-                                  <th className="text-left px-3 py-1.5">Zaman</th>
-                                  <th className="text-left px-3 py-1.5">Sinyal</th>
-                                  <th className="text-left px-3 py-1.5">Fiyat</th>
-                                  <th className="text-left px-3 py-1.5">Kar / Zarar (%)</th>
-                                  <th className="text-left px-3 py-1.5">Met Kurallar</th>
+                              <thead className="sticky top-0 z-10 bg-surface-raised">
+                                <tr className="text-2xs text-content-faint">
+                                  <th className="px-3 py-2 text-left font-normal">Zaman</th>
+                                  <th className="px-3 py-2 text-left font-normal">Sinyal</th>
+                                  <th className="px-3 py-2 text-right font-normal">Fiyat</th>
+                                  <th className="px-3 py-2 text-right font-normal">Kâr / zarar</th>
+                                  <th className="px-3 py-2 text-left font-normal">Karşılanan kurallar</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -729,47 +744,45 @@ export default function StrategyPage({
                                   <tr
                                     key={i}
                                     onClick={handleNavigateToChart}
-                                    className="border-t border-slate-800/30 hover:bg-indigo-500/10 cursor-pointer transition-colors"
+                                    className="cursor-pointer border-t border-line-subtle transition-colors ease-out hover:bg-surface-hover"
                                     title="Tıklayarak grafiğe geçin ve sinyali görün"
                                   >
-                                    <td className="px-3 py-1.5 text-slate-400 font-mono">
+                                    <td className="px-3 py-1.5 font-mono text-content-muted">
                                       {formatTimestamp(signal.timestamp)}
                                     </td>
                                     <td className="px-3 py-1.5">
                                       <span
-                                        className={`flex items-center gap-1 font-semibold ${
-                                          signal.signal === 'BUY'
-                                            ? 'text-emerald-400'
-                                            : 'text-red-400'
+                                        className={`flex items-center gap-1 ${
+                                          signal.signal === 'BUY' ? 'text-profit-400' : 'text-loss-400'
                                         }`}
                                       >
                                         {signal.signal === 'BUY' ? (
-                                          <ArrowUpRight className="w-3 h-3" />
+                                          <ArrowUpRight className="h-3 w-3" strokeWidth={2} />
                                         ) : (
-                                          <ArrowDownRight className="w-3 h-3" />
+                                          <ArrowDownRight className="h-3 w-3" strokeWidth={2} />
                                         )}
                                         {signal.signal}
                                       </span>
                                     </td>
-                                    <td className="px-3 py-1.5 text-slate-200 font-mono">
+                                    <td className="px-3 py-1.5 text-right font-mono text-content">
                                       {typeof signal.price === 'number' && !isNaN(signal.price)
                                         ? signal.price.toFixed(2)
                                         : '—'}
                                     </td>
-                                    <td className="px-3 py-1.5 font-mono">
+                                    <td className="px-3 py-1.5 text-right font-mono">
                                       {signal.signal === 'SELL' && typeof signal.pnl_percent === 'number' && !isNaN(signal.pnl_percent) ? (
                                         <span
-                                          className={`font-bold ${
-                                            signal.pnl_percent >= 0 ? 'text-emerald-400' : 'text-red-400'
-                                          }`}
+                                          className={
+                                            signal.pnl_percent >= 0 ? 'text-profit-400' : 'text-loss-400'
+                                          }
                                         >
                                           {signal.pnl_percent >= 0 ? `+${signal.pnl_percent.toFixed(2)}%` : `${signal.pnl_percent.toFixed(2)}%`}
                                         </span>
                                       ) : (
-                                        <span className="text-slate-600">—</span>
+                                        <span className="text-content-faint">—</span>
                                       )}
                                     </td>
-                                    <td className="px-3 py-1.5 text-slate-500 text-[10px] font-mono truncate max-w-xs">
+                                    <td className="max-w-xs truncate px-3 py-1.5 font-mono text-2xs text-content-faint">
                                       {Array.isArray(signal.conditions_met) ? signal.conditions_met.join(' & ') : ''}
                                     </td>
                                   </tr>
@@ -777,9 +790,9 @@ export default function StrategyPage({
                               </tbody>
                             </table>
                             {evaluateResult.signals.length > 100 && (
-                              <div className="text-center py-1.5 text-[10px] text-slate-500 bg-slate-900/40">
-                                ... ve {evaluateResult.signals.length - 100} sinyal daha
-                              </div>
+                              <p className="border-t border-line-subtle bg-surface-raised py-2 text-center text-2xs text-content-faint">
+                                İlk 100 sinyal gösteriliyor · {evaluateResult.signals.length - 100} sinyal daha var, tamamı CSV'de
+                              </p>
                             )}
                           </div>
                         )}

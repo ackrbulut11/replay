@@ -172,8 +172,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Google girişi başarısız');
+        // Gövde her zaman JSON değil: Vite dev proxy backend'e ulaşamadığında
+        // düz metin bir 500 döndürüyor ve `res.json()` burada SyntaxError
+        // fırlatıyordu — kullanıcı giriş ekranında "Unexpected token" görüyordu.
+        let detail = '';
+        try {
+          detail = (await res.json())?.detail ?? '';
+        } catch {
+          detail = '';
+        }
+        if (!detail && res.status >= 500) {
+          detail = 'Sunucuya ulaşılamadı. Backend çalışıyor mu?';
+        }
+        throw new Error(detail || `Giriş başarısız (HTTP ${res.status})`);
       }
 
       const data = await res.json();

@@ -17,14 +17,21 @@ import {
 } from '../../store/watchlistStore';
 import WatchlistContextMenu, { ContextMenuTarget } from './WatchlistContextMenu';
 
-/** Sağlayıcıya göre varsayılan bayrak rengi — sembol işaretli DEĞİLKEN kullanılır. */
+/**
+ * Sağlayıcıya göre varsayılan bayrak rengi — sembol işaretli DEĞİLKEN kullanılır.
+ *
+ * Piyasalar kâr-zarar paletinden ayrı tutuluyor: BIST eskiden kırmızı, forex
+ * yeşildi ve yan yana duran fiyat değişimi sütunuyla aynı iki rengi
+ * paylaşıyorlardı — göz "BIST kaybediyor" diye okuyordu. Bu dört renk
+ * kategorik bir palet; hiçbiri bir değer yargısı taşımıyor.
+ */
 function providerFlagStyle(provider?: string, exchange?: string): string {
   const p = (provider || '').toLowerCase();
   const ex = (exchange || '').toLowerCase();
-  if (p === 'bist' || ex.includes('bist')) return 'text-red-500 fill-red-500/20';
-  if (p === 'nasdaq' || ex.includes('nasdaq')) return 'text-blue-400 fill-blue-400/20';
-  if (p === 'forex' || p === 'fx' || ex.includes('forex')) return 'text-emerald-400 fill-emerald-400/20';
-  return 'text-amber-400 fill-amber-400/20';
+  if (p === 'bist' || ex.includes('bist')) return 'text-warn-400 fill-warn-400/20';
+  if (p === 'nasdaq' || ex.includes('nasdaq')) return 'text-accent-300 fill-accent-300/20';
+  if (p === 'forex' || p === 'fx' || ex.includes('forex')) return 'text-ink-300 fill-ink-300/20';
+  return 'text-accent-500 fill-accent-500/20';
 }
 
 function formatPrice(price?: number | null, provider?: string): string {
@@ -73,9 +80,9 @@ function WatchlistRow({
       onContextMenu={(e) => onContextMenu(e, item)}
       className={`group flex items-center justify-between px-2 py-2 rounded-xl cursor-pointer transition-all ${
         isCurrent
-          ? 'bg-indigo-600/20 border border-indigo-500/50 shadow-md shadow-indigo-500/10'
-          : 'hover:bg-slate-800/50 border border-transparent'
-      } ${isDragging ? 'shadow-xl shadow-indigo-500/20 scale-[1.02] bg-slate-800/80' : ''}`}
+          ? 'bg-accent-600/20 border border-accent-500/50 shadow-md shadow-accent-500/10'
+          : 'hover:bg-surface-hover border border-transparent'
+      } ${isDragging ? 'shadow-xl shadow-accent-500/20 scale-[1.02] bg-surface-hover' : ''}`}
       {...(dragProps || {})}
     >
       <div className="flex items-center gap-2 min-w-0">
@@ -92,21 +99,21 @@ function WatchlistRow({
 
         <div className="flex flex-col truncate">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-100 font-mono tracking-tight group-hover:text-indigo-300 transition">
+            <span className="text-xs font-medium text-content-strong font-mono tracking-tight group-hover:text-accent-300 transition">
               {item.symbol}
             </span>
-            <span className="text-[9px] font-bold px-1 rounded bg-slate-900 border border-slate-800 text-slate-400 shrink-0">
+            <span className="text-2xs font-medium px-1 rounded bg-surface-raised border border-line text-content-muted shrink-0">
               {item.exchange}
             </span>
             {item.note && (
               <StickyNote
-                className="w-3 h-3 text-amber-400 shrink-0"
+                className="w-3 h-3 text-warn-400 shrink-0"
                 // Not metni tooltip olarak görünür; düzenlemek için sağ tık menüsü.
                 aria-label="Notu var"
               />
             )}
           </div>
-          <span className="text-[10px] text-slate-500 truncate max-w-[100px]">
+          <span className="text-2xs text-content-faint truncate max-w-[100px]">
             {item.note || item.name}
           </span>
         </div>
@@ -114,15 +121,15 @@ function WatchlistRow({
 
       <div className="flex items-center gap-1.5 shrink-0">
         <div className="flex flex-col items-end font-mono">
-          <span className="text-xs font-bold text-slate-100">
+          <span className="text-xs font-medium text-content-strong">
             {formatPrice(item.lastPrice, item.provider)}
           </span>
           {item.changePercent !== undefined && item.changePercent !== null ? (
-            <span className={`text-[10px] font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`text-2xs font-medium ${isPositive ? 'text-profit-400' : 'text-loss-400'}`}>
               {isPositive ? '+' : ''}{item.changePercent.toFixed(2)}%
             </span>
           ) : (
-            <span className="text-[10px] text-slate-600">—</span>
+            <span className="text-2xs text-content-faint">—</span>
           )}
         </div>
 
@@ -131,7 +138,7 @@ function WatchlistRow({
             e.stopPropagation();
             onRemove();
           }}
-          className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 hover:bg-red-950/40 rounded transition-all"
+          className="opacity-0 group-hover:opacity-100 p-1 text-content-faint hover:text-loss-400 hover:bg-loss-950/40 rounded transition-all"
           title="Listeden Çıkar"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -160,10 +167,10 @@ function SectionRow({
       className="flex items-center gap-2 px-2 pt-3 pb-1 cursor-default select-none"
       {...(dragProps || {})}
     >
-      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+      <span className="text-2xs font-medium text-content-muted truncate">
         {item.name}
       </span>
-      <div className="flex-1 h-px bg-slate-800" />
+      <div className="flex-1 h-px bg-surface-hover" />
     </div>
   );
 }
@@ -382,47 +389,47 @@ export default function WatchlistPanel({
   return (
     <div
       style={{ width: state.panelWidth }}
-      className="h-full bg-[#0a0b0e] border-l border-white/[0.06] flex flex-col z-20 shadow-2xl overflow-hidden animate-slideInRight relative shrink-0"
+      className="h-full bg-canvas border-l border-line flex flex-col z-20 shadow-2xl overflow-hidden animate-slideInRight relative shrink-0"
     >
       {/* Resize handle (left edge) */}
       <div
         onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-indigo-600/30 transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors"
         title="Genişliği Ayarla"
       >
         <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <GripVertical className="w-3 h-3 text-slate-400 group-hover:text-indigo-300" />
+          <GripVertical className="w-3 h-3 text-content-muted group-hover:text-accent-300" />
         </div>
       </div>
 
       {/* Panel Top Header */}
-      <div className="pl-2 pr-3 py-3 border-b border-white/[0.06] flex items-center justify-between bg-[#0a0b0e]">
+      <div className="pl-2 pr-3 py-3 border-b border-line flex items-center justify-between bg-canvas">
         {/* Watchlist Name Dropdown Selector */}
         <div className="relative">
           <button
             onClick={() => setIsListDropdownOpen(!isListDropdownOpen)}
-            className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] hover:border-emerald-500/40 text-xs font-medium text-zinc-100 transition-all select-none"
+            className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-line hover:border-accent-500/40 text-xs font-medium text-content-strong transition-all select-none"
           >
             <span
               style={{ color: getListHeaderColor() }}
-              className="w-5 h-4 flex items-center justify-center shrink-0 text-xs font-bold leading-none select-none"
+              className="w-5 h-4 flex items-center justify-center shrink-0 text-xs font-medium leading-none select-none"
             >
               {getListHeaderEmoji()}
             </span>
             <span className="max-w-[110px] truncate">{activeGroup?.name || 'Watchlist'}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <ChevronDown className="w-3.5 h-3.5 text-content-muted" />
           </button>
 
           {/* List Selector Dropdown */}
           {isListDropdownOpen && (
             <div
-              className="absolute top-9 left-0 w-60 bg-[#0d1321] border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-0.5 animate-fadeIn"
+              className="absolute top-9 left-0 w-60 bg-surface-raised border border-line rounded-xl shadow-2xl p-1.5 z-50 space-y-0.5 animate-fadeIn"
               onMouseLeave={() => setIsListDropdownOpen(false)}
             >
-              <div className="text-[9px] text-slate-500 font-bold uppercase px-2.5 py-1 select-none">
+              <div className="text-2xs text-content-faint font-medium px-2.5 py-1 select-none">
                 İzleme Listelerim
               </div>
-              <div className="w-full h-px bg-slate-800/60 my-1" />
+              <div className="w-full h-px bg-surface-hover my-1" />
               {state.lists.map((group) => (
                 <button
                   key={group.id}
@@ -430,38 +437,38 @@ export default function WatchlistPanel({
                     watchlistStore.setActiveList(group.id);
                     setIsListDropdownOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                     group.id === state.activeListId
-                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                      : 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-100'
+                      ? 'bg-accent-600/20 text-accent-300 border border-accent-500/30'
+                      : 'text-content hover:bg-surface-hover hover:text-content-strong'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span
                       style={{ color: group.color }}
-                      className="w-6 h-5 flex items-center justify-center shrink-0 text-xs font-bold leading-none text-center select-none"
+                      className="w-6 h-5 flex items-center justify-center shrink-0 text-xs font-medium leading-none text-center select-none"
                     >
                       {group.emoji}
                     </span>
                     <span className="truncate">{group.name}</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono ml-2 shrink-0">
+                  <span className="text-2xs text-content-faint font-mono ml-2 shrink-0">
                     ({group.items.filter((i) => i.kind !== 'section').length})
                   </span>
                 </button>
               ))}
 
-              <div className="w-full h-px bg-slate-800/60 my-1" />
+              <div className="w-full h-px bg-surface-hover my-1" />
               <button
                 onClick={() => {
                   setIsListDropdownOpen(false);
                   setPendingListSymbol(null);
                   setIsNewListModalOpen(true);
                 }}
-                className="w-full flex items-center gap-3 px-2.5 py-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded-lg font-bold transition-all"
+                className="w-full flex items-center gap-3 px-2.5 py-1.5 text-xs text-accent-400 hover:bg-accent-300/10 rounded-lg font-medium transition-all"
               >
                 <div className="w-6 h-5 flex items-center justify-center shrink-0">
-                  <Plus className="w-3.5 h-3.5 text-indigo-400" />
+                  <Plus className="w-3.5 h-3.5 text-accent-400" />
                 </div>
                 <span>Yeni Liste Oluştur</span>
               </button>
@@ -475,8 +482,8 @@ export default function WatchlistPanel({
           {/* Refresh */}
           <button
             onClick={() => watchlistStore.fetchQuotes()}
-            className={`p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800/60 rounded-lg transition-all ${
-              state.quotesLoading ? 'animate-spin text-indigo-400' : ''
+            className={`p-1.5 text-content-muted hover:text-accent-400 hover:bg-surface-hover rounded-lg transition-all ${
+              state.quotesLoading ? 'animate-spin text-accent-400' : ''
             }`}
             title="Fiyatları Yenile"
           >
@@ -486,7 +493,7 @@ export default function WatchlistPanel({
           {/* Add Symbol */}
           <button
             onClick={onOpenSearchModal}
-            className="p-1.5 bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-600/50 hover:text-white rounded-lg transition-all"
+            className="p-1.5 bg-accent-600/30 text-accent-300 border border-accent-500/40 hover:bg-accent-600/50 hover:text-content-strong rounded-lg transition-all"
             title="Yeni Hisse / Sembol Ekle"
           >
             <Plus className="w-4 h-4" />
@@ -495,45 +502,45 @@ export default function WatchlistPanel({
       </div>
 
       {/* Table Column Headers */}
-      <div className="px-3 py-2 bg-[#090d16] border-b border-slate-800/80 flex items-center justify-between text-[10px] font-bold text-slate-400 select-none">
+      <div className="px-3 py-2 bg-canvas border-b border-line flex items-center justify-between text-2xs font-medium text-content-muted select-none">
         <button
           onClick={() => handleSort('symbol')}
-          className="flex items-center gap-1 hover:text-slate-200 transition"
+          className="flex items-center gap-1 hover:text-content transition"
         >
           <span>SEMBOL</span>
-          {sortField === 'symbol' && <ArrowUpDown className="w-3 h-3 text-indigo-400" />}
+          {sortField === 'symbol' && <ArrowUpDown className="w-3 h-3 text-accent-400" />}
         </button>
 
         <div className="flex items-center gap-4">
           <button
             onClick={() => handleSort('price')}
-            className="flex items-center gap-1 hover:text-slate-200 transition"
+            className="flex items-center gap-1 hover:text-content transition"
           >
             <span>SON</span>
-            {sortField === 'price' && <ArrowUpDown className="w-3 h-3 text-indigo-400" />}
+            {sortField === 'price' && <ArrowUpDown className="w-3 h-3 text-accent-400" />}
           </button>
           <button
             onClick={() => handleSort('change')}
-            className="flex items-center gap-1 hover:text-slate-200 transition"
+            className="flex items-center gap-1 hover:text-content transition"
           >
             <span>DEĞ%</span>
-            {sortField === 'change' && <ArrowUpDown className="w-3 h-3 text-indigo-400" />}
+            {sortField === 'change' && <ArrowUpDown className="w-3 h-3 text-accent-400" />}
           </button>
         </div>
       </div>
 
       {/* Watchlist Item Rows — boş alana sağ tık da menüyü açar (liste geneli maddeleri) */}
       <div
-        className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-800/30 p-1 space-y-0.5"
+        className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-line/30 p-1 space-y-0.5"
         onContextMenu={(e) => openContextMenu(e, null)}
       >
         {items.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-500 font-medium space-y-3">
-            <Sparkles className="w-6 h-6 text-indigo-400/50 mx-auto" />
+          <div className="p-8 text-center text-xs text-content-faint font-medium space-y-3">
+            <Sparkles className="w-6 h-6 text-accent-400/50 mx-auto" />
             <p>Bu listede henüz sembol yok.</p>
             <button
               onClick={onOpenSearchModal}
-              className="px-3 py-1.5 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 rounded-lg font-bold text-xs hover:bg-indigo-600/40 transition"
+              className="px-3 py-1.5 bg-accent-600/20 text-accent-300 border border-accent-500/30 rounded-lg font-medium text-xs hover:bg-accent-600/40 transition"
             >
               + Sembol Ekle
             </button>
@@ -574,11 +581,11 @@ export default function WatchlistPanel({
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-2 bg-[#070b13] border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-500 select-none">
+      <div className="px-3 py-2 bg-canvas border-t border-line flex items-center justify-between text-2xs text-content-faint select-none">
         <span>{symbolCount} Sembol</span>
         <button
           onClick={onOpenSearchModal}
-          className="text-xs font-bold text-indigo-400 hover:text-indigo-300 transition"
+          className="text-xs font-medium text-accent-400 hover:text-accent-300 transition"
         >
           + Sembol Ekle
         </button>
@@ -613,9 +620,9 @@ export default function WatchlistPanel({
 
       {/* Not Ekleme / Düzenleme Modalı */}
       {noteTarget && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0d1321] border border-slate-800 rounded-2xl p-5 w-full max-w-sm space-y-4 shadow-2xl">
-            <h3 className="text-sm font-bold text-slate-100">
+        <div className="fixed inset-0 z-50 bg-canvas backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface-raised border border-line rounded-2xl p-5 w-full max-w-sm space-y-4 shadow-2xl">
+            <h3 className="text-sm font-medium text-content-strong">
               {noteTarget.symbol} için not
             </h3>
             <textarea
@@ -624,7 +631,7 @@ export default function WatchlistPanel({
               placeholder="Bu sembolle ilgili notunuz (örn. 'destek 63.500, kırılırsa al')..."
               autoFocus
               rows={4}
-              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500 transition resize-none"
+              className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content-strong outline-none focus:border-accent-500 transition resize-none"
             />
             <div className="flex justify-between items-center gap-2">
               <button
@@ -633,14 +640,14 @@ export default function WatchlistPanel({
                   setNoteTarget(null);
                 }}
                 disabled={!noteTarget.note}
-                className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-xs text-loss-400 hover:text-loss-300 font-medium disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 Notu Sil
               </button>
               <div className="flex gap-2">
                 <button
                   onClick={() => setNoteTarget(null)}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-semibold"
+                  className="px-3 py-1.5 text-xs text-content-muted hover:text-content font-medium"
                 >
                   İptal
                 </button>
@@ -649,7 +656,7 @@ export default function WatchlistPanel({
                     watchlistStore.setNote(noteTarget.id, noteDraft);
                     setNoteTarget(null);
                   }}
-                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-500 transition"
+                  className="px-3 py-1.5 bg-accent-600 text-ink-950 rounded-lg text-xs font-medium hover:bg-accent-300 transition"
                 >
                   Kaydet
                 </button>
@@ -661,9 +668,9 @@ export default function WatchlistPanel({
 
       {/* Bölüm Ekleme / Yeniden Adlandırma Modalı */}
       {sectionModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0d1321] border border-slate-800 rounded-2xl p-5 w-full max-w-xs space-y-4 shadow-2xl">
-            <h3 className="text-sm font-bold text-slate-100">
+        <div className="fixed inset-0 z-50 bg-canvas backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface-raised border border-line rounded-2xl p-5 w-full max-w-xs space-y-4 shadow-2xl">
+            <h3 className="text-sm font-medium text-content-strong">
               {sectionModal.mode === 'create' ? 'Yeni Bölüm' : 'Bölümü Yeniden Adlandır'}
             </h3>
             <input
@@ -673,18 +680,18 @@ export default function WatchlistPanel({
               onKeyDown={(e) => e.key === 'Enter' && submitSectionModal()}
               placeholder="Bölüm Adı (Örn: Bankalar)..."
               autoFocus
-              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500 transition"
+              className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content-strong outline-none focus:border-accent-500 transition"
             />
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => { setSectionModal(null); setSectionDraft(''); }}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-semibold"
+                className="px-3 py-1.5 text-xs text-content-muted hover:text-content font-medium"
               >
                 İptal
               </button>
               <button
                 onClick={submitSectionModal}
-                className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-500 transition"
+                className="px-3 py-1.5 bg-accent-600 text-ink-950 rounded-lg text-xs font-medium hover:bg-accent-300 transition"
               >
                 {sectionModal.mode === 'create' ? 'Ekle' : 'Kaydet'}
               </button>
@@ -695,12 +702,12 @@ export default function WatchlistPanel({
 
       {/* New List Modal */}
       {isNewListModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0d1321] border border-slate-800 rounded-2xl p-5 w-full max-w-xs space-y-4 shadow-2xl">
-            <h3 className="text-sm font-bold text-slate-100">Yeni İzleme Listesi</h3>
+        <div className="fixed inset-0 z-50 bg-canvas backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface-raised border border-line rounded-2xl p-5 w-full max-w-xs space-y-4 shadow-2xl">
+            <h3 className="text-sm font-medium text-content-strong">Yeni İzleme Listesi</h3>
             {pendingListSymbol && (
-              <p className="text-[11px] text-slate-400">
-                <span className="font-mono font-bold text-indigo-300">{pendingListSymbol.symbol}</span>{' '}
+              <p className="text-2xs text-content-muted">
+                <span className="font-mono font-medium text-accent-300">{pendingListSymbol.symbol}</span>{' '}
                 oluşturulan listeye eklenecek.
               </p>
             )}
@@ -711,7 +718,7 @@ export default function WatchlistPanel({
               onKeyDown={(e) => e.key === 'Enter' && submitNewList()}
               placeholder="Liste Adı (Örn: Bankacılık)..."
               autoFocus
-              className="w-full bg-[#070b13] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500 transition"
+              className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content-strong outline-none focus:border-accent-500 transition"
             />
             <div className="flex justify-end gap-2">
               <button
@@ -720,13 +727,13 @@ export default function WatchlistPanel({
                   setNewListName('');
                   setPendingListSymbol(null);
                 }}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 font-semibold"
+                className="px-3 py-1.5 text-xs text-content-muted hover:text-content font-medium"
               >
                 İptal
               </button>
               <button
                 onClick={submitNewList}
-                className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-500 transition"
+                className="px-3 py-1.5 bg-accent-600 text-ink-950 rounded-lg text-xs font-medium hover:bg-accent-300 transition"
               >
                 Oluştur
               </button>

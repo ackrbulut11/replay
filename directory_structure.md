@@ -19,7 +19,8 @@ TradingResearchPlatform/
 │   │   ├── App.tsx
 │   │   │
 │   │   ├── assets/
-│   │   │   └── logo.jpg              # Official REPLAY platform brand logo
+│   │   │   ├── logo.jpg              # Official REPLAY platform brand logo
+│   │   │   └── fonts/                # Self-hosted IBM Plex Sans/Mono (latin + latin-ext)
 │   │   │
 │   │   ├── context/
 │   │   │   └── AuthContext.tsx       # Google OAuth 2.0 & JWT Auth state management

@@ -39,16 +39,16 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{label}</span>
+        <span className="text-2xs text-content-faint font-medium">{label}</span>
         {/* Hızlı Tip Değiştirici Butonlar */}
-        <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+        <div className="flex items-center gap-1 bg-canvas p-0.5 rounded-lg border border-line">
           <button
             type="button"
             onClick={() => onChange({ type: 'indicator', name: 'EMA', period: 20 })}
-            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
+            className={`text-2xs px-1.5 py-0.5 rounded font-medium transition-all ${
               type === 'indicator'
-                ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'bg-accent-600/30 text-accent-300 border border-accent-500/40'
+                : 'text-content-faint hover:text-content'
             }`}
             title="İndikatör seç (EMA, RSI, MACD vs.)"
           >
@@ -57,10 +57,10 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
           <button
             type="button"
             onClick={() => onChange({ type: 'value', value: 30 })}
-            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
+            className={`text-2xs px-1.5 py-0.5 rounded font-medium transition-all ${
               type === 'value'
-                ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'bg-warn-600/30 text-warn-300 border border-warn-500/40'
+                : 'text-content-faint hover:text-content'
             }`}
             title="Sabit Sayı / Seviye gir (30, 70, 0 vs.)"
           >
@@ -69,10 +69,10 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
           <button
             type="button"
             onClick={() => onChange({ type: 'price', field: 'close' })}
-            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold transition-all ${
+            className={`text-2xs px-1.5 py-0.5 rounded font-medium transition-all ${
               type === 'price'
-                ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'bg-accent-600/30 text-accent-300 border border-accent-500/40'
+                : 'text-content-faint hover:text-content'
             }`}
             title="Fiyat alanı seç (Kapanış, Hacim vs.)"
           >
@@ -95,7 +95,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
               onChange({ type: 'value', value: 0 });
             }
           }}
-          className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 outline-none transition-colors"
+          className="bg-surface-raised border border-line-strong text-content text-xs rounded-lg px-2 py-1.5 focus:border-accent-500 focus:ring-1 focus:ring-accent-500/30 outline-none transition-colors"
         >
           <option value="indicator">İndikatör</option>
           <option value="price">Fiyat</option>
@@ -118,7 +118,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                   field: undefined,
                 });
               }}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors font-semibold"
+              className="bg-surface-raised border border-line-strong text-content text-xs rounded-lg px-2 py-1.5 focus:border-accent-500 outline-none transition-colors font-medium"
             >
               {indicators.map((ind) => (
                 <option key={ind.name} value={ind.name}>
@@ -137,7 +137,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
                 });
               }}
               placeholder="Periyot (ör: 20)"
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-24 focus:border-indigo-500 outline-none transition-colors font-mono"
+              className="bg-surface-raised border border-line-strong text-content text-xs rounded-lg px-2 py-1.5 w-24 focus:border-accent-500 outline-none transition-colors font-mono"
               title="İndikatör periyodu (örneğin: 14 veya 20). Gelişmiş kullanıcılar: $param_adı"
             />
             {/* Çoklu çıktılı indikatörlerde alan seçimi */}
@@ -145,7 +145,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
               <select
                 value={operand.field || ''}
                 onChange={(e) => onChange({ ...operand, field: e.target.value || undefined })}
-                className="bg-slate-900 border border-indigo-700/60 text-indigo-300 text-xs font-semibold rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
+                className="bg-surface-raised border border-accent-700/60 text-accent-300 text-xs font-medium rounded-lg px-2 py-1.5 focus:border-accent-500 outline-none transition-colors"
               >
                 <option value="">Varsayılan Çıktı</option>
                 {indicators
@@ -161,7 +161,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
             <select
               value={operand.timeframe || ''}
               onChange={(e) => onChange({ ...operand, timeframe: e.target.value || undefined })}
-              className="bg-slate-900 border border-slate-700 text-slate-400 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
+              className="bg-surface-raised border border-line-strong text-content-muted text-xs rounded-lg px-2 py-1.5 focus:border-accent-500 outline-none transition-colors"
               title="Farklı zaman dilimi (Opsiyonel)"
             >
               <option value="">Ana TF</option>
@@ -180,7 +180,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
             <select
               value={operand.field}
               onChange={(e) => onChange({ ...operand, field: e.target.value })}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors font-semibold"
+              className="bg-surface-raised border border-line-strong text-content text-xs rounded-lg px-2 py-1.5 focus:border-accent-500 outline-none transition-colors font-medium"
             >
               {PRICE_FIELDS.map((f) => (
                 <option key={f} value={f}>
@@ -191,7 +191,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
             <select
               value={operand.timeframe || ''}
               onChange={(e) => onChange({ ...operand, timeframe: e.target.value || undefined })}
-              className="bg-slate-900 border border-slate-700 text-slate-400 text-xs rounded-lg px-2 py-1.5 focus:border-indigo-500 outline-none transition-colors"
+              className="bg-surface-raised border border-line-strong text-content-muted text-xs rounded-lg px-2 py-1.5 focus:border-accent-500 outline-none transition-colors"
             >
               <option value="">Ana TF</option>
               {TIMEFRAMES.map((tf) => (
@@ -216,7 +216,7 @@ function OperandEditor({ operand, onChange, indicators, label }: OperandEditorPr
               });
             }}
             placeholder="Sayı (ör: 0)"
-            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 w-28 focus:border-indigo-500 outline-none transition-colors font-mono font-semibold"
+            className="bg-surface-raised border border-line-strong text-content text-xs rounded-lg px-2 py-1.5 w-28 focus:border-accent-500 outline-none transition-colors font-mono font-medium"
             title="Sabit sayısal değer (örneğin: 0, 30, 70)"
           />
         )}
@@ -283,16 +283,16 @@ function ConditionRow({
   };
 
   return (
-    <div className="group relative flex flex-col gap-3 bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 hover:border-slate-700/80 transition-colors">
+    <div className="group relative flex flex-col gap-3 bg-surface-raised border border-line rounded-xl p-3 hover:border-line-strong transition-colors">
       {/* Satır başlığı */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <GripVertical className="w-3.5 h-3.5 text-slate-600" />
-          <span className="text-[10px] text-slate-500 font-mono font-bold">#{index + 1}</span>
+          <GripVertical className="w-3.5 h-3.5 text-content-faint" />
+          <span className="text-2xs text-content-faint font-mono font-medium">#{index + 1}</span>
         </div>
         <button
           onClick={onDelete}
-          className="opacity-0 group-hover:opacity-100 p-1 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+          className="opacity-0 group-hover:opacity-100 p-1 text-loss-400/60 hover:text-loss-400 hover:bg-loss-500/10 rounded-lg transition-all"
           title="Koşulu sil"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -310,14 +310,14 @@ function ConditionRow({
 
         {/* Operatör */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Operatör</span>
+          <span className="text-2xs text-content-faint font-medium">Operatör</span>
           <select
             value={condition.operator}
             onChange={(e) => onChange({ ...condition, operator: e.target.value as OperatorType })}
-            className="bg-indigo-950/50 border border-indigo-700/50 text-indigo-300 text-xs rounded-lg px-3 py-1.5 font-semibold focus:border-indigo-500 outline-none transition-colors"
+            className="bg-accent-950/50 border border-accent-700/50 text-accent-300 text-xs rounded-lg px-3 py-1.5 font-medium focus:border-accent-500 outline-none transition-colors"
           >
             {OPERATORS.map((op) => (
-              <option key={op.value} value={op.value} className="bg-[#0d1321] text-slate-100 py-1">
+              <option key={op.value} value={op.value} className="bg-surface-raised text-content-strong py-1">
                 {op.label}
               </option>
             ))}
@@ -357,7 +357,16 @@ interface ConditionEditorProps {
   onChange: (group: ConditionGroup) => void;
   indicators: IndicatorInfo[];
   title: string;
-  accentColor?: string;
+  /**
+   * Grubun ne işe yaradığı.
+   *
+   * Eskiden burada `accentColor` vardı ve `'red'` değeri yalnızca rengi
+   * değil DAVRANIŞI da belirliyordu: çıkış grubunda yeni koşulun varsayılan
+   * operatörü `cross_below`, RSI eşiği 70 oluyordu. Renk adına bağlı bir
+   * davranış, renk değiştirmek istendiği anda sessizce bozulur — prop artık
+   * niyeti taşıyor, görünüm ondan türüyor.
+   */
+  kind?: 'entry' | 'exit';
   /** İç içe grup seviyesi; 0 = en üst. Kendi kendini çağırırken artar. */
   depth?: number;
   /** Alt grup olarak render edilirken üst grup silme düğmesi sağlar. */
@@ -369,25 +378,11 @@ export default function ConditionEditor({
   onChange,
   indicators,
   title,
-  accentColor = 'indigo',
+  kind = 'entry',
   depth = 0,
   onDeleteGroup,
 }: ConditionEditorProps) {
-  const isSellGroup = accentColor === 'red';
-
-  const colorMap: Record<string, string> = {
-    indigo: 'border-indigo-600/40 bg-indigo-950/20',
-    emerald: 'border-emerald-600/40 bg-emerald-950/20',
-    red: 'border-red-600/40 bg-red-950/20',
-    amber: 'border-amber-600/40 bg-amber-950/20',
-  };
-
-  const badgeMap: Record<string, string> = {
-    indigo: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-    emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    red: 'bg-red-500/20 text-red-300 border-red-500/40',
-    amber: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  };
+  const isSellGroup = kind === 'exit';
 
   // Yeni eklenen özel koşul her zaman en üste gelir (#1 sıraya)
   const handleAddCondition = () => {
@@ -538,83 +533,86 @@ export default function ConditionEditor({
   };
 
   return (
-    <div className={`border rounded-xl p-4 ${colorMap[accentColor] || colorMap.indigo}`}>
+    /* Üst seviye grup çerçeveli bir bölüm; alt gruplar yalnızca soldan
+       girintili ve tek bir dikey çizgiyle işaretli. İç içe kutu yerine
+       girinti kullanmak parantez yapısını okunur tutuyor. */
+    <section
+      className={
+        depth === 0
+          ? 'rounded-lg border border-line bg-surface'
+          : 'border-l border-line-strong pl-3'
+      }
+    >
       {/* Başlık ve Butonlar */}
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badgeMap[accentColor] || badgeMap.indigo}`}>
-            {title}
-          </span>
-          <span className="text-[10px] text-slate-500">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-2 ${
+          depth === 0 ? 'border-b border-line-subtle px-3.5 py-2.5' : 'pb-2'
+        }`}
+      >
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-xs font-medium text-content-strong">{title}</h3>
+          <span className="font-mono text-2xs text-content-faint">
             {group.conditions.length} koşul
           </span>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* AND/OR toggle */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* VE/VEYA anahtarı. Mavi/turuncu rozet yerine nötr bir anahtar:
+              iki seçenek de eşit derecede geçerli, biri "uyarı" değil. */}
           {group.conditions.length > 1 && (
             <button
               onClick={handleToggleLogic}
-              className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
-                group.logic === 'AND'
-                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
-                  : 'bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30'
-              }`}
-              title="Tıkla: Tüm koşullar mı uymalı, yoksa herhangi biri uyması yeterli mi?"
+              className="rounded-md border border-line-strong px-2 py-1 text-2xs text-content transition-colors ease-out hover:border-ink-500 hover:bg-surface-hover"
+              title="Tıkla: tüm koşullar mı sağlanmalı, biri yeterli mi?"
             >
-              {group.logic === 'AND' ? 'Tümü Uymalı (VE)' : 'Biri Uymalı (VEYA)'}
+              {group.logic === 'AND' ? 'Tümü sağlanmalı' : 'Biri yeterli'}
             </button>
           )}
 
-          {/* Hızlı Şablon Listesi Dropdown */}
-          <div className="relative inline-flex items-center">
-            <select
-              defaultValue=""
-              onChange={(e) => {
-                handleSelectTemplate(e.target.value);
-                e.target.value = '';
-              }}
-              className="text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer outline-none"
-            >
-              <option value="" disabled>
-                ⚡ Hızlı Şablon Ekle...
-              </option>
+          {/* Hazır şablonlar. Emoji ve ok işaretleri kaldırıldı — kural
+              zaten metinle yazılı ve emoji her platformda başka çiziliyordu. */}
+          <select
+            defaultValue=""
+            aria-label="Hazır koşul ekle"
+            onChange={(e) => {
+              handleSelectTemplate(e.target.value);
+              e.target.value = '';
+            }}
+            className="cursor-pointer rounded-md border border-line-strong bg-surface-raised px-2 py-1 text-2xs text-content outline-none transition-colors ease-out hover:border-ink-500 hover:bg-surface-hover"
+          >
+            <option value="" disabled>
+              Hazır koşul ekle
+            </option>
+            <option value="macd_zero">
+              {isSellGroup ? "MACD, 0'ı aşağı kesti" : "MACD, 0'ı yukarı kesti"}
+            </option>
+            <option value="rsi_level">
+              {isSellGroup ? 'RSI 70’i aşağı kesti' : 'RSI 30’u yukarı kesti'}
+            </option>
+            <option value="ema_cross">
+              {isSellGroup ? 'EMA 20, EMA 50’yi aşağı kesti' : 'EMA 20, EMA 50’yi yukarı kesti'}
+            </option>
+            <option value="macd_signal">
+              {isSellGroup ? 'MACD, sinyali aşağı kesti' : 'MACD, sinyali yukarı kesti'}
+            </option>
+            <option value="price_ema">
+              {isSellGroup ? 'Fiyat, EMA 200 altında' : 'Fiyat, EMA 200 üstünde'}
+            </option>
+            <option value="bollinger_bounce">
+              {isSellGroup ? 'Fiyat, Bollinger üst bandında' : 'Fiyat, Bollinger alt bandında'}
+            </option>
+            <option value="stoch_level">
+              {isSellGroup ? 'Stoch %K 80’i aşağı kesti' : 'Stoch %K 20’yi yukarı kesti'}
+            </option>
+            <option value="adx_trend">ADX 25 üstünde — güçlü trend</option>
+          </select>
 
-              <option value="macd_zero" className="bg-[#0d1321] text-slate-100 font-semibold">
-                {isSellGroup ? "📉 MACD ↘ 0 (MACD 0'ı Aşağı Kesti)" : "📈 MACD ↗ 0 (MACD 0'ı Yukarı Kesti)"}
-              </option>
-              <option value="rsi_level" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '📊 RSI ↘ 70 (Aşırı Alımdan Düşüş)' : '📊 RSI ↗ 30 (Aşırı Satımdan Çıkış)'}
-              </option>
-              <option value="ema_cross" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '🔀 EMA 20 ↘ EMA 50 (Death Cross)' : '🔀 EMA 20 ↗ EMA 50 (Golden Cross)'}
-              </option>
-              <option value="macd_signal" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '📉 MACD ↘ Signal (Sinyali Aşağı Kesti)' : '📈 MACD ↗ Signal (Sinyali Yukarı Kesti)'}
-              </option>
-              <option value="price_ema" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '🕯️ Fiyat < EMA 200 (Düşüş Trendi)' : '🕯️ Fiyat > EMA 200 (Yükseliş Trendi)'}
-              </option>
-              <option value="bollinger_bounce" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '💥 Fiyat ↘ Bollinger Üst Bant (Direnç)' : '💥 Fiyat ↗ Bollinger Alt Bant (Destek)'}
-              </option>
-              <option value="stoch_level" className="bg-[#0d1321] text-slate-100">
-                {isSellGroup ? '⚡ Stoch K ↘ 80 (Aşırı Alım)' : '⚡ Stoch K ↗ 20 (Aşırı Satım)'}
-              </option>
-              <option value="adx_trend" className="bg-[#0d1321] text-slate-100">
-                {'🎯 ADX > 25 (Güçlü Trend Filtresi)'}
-              </option>
-            </select>
-          </div>
-
-
-          {/* Özel Koşul Ekle (En Üste Ekler) */}
           <button
             onClick={handleAddCondition}
-            className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
+            className="flex items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-2xs text-content transition-colors ease-out hover:border-ink-500 hover:bg-surface-hover"
           >
-            <Plus className="w-3.5 h-3.5" />
-            + Özel Koşul
+            <Plus className="h-3 w-3" strokeWidth={2} />
+            Özel koşul
           </button>
 
           {/* Alt grup: (A VE B) VEYA (C VE D) kurmayı mümkün kılar */}
@@ -622,45 +620,45 @@ export default function ConditionEditor({
             <button
               onClick={handleAddGroup}
               title="Parantezli kural: (A VE B) VEYA (C VE D)"
-              className="flex items-center gap-1 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
+              className="flex items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-2xs text-content transition-colors ease-out hover:border-ink-500 hover:bg-surface-hover"
             >
-              <Plus className="w-3.5 h-3.5" />
-              + Alt Grup
+              <Plus className="h-3 w-3" strokeWidth={2} />
+              Alt grup
             </button>
           )}
 
           {onDeleteGroup && (
             <button
               onClick={onDeleteGroup}
+              aria-label="Bu alt grubu sil"
               title="Bu alt grubu sil"
-              className="p-1 text-red-400/60 hover:text-red-400 transition-colors cursor-pointer"
+              className="rounded p-1 text-content-faint transition-colors ease-out hover:bg-loss-950 hover:text-loss-400"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
             </button>
           )}
         </div>
       </div>
 
       {/* Koşul listesi */}
-      <div className="flex flex-col gap-2">
+      <div className={`flex flex-col gap-2 ${depth === 0 ? 'p-3.5' : ''}`}>
         {group.conditions.length === 0 ? (
-          <div className="text-center py-6 text-slate-400 text-xs italic bg-slate-900/40 rounded-lg border border-slate-800/40">
-            Henüz koşul eklenmedi. Yukarıdaki "⚡ Hızlı Şablon Ekle" veya "+ Özel Koşul" butonuna tıklayarak ilk kuralınızı ekleyin.
-          </div>
+          <p className="py-4 text-xs leading-relaxed text-content-faint">
+            Henüz koşul yok. “Hazır koşul ekle” en sık kullanılan kalıpları tek
+            tıkla getirir; “Özel koşul” boş bir satır açar.
+          </p>
         ) : (
           group.conditions.map((condition, index) => (
             <div key={index}>
               {index > 0 && (
-                <div className="flex items-center justify-center py-1">
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                      group.logic === 'AND'
-                        ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
-                        : 'text-orange-400 bg-orange-500/10 border-orange-500/20'
-                    }`}
-                  >
-                    {group.logic === 'AND' ? 'VE (Tüm Koşullar Sağlanmalı)' : 'VEYA (Herhangi Biri Sağlanabilir)'}
+                /* Koşullar arası bağlaç: ayraç çizgisinin üstünde küçük bir
+                   etiket. Rozet yerine çizgi, satırların bir liste olduğunu
+                   gösteriyor. */
+                <div className="flex items-center gap-2 py-1.5">
+                  <span className="text-2xs text-content-faint">
+                    {group.logic === 'AND' ? 've' : 'veya'}
                   </span>
+                  <span className="h-px flex-1 bg-line-subtle" />
                 </div>
               )}
               {isConditionGroup(condition) ? (
@@ -669,8 +667,8 @@ export default function ConditionEditor({
                   onChange={(g) => handleUpdateCondition(index, g)}
                   onDeleteGroup={() => handleDeleteCondition(index)}
                   indicators={indicators}
-                  title={`Alt Grup ${index + 1}`}
-                  accentColor={accentColor}
+                  title={`Alt grup ${index + 1}`}
+                  kind={kind}
                   depth={depth + 1}
                 />
               ) : (
@@ -687,6 +685,6 @@ export default function ConditionEditor({
           ))
         )}
       </div>
-    </div>
+    </section>
   );
 }

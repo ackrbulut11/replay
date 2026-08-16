@@ -78,11 +78,11 @@ function SummaryCell({
   tone?: 'good' | 'bad' | 'neutral';
 }) {
   const color =
-    tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : 'text-zinc-200';
+    tone === 'good' ? 'text-profit-400' : tone === 'bad' ? 'text-loss-400' : 'text-content';
   return (
-    <div className="bg-[#0d1321] px-2 py-1.5 flex flex-col gap-0.5">
-      <span className="text-[8px] uppercase tracking-wider text-zinc-600">{label}</span>
-      <span className={`text-[11px] font-bold font-mono ${color}`}>{value}</span>
+    <div className="bg-surface-raised px-2 py-1.5 flex flex-col gap-0.5">
+      <span className="text-2xs text-content-faint">{label}</span>
+      <span className={`text-2xs font-medium font-mono ${color}`}>{value}</span>
     </div>
   );
 }
@@ -167,38 +167,38 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
     return (
       <div
         key={trade.id}
-        className="grid grid-cols-[auto_1fr_1fr_auto] gap-x-2 items-center px-2 py-1 text-[10px] font-mono border-t border-white/[0.05] hover:bg-white/[0.03]"
+        className="grid grid-cols-[auto_1fr_1fr_auto] gap-x-2 items-center px-2 py-1 text-2xs font-mono border-t border-line hover:bg-white/[0.03]"
       >
         <span
-          className={`font-semibold ${isLong ? 'text-emerald-400' : 'text-red-400'}`}
+          className={`font-medium ${isLong ? 'text-profit-400' : 'text-loss-400'}`}
           title={isLong ? 'Long pozisyon' : 'Short pozisyon'}
         >
           {isLong ? 'L' : 'S'}
         </span>
 
-        <span className="text-zinc-400 truncate" title={`Giriş: ${formatDate(trade.entry_time)}`}>
-          <span className="text-zinc-600">{formatDate(trade.entry_time)}</span>{' '}
-          <span className="text-zinc-200">{formatPrice(trade.entry_price)}</span>
+        <span className="text-content-muted truncate" title={`Giriş: ${formatDate(trade.entry_time)}`}>
+          <span className="text-content-faint">{formatDate(trade.entry_time)}</span>{' '}
+          <span className="text-content">{formatPrice(trade.entry_price)}</span>
         </span>
 
-        <span className="text-zinc-400 truncate" title={`Çıkış: ${formatDate(trade.exit_time)}`}>
+        <span className="text-content-muted truncate" title={`Çıkış: ${formatDate(trade.exit_time)}`}>
           {isOpenPosition ? (
-            <span className="text-amber-400/80">açık</span>
+            <span className="text-warn-400/80">açık</span>
           ) : (
             <>
-              <span className="text-zinc-600">{formatDate(trade.exit_time)}</span>{' '}
-              <span className="text-zinc-200">{formatPrice(trade.exit_price)}</span>
+              <span className="text-content-faint">{formatDate(trade.exit_time)}</span>{' '}
+              <span className="text-content">{formatPrice(trade.exit_price)}</span>
             </>
           )}
         </span>
 
         <span
-          className={`text-right font-semibold tabular-nums ${
-            isOpenPosition ? 'text-zinc-600' : (pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+          className={`text-right font-medium tabular-nums ${
+            isOpenPosition ? 'text-content-faint' : (pnl ?? 0) >= 0 ? 'text-profit-400' : 'text-loss-400'
           }`}
         >
           {isOpenPosition ? '—' : formatPercent(pnl)}
-          {trade.is_saved && <span className="ml-1 text-indigo-400" title="Kalıcı kaydedildi">•</span>}
+          {trade.is_saved && <span className="ml-1 text-accent-400" title="Kalıcı kaydedildi">•</span>}
         </span>
       </div>
     );
@@ -209,7 +209,7 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
     // (bkz. useDraggablePanel).
     <div
       ref={panelRef}
-      className="w-[420px] max-w-[90vw] bg-[#0a0b0e]/95 border border-white/[0.1] rounded-lg shadow-2xl backdrop-blur-md text-zinc-100 select-none overflow-hidden"
+      className="w-[420px] max-w-[90vw] bg-canvas border border-white/[0.1] rounded-lg shadow-2xl backdrop-blur-md text-content-strong select-none overflow-hidden"
     >
       {/* Başlık: tutamaçtan sürüklenir, gerisine tıklanınca açılır/kapanır. */}
       <div className="flex items-center gap-1.5 px-2 py-1">
@@ -218,7 +218,7 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
           title="Sürükleyerek taşı"
           className="flex items-center cursor-grab active:cursor-grabbing -ml-0.5 pr-0.5"
         >
-          <GripHorizontal className="w-3 h-3 text-zinc-600" />
+          <GripHorizontal className="w-3 h-3 text-content-faint" />
         </span>
 
         <button
@@ -228,22 +228,22 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
           className="flex-1 flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer"
         >
           {isOpen ? (
-            <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+            <ChevronDown className="w-3.5 h-3.5 text-content-faint" />
           ) : (
-            <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
+            <ChevronRight className="w-3.5 h-3.5 text-content-faint" />
           )}
-          <History className="w-3 h-3 text-indigo-400" />
-          <span className="font-mono text-[9px] tracking-[0.15em] text-indigo-400 font-semibold uppercase">
+          <History className="w-3 h-3 text-accent-400" />
+          <span className="font-mono text-2xs tracking-[0.15em] text-accent-400 font-medium">
             Geçmiş
           </span>
-          <span className="text-[10px] font-mono text-zinc-500">({trades.length})</span>
-          {loading && <Loader2 className="w-3 h-3 animate-spin text-zinc-600" />}
+          <span className="text-2xs font-mono text-content-faint">({trades.length})</span>
+          {loading && <Loader2 className="w-3 h-3 animate-spin text-content-faint" />}
 
           {/* Toplam durum — panel kapalıyken de görünür. */}
           {totalPercent !== null && (
             <span
-              className={`ml-auto text-[10px] font-mono font-semibold tabular-nums ${
-                totalPercent >= 0 ? 'text-emerald-400' : 'text-red-400'
+              className={`ml-auto text-2xs font-mono font-medium tabular-nums ${
+                totalPercent >= 0 ? 'text-profit-400' : 'text-loss-400'
               }`}
               title="Pozisyon büyüklüğüne göre ağırlıklı toplam kâr/zarar"
             >
@@ -251,7 +251,7 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
             </span>
           )}
           <span
-            className={`${totalPercent !== null ? '' : 'ml-auto'} text-[9px] font-mono text-zinc-600 uppercase`}
+            className={`${totalPercent !== null ? '' : 'ml-auto'} text-2xs font-mono text-content-faint`}
           >
             {symbol}
           </span>
@@ -266,7 +266,7 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
             (RULES.md "Yasaklar") — üstteki toplam getiri de aynı rapordan.
           */}
           {report && report.total_trades > 0 && (
-            <div className="grid grid-cols-3 gap-px bg-white/[0.06] border-t border-white/[0.06]">
+            <div className="grid grid-cols-3 gap-px bg-white/[0.06] border-t border-line">
               <SummaryCell
                 label="Bakiye"
                 value={report.ending_balance.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
@@ -298,12 +298,12 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
           )}
 
           {ordered.length === 0 ? (
-            <div className="px-2 py-3 text-[10px] text-zinc-500 text-center border-t border-white/[0.06]">
+            <div className="px-2 py-3 text-2xs text-content-faint text-center border-t border-line">
               Bu paritede henüz işlem yok.
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-x-2 px-2 py-1 text-[8px] uppercase tracking-wider text-zinc-600 border-t border-white/[0.06]">
+              <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-x-2 px-2 py-1 text-2xs text-content-faint border-t border-line">
                 <span>Yön</span>
                 <span>Giriş</span>
                 <span>Çıkış</span>
@@ -315,17 +315,17 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
                   1 birimlik %10 zarar birbirini götürmez. Ağırlıklandırmayı
                   sunucu yapar (bkz. weighted_return_pct). */}
               <div className="flex items-center gap-2 px-2 py-1 border-t border-white/[0.1] bg-white/[0.02]">
-                <span className="text-[9px] uppercase tracking-wider text-zinc-500">Toplam</span>
-                <span className="text-[9px] text-zinc-600">
+                <span className="text-2xs text-content-faint">Toplam</span>
+                <span className="text-2xs text-content-faint">
                   {closedCount} kapalı işlem, büyüklüğe göre ağırlıklı
                 </span>
                 <span
-                  className={`ml-auto text-[11px] font-mono font-bold tabular-nums ${
+                  className={`ml-auto text-2xs font-mono font-medium tabular-nums ${
                     totalPercent === null
-                      ? 'text-zinc-600'
+                      ? 'text-content-faint'
                       : totalPercent >= 0
-                        ? 'text-emerald-400'
-                        : 'text-red-400'
+                        ? 'text-accent-400'
+                        : 'text-loss-400'
                   }`}
                 >
                   {totalPercent === null ? '—' : formatPercent(totalPercent)}
@@ -335,14 +335,14 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
           )}
 
           {error && (
-            <div className="flex items-start gap-1 px-2 py-1 text-[9px] text-red-400 bg-red-500/10 border-t border-red-500/30">
+            <div className="flex items-start gap-1 px-2 py-1 text-2xs text-loss-400 bg-loss-500/10 border-t border-loss-500/30">
               <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-px" />
               <span>{error}</span>
             </div>
           )}
 
-          <div className="flex items-center gap-2 px-2 py-1.5 border-t border-white/[0.06]">
-            <span className="text-[9px] text-zinc-600 leading-tight">
+          <div className="flex items-center gap-2 px-2 py-1.5 border-t border-line">
+            <span className="text-2xs text-content-faint leading-tight">
               Kaydedilen işlemler bu paritedeki sonraki replaylerde de görünür.
             </span>
             <button
@@ -354,7 +354,7 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
                   ? 'Kaydedilecek yeni işlem yok'
                   : `${unsavedCount} işlemi kalıcı olarak kaydet`
               }
-              className="ml-auto flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex-shrink-0"
+              className="ml-auto flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded bg-accent-500/15 text-accent-300 border border-accent-500/40 hover:bg-accent-300/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer flex-shrink-0"
             >
               {busy ? (
                 <Loader2 className="w-3 h-3 animate-spin" />

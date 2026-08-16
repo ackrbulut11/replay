@@ -1,5 +1,5 @@
-import { SlidersHorizontal, Settings2 } from 'lucide-react';
-import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
+import { Settings2 } from 'lucide-react';
+import { useChartSettingsStore, type IndicatorSettingsMap } from '../store/chartSettingsStore';
 
 export interface IndicatorsState {
   ema20: boolean;
@@ -27,63 +27,84 @@ interface IndicatorToolbarProps {
   onOpenSettings?: (key: keyof IndicatorSettingsMap) => void;
 }
 
+const INDICATORS: { key: keyof IndicatorsState; label: string }[] = [
+  { key: 'ema20', label: 'EMA 20' },
+  { key: 'ema50', label: 'EMA 50' },
+  { key: 'ema100', label: 'EMA 100' },
+  { key: 'ema200', label: 'EMA 200' },
+  { key: 'rsi', label: 'RSI' },
+  { key: 'macd', label: 'MACD' },
+  { key: 'bb', label: 'Bollinger' },
+];
+
 export default function IndicatorToolbar({ state, onToggle, onOpenSettings }: IndicatorToolbarProps) {
-  const indicatorsList: { key: keyof IndicatorsState; label: string; badgeColor: string }[] = [
-    { key: 'ema20', label: 'EMA 20', badgeColor: 'border-amber-500/60 text-amber-400 bg-amber-500/10' },
-    { key: 'ema50', label: 'EMA 50', badgeColor: 'border-cyan-500/60 text-cyan-400 bg-cyan-500/10' },
-    { key: 'ema100', label: 'EMA 100', badgeColor: 'border-purple-500/60 text-purple-400 bg-purple-500/10' },
-    { key: 'ema200', label: 'EMA 200', badgeColor: 'border-pink-500/60 text-pink-400 bg-pink-500/10' },
-    { key: 'rsi', label: 'RSI', badgeColor: 'border-slate-300/60 text-slate-200 bg-slate-500/10' },
-    { key: 'macd', label: 'MACD', badgeColor: 'border-emerald-500/60 text-emerald-400 bg-emerald-500/10' },
-    { key: 'bb', label: 'Bollinger', badgeColor: 'border-yellow-500/60 text-yellow-400 bg-yellow-500/10' },
-  ];
+  const [settings] = useChartSettingsStore();
+
+  /**
+   * Rozetin rengi grafikteki ÇİZGİNİN rengidir.
+   *
+   * Önceden her rozetin rengi burada Tailwind sınıfı olarak sabitti; kullanıcı
+   * ayarlardan EMA 50'yi mora çevirince grafikte mor çizgi, araç çubuğunda
+   * hâlâ camgöbeği rozet görünüyordu. Rozet artık ayarlardaki renkten
+   * türüyor, yani her zaman doğru çizgiyi işaret ediyor.
+   *
+   * Bu renkler kasten token sisteminin dışında: kategorik bir veri paleti,
+   * arayüz vurgusu değil. Kullanıcının seçtiği renk neyse o.
+   */
+  const seriesColor = (key: keyof IndicatorsState): string | null => {
+    const s = settings.indicators as unknown as Record<string, { color?: string } | undefined>;
+    return s?.[key]?.color ?? null;
+  };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 bg-[#0a0b0e] border border-white/[0.08] rounded-xl p-2 backdrop-blur-md shadow-2xl">
-      <div className="flex items-center gap-1.5 px-2 text-zinc-400 border-r border-white/[0.06] pr-3">
-        <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
-        <span className="font-mono text-[10px] tracking-[0.18em] text-zinc-400 uppercase font-semibold">Göstergeler</span>
-      </div>
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-line bg-surface-overlay/95 p-1.5 shadow-md backdrop-blur-md">
+      {INDICATORS.map(({ key, label }) => {
+        const isActive = state[key];
+        const color = seriesColor(key);
 
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {indicatorsList.map(({ key, label, badgeColor }) => {
-          const isActive = state[key];
-          return (
-            <div
-              key={key}
-              className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all duration-150 flex items-center gap-1.5 select-none ${
-                isActive
-                  ? `${badgeColor} shadow-xs font-semibold`
-                  : 'bg-white/[0.02] border-white/[0.06] text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04]'
-              }`}
+        return (
+          <div
+            key={key}
+            className={`flex select-none items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ease-out ${
+              isActive
+                ? 'border-line-strong bg-surface-hover text-content-strong'
+                : 'border-transparent text-content-muted hover:bg-surface-hover hover:text-content'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => onToggle(key)}
+              aria-pressed={isActive}
+              className="flex items-center gap-1.5"
             >
+              {/* Nokta değil kısa bir çizgi: grafikte çizilen şey bir çizgi.
+                  Nabız animasyonu kaldırıldı — açık bir gösterge "bekleyen"
+                  bir durum değil, animasyon hiçbir şey anlatmıyordu. */}
+              <span
+                aria-hidden
+                className={`h-0.5 w-3 rounded-full ${isActive ? '' : 'bg-ink-600'}`}
+                style={isActive && color ? { backgroundColor: color } : undefined}
+              />
+              <span>{label}</span>
+            </button>
+
+            {isActive && onOpenSettings && (
               <button
                 type="button"
-                onClick={() => onToggle(key)}
-                className="flex items-center gap-1.5 cursor-pointer"
+                aria-label={`${label} ayarları`}
+                title={`${label} ayarları`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenSettings(key as keyof IndicatorSettingsMap);
+                }}
+                className="rounded p-0.5 text-content-faint transition-colors ease-out hover:bg-surface-hover hover:text-content"
               >
-                <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-current animate-pulse' : 'bg-zinc-600'}`} />
-                <span>{label}</span>
+                <Settings2 className="h-3 w-3" strokeWidth={1.75} />
               </button>
-
-              {isActive && onOpenSettings && (
-                <button
-                  type="button"
-                  title={`${label} Ayarları`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenSettings(key as keyof IndicatorSettingsMap);
-                  }}
-                  className="p-0.5 rounded hover:bg-white/[0.1] text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer ml-0.5"
-                >
-                  <Settings2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
-

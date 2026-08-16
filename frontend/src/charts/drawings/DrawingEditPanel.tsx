@@ -29,45 +29,45 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
   };
 
   return (
-    <div className="flex items-center gap-3 bg-[#0d1321]/95 border border-slate-700 rounded-lg px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
-      <span className="text-slate-400 font-medium whitespace-nowrap">{title}</span>
+    <div className="flex items-center gap-3 bg-surface-raised border border-line-strong rounded-lg px-3 py-1.5 text-xs shadow-lg backdrop-blur-md">
+      <span className="text-content-muted font-medium whitespace-nowrap">{title}</span>
 
       {tool === 'longPosition' || tool === 'shortPosition' ? (
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+          <span className="text-2xs font-medium px-2 py-0.5 rounded bg-accent-500/20 text-accent-400 border border-accent-500/30">
             Kar Hedefi: Yeşil
           </span>
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+          <span className="text-2xs font-medium px-2 py-0.5 rounded bg-loss-500/20 text-loss-400 border border-loss-500/30">
             Stop Loss: Kırmızı
           </span>
         </div>
       ) : isRuler ? (
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+          <span className="text-2xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
             Kar: Mavi
           </span>
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-red-950/40 text-red-400 border border-red-700/40">
+          <span className="text-2xs font-medium px-2 py-0.5 rounded bg-loss-950/40 text-loss-400 border border-loss-700/40">
             Zarar: Koyu Kırmızı (Şeffaf)
           </span>
         </div>
       ) : (
         <>
-          <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-content cursor-pointer">
             <span>Renk</span>
             <input
               type="color"
               value={options.color}
               onChange={(e) => onChange({ ...options, color: e.target.value })}
-              className="w-6 h-6 rounded cursor-pointer border border-slate-600 bg-transparent"
+              className="w-6 h-6 rounded cursor-pointer border border-line-strong bg-transparent"
             />
           </label>
 
-          <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-content cursor-pointer">
             <span>Kalınlık</span>
             <select
               value={options.lineWidth}
               onChange={(e) => onChange({ ...options, lineWidth: Number(e.target.value) })}
-              className="bg-[#070b13] border border-slate-700 rounded px-1.5 py-1 text-slate-100 cursor-pointer"
+              className="bg-canvas border border-line-strong rounded px-1.5 py-1 text-content-strong cursor-pointer"
             >
               {widthOptions.map((w) => (
                 <option key={w} value={w}>{w}px</option>
@@ -75,7 +75,7 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
             </select>
           </label>
 
-          <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-content cursor-pointer">
             <span>Opaklık</span>
             <input
               type="range"
@@ -84,18 +84,18 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
               step={0.1}
               value={options.opacity}
               onChange={(e) => onChange({ ...options, opacity: Number(e.target.value) })}
-              className="w-16 accent-indigo-500 cursor-pointer"
+              className="w-16 accent-accent-500 cursor-pointer"
             />
-            <span className="text-slate-400 w-6 font-mono">{Math.round(options.opacity * 100)}%</span>
+            <span className="text-content-muted w-6 font-mono">{Math.round(options.opacity * 100)}%</span>
           </label>
 
           {supportsLineStyle && (
-            <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-content cursor-pointer">
               <span>Çizgi</span>
               <select
                 value={options.lineStyle ?? 'solid'}
                 onChange={(e) => handleLineStyleChange(e.target.value as DrawingEditOptions['lineStyle'])}
-                className="bg-[#070b13] border border-slate-700 rounded px-1.5 py-1 text-slate-100 cursor-pointer"
+                className="bg-canvas border border-line-strong rounded px-1.5 py-1 text-content-strong cursor-pointer"
               >
                 {LINE_STYLES.map((s) => (
                   <option key={s.value} value={s.value}>{s.label}</option>
@@ -105,7 +105,7 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
           )}
 
           {isRectangle && (
-            <label className="flex items-center gap-1.5 text-slate-300 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-content cursor-pointer">
               <span>Dolgu</span>
               <input
                 type="range"
@@ -114,9 +114,9 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
                 step={0.05}
                 value={options.fillOpacity ?? 0.16}
                 onChange={(e) => onChange({ ...options, fillOpacity: Number(e.target.value) })}
-                className="w-16 accent-emerald-500 cursor-pointer"
+                className="w-16 accent-accent-500 cursor-pointer"
               />
-              <span className="text-slate-400 w-6 font-mono">{Math.round((options.fillOpacity ?? 0.16) * 100)}%</span>
+              <span className="text-content-muted w-6 font-mono">{Math.round((options.fillOpacity ?? 0.16) * 100)}%</span>
             </label>
           )}
         </>
@@ -126,7 +126,7 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
         <button
           onClick={onDelete}
           title="Delete drawing"
-          className="p-1.5 rounded-md text-red-400 hover:text-red-300 hover:bg-red-950/40 transition-colors"
+          className="p-1.5 rounded-md text-loss-400 hover:text-loss-300 hover:bg-loss-950/40 transition-colors"
         >
           <Trash2 className="w-4 h-4" />
         </button>

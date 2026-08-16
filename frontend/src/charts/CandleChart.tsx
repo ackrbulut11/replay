@@ -2510,19 +2510,17 @@ export default function CandleChart({
 
   
   return (
-    <div className="relative w-full h-full border border-white/[0.06] rounded-xl overflow-hidden bg-[#090d16]">
+    <div className="relative w-full h-full border border-line rounded-xl overflow-hidden bg-canvas">
       {/* Yüzen Kontrol Paneli Araç Çubuğu */}
-      <div className="absolute top-2 left-2 right-2 h-12 z-30 flex items-center justify-between bg-[#0a0b0e]/95 border border-white/[0.08] rounded-xl px-3.5 shadow-2xl backdrop-blur-md text-zinc-100">
+      <div className="absolute top-2 left-2 right-2 h-12 z-30 flex items-center justify-between bg-canvas border border-line rounded-xl px-3.5 shadow-2xl backdrop-blur-md text-content-strong">
         {/* Sol Taraf: Logo & Sembol & Sağlayıcı & Zaman Dilimi */}
         <div className="flex items-center gap-3">
           {/* Logo / Başlık */}
-          <div className="flex items-center gap-1.5 border-r border-white/[0.06] pr-3 h-5">
-            <span
-              className="text-xs font-extrabold tracking-[0.14em] font-sans select-none bg-clip-text text-transparent"
-              style={{
-                backgroundImage: 'linear-gradient(90deg, rgba(42, 123, 155, 1) 0%, rgba(87, 199, 133, 1) 35%, rgba(151, 79, 196, 1) 88%)',
-              }}
-            >
+          <div className="flex items-center gap-1.5 border-r border-line pr-3 h-5">
+            {/* Landing'deki ikizi gibi bu wordmark de gradient metindi.
+                Grafik araç çubuğunda, mumların hemen üstünde duran mavi-yeşil-mor
+                bir geçiş, grafiğin kendi renkleriyle yarışıyordu. */}
+            <span className="select-none font-sans text-xs font-medium tracking-[0.16em] text-content-strong">
               REPLAY
             </span>
           </div>
@@ -2531,13 +2529,13 @@ export default function CandleChart({
           <div className="flex items-center gap-1">
             <button
               onClick={onOpenSearchModal || (() => setIsSearchModalOpen(true))}
-              className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.08] hover:border-emerald-500/40 rounded-lg px-2.5 py-1 transition-all group"
+              className="flex items-center gap-2 bg-white/[0.03] border border-line hover:border-accent-500/40 rounded-lg px-2.5 py-1 transition-all group"
               title="Sembol Ara (BIST 100, NASDAQ, Crypto)"
             >
-              <Search className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <Search className="w-3.5 h-3.5 text-accent-400 group-hover:scale-110 transition-transform" />
               <div className="flex items-center gap-1">
-                <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Symbol:</span>
-                <span className="text-xs font-semibold text-zinc-100 font-mono tracking-tight group-hover:text-emerald-400">
+                <span className="font-mono text-2xs text-content-faint font-medium select-none">Symbol:</span>
+                <span className="text-xs font-medium text-content-strong font-mono tracking-tight group-hover:text-accent-400">
                   {/*
                     Kör modda sembol adı gizlenir: "bu BTC, 2021'de yükseldi"
                     bilgisi manuel backtest kararını önyargılı kılar. İşlem yine
@@ -2553,31 +2551,31 @@ export default function CandleChart({
               onClick={() => watchlistStore.toggleSymbol(symbol, provider)}
               className={`p-1.5 rounded-lg border transition-all ${
                 isBookmarked
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30 shadow-xs'
-                  : 'bg-white/[0.03] border-white/[0.08] text-zinc-500 hover:text-amber-400 hover:bg-white/[0.06]'
+                  ? 'bg-warn-500/15 text-warn-300 border-warn-500/30 shadow-xs'
+                  : 'bg-white/[0.03] border-line text-content-faint hover:text-warn-400 hover:bg-white/[0.06]'
               }`}
               title={isBookmarked ? 'İzleme Listesinden Çıkar' : 'İzleme Listesine Ekle'}
             >
-              <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-amber-400' : ''}`} />
+              <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-warn-400' : ''}`} />
             </button>
           </div>
 
           {/* Zaman Dilimi Seçimi */}
-          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1">
-            <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Interval</span>
+          <div className="flex items-center gap-1 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1">
+            <span className="font-mono text-2xs text-content-faint font-medium select-none">Interval</span>
             <select
               value={timeframe}
               onChange={(e) => handleTimeframeChange(e.target.value)}
-              className="bg-transparent border-none outline-none text-xs font-medium text-zinc-200 cursor-pointer focus:ring-0"
+              className="bg-transparent border-none outline-none text-xs font-medium text-content cursor-pointer focus:ring-0"
             >
-              <option value="1m" className="bg-[#0a0b0e] text-zinc-100">1m</option>
-              <option value="5m" className="bg-[#0a0b0e] text-zinc-100">5m</option>
-              <option value="15m" className="bg-[#0a0b0e] text-zinc-100">15m</option>
-              <option value="1h" className="bg-[#0a0b0e] text-zinc-100">1h</option>
-              <option value="4h" className="bg-[#0a0b0e] text-zinc-100">4h</option>
-              <option value="1d" className="bg-[#0a0b0e] text-zinc-100">1d</option>
-              <option value="1w" className="bg-[#0a0b0e] text-zinc-100">1w</option>
-              <option value="1mo" className="bg-[#0a0b0e] text-zinc-100">1mo</option>
+              <option value="1m" className="bg-canvas text-content-strong">1m</option>
+              <option value="5m" className="bg-canvas text-content-strong">5m</option>
+              <option value="15m" className="bg-canvas text-content-strong">15m</option>
+              <option value="1h" className="bg-canvas text-content-strong">1h</option>
+              <option value="4h" className="bg-canvas text-content-strong">4h</option>
+              <option value="1d" className="bg-canvas text-content-strong">1d</option>
+              <option value="1w" className="bg-canvas text-content-strong">1w</option>
+              <option value="1mo" className="bg-canvas text-content-strong">1mo</option>
             </select>
           </div>
 
@@ -2587,7 +2585,7 @@ export default function CandleChart({
               Kaba bölüm dizinin başındadır, ilk muma bakmak yeter. */}
           {data.length > 0 && data[0].tf && data[0].tf !== timeframe && (
             <div
-              className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1 text-[10px] font-medium text-amber-300 select-none"
+              className="flex items-center gap-1 bg-warn-500/10 border border-warn-500/30 rounded-lg px-2.5 py-1 text-2xs font-medium text-warn-300 select-none"
               title={`${timeframe} verisi replay konumuna kadar geriye uzanmıyor: geçmiş bölüm ${data[0].tf} mumlarıyla gösteriliyor, ${timeframe} verisinin başladığı tarihten sonrası ${timeframe}.`}
             >
               <AlertCircle className="w-3 h-3" />
@@ -2596,15 +2594,15 @@ export default function CandleChart({
           )}
 
           {/* Grafik Tipi Seçimi (Mum / Çizgi) */}
-          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1">
-            <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Grafik</span>
+          <div className="flex items-center gap-1 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1">
+            <span className="font-mono text-2xs text-content-faint font-medium select-none">Grafik</span>
             <select
               value={chartType}
               onChange={(e) => setChartType(e.target.value as 'candlestick' | 'line')}
-              className="bg-transparent border-none outline-none text-xs font-medium text-zinc-200 cursor-pointer focus:ring-0"
+              className="bg-transparent border-none outline-none text-xs font-medium text-content cursor-pointer focus:ring-0"
             >
-              <option value="candlestick" className="bg-[#0a0b0e] text-zinc-100">Mum Grafiği</option>
-              <option value="line" className="bg-[#0a0b0e] text-zinc-100">Çizgi Grafiği</option>
+              <option value="candlestick" className="bg-canvas text-content-strong">Mum Grafiği</option>
+              <option value="line" className="bg-canvas text-content-strong">Çizgi Grafiği</option>
             </select>
           </div>
 
@@ -2613,26 +2611,26 @@ export default function CandleChart({
             onClick={handleToggleReplayMode}
             className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all select-none ${
               replayState.isReplayActive
-                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-xs'
-                : 'bg-white/[0.03] border-white/[0.08] text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-100'
+                ? 'bg-warn-500/15 text-warn-300 border-warn-500/40 shadow-xs'
+                : 'bg-white/[0.03] border-line text-content hover:bg-white/[0.06] hover:text-content-strong'
             }`}
             title="Replay Motorunu Aç/Kapat (Kısayol: X)"
           >
-            <RotateCcw className={`w-3.5 h-3.5 ${replayState.isReplayActive ? 'text-amber-400' : 'text-emerald-400'}`} />
+            <RotateCcw className={`w-3.5 h-3.5 ${replayState.isReplayActive ? 'text-warn-400' : 'text-accent-400'}`} />
             <span>Replay</span>
           </button>
 
           {/* Strateji Sinyalleri Temizleme Rozeti */}
           {evaluateResult && Array.isArray(evaluateResult.signals) && (
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-xs"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent-500/15 border border-accent-500/30 text-accent-400 shadow-xs"
               title={
                 shownSignalCount < evaluateResult.signals.length
                   ? `${evaluateResult.signals.length} sinyalden ${shownSignalCount} tanesi grafikte gösteriliyor — geri kalanı henüz yüklenmemiş geçmiş mumlara denk geliyor.`
                   : undefined
               }
             >
-              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <Zap className="w-3.5 h-3.5 text-accent-400" />
               <span>
                 Strateji ({evaluateResult.total_trades ?? 0} İşlem ·{' '}
                 {shownSignalCount < evaluateResult.signals.length
@@ -2642,7 +2640,7 @@ export default function CandleChart({
               </span>
               <button
                 onClick={() => strategyStore.clearEvaluateResult()}
-                className="ml-1 p-0.5 hover:bg-emerald-500/30 text-emerald-300 hover:text-white rounded transition-colors"
+                className="ml-1 p-0.5 hover:bg-accent-300/30 text-accent-300 hover:text-content-strong rounded transition-colors"
                 title="Strateji sinyallerini grafikten kaldır ve grafiği eski temiz haline getir"
               >
                 <X className="w-3.5 h-3.5" />
@@ -2659,17 +2657,17 @@ export default function CandleChart({
               onClick={() => setIsIndicatorsOpen(!isIndicatorsOpen)}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all ${
                 isIndicatorsOpen
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold'
-                  : 'bg-white/[0.03] border-white/[0.08] text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-100'
+                  ? 'bg-accent-500/15 text-accent-400 border-accent-500/30 font-medium'
+                  : 'bg-white/[0.03] border-line text-content hover:bg-white/[0.06] hover:text-content-strong'
               }`}
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+              <SlidersHorizontal className="w-3.5 h-3.5 text-accent-400" />
               Indicators
             </button>
 
             {isIndicatorsOpen && (
-              <div className="absolute right-0 top-9 mt-1 w-56 bg-[#0a0b0e] border border-white/[0.1] rounded-xl p-2.5 shadow-2xl z-50 backdrop-blur-md space-y-0.5 text-zinc-100">
-                <div className="font-mono text-[9px] text-zinc-500 font-semibold uppercase px-2 py-1 select-none">
+              <div className="absolute right-0 top-9 mt-1 w-56 bg-canvas border border-white/[0.1] rounded-xl p-2.5 shadow-2xl z-50 backdrop-blur-md space-y-0.5 text-content-strong">
+                <div className="font-mono text-2xs text-content-faint font-medium px-2 py-1 select-none">
                   Technical Indicators
                 </div>
                 <div className="w-full h-px bg-white/[0.06] my-1" />
@@ -2703,7 +2701,7 @@ export default function CandleChart({
                             className={`w-2 h-2 rounded-full shrink-0 ${indicators[indKey] ? 'animate-pulse' : ''}`}
                             style={{ backgroundColor: dotColors[indKey] }}
                           />
-                          <span className="text-xs text-zinc-200 font-medium">{labels[indKey]}</span>
+                          <span className="text-xs text-content font-medium">{labels[indKey]}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           {indicators[indKey] && (
@@ -2711,7 +2709,7 @@ export default function CandleChart({
                               type="button"
                               title={`${labels[indKey]} ayarları`}
                               onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingIndicator(indKey as keyof IndicatorSettingsMap); }}
-                              className="p-0.5 rounded transition-colors text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.08]"
+                              className="p-0.5 rounded transition-colors text-content-muted hover:text-content-strong hover:bg-white/[0.08]"
                             >
                               <Settings2 className="w-3.5 h-3.5" />
                             </button>
@@ -2720,7 +2718,7 @@ export default function CandleChart({
                             type="checkbox"
                             checked={indicators[indKey]}
                             onChange={() => onToggleIndicator(indKey)}
-                            className="w-3.5 h-3.5 accent-emerald-400 rounded border-white/[0.1] cursor-pointer bg-white/[0.03]"
+                            className="w-3.5 h-3.5 accent-accent-400 rounded border-white/[0.1] cursor-pointer bg-white/[0.03]"
                           />
                         </div>
                       </label>
@@ -2737,36 +2735,36 @@ export default function CandleChart({
               onClick={() => setIsDatesOpen(!isDatesOpen)}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border transition-all ${
                 isDatesOpen || start || end
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-semibold'
-                  : 'bg-white/[0.03] border-white/[0.08] text-zinc-300 hover:bg-white/[0.06] hover:text-zinc-100'
+                  ? 'bg-accent-500/15 text-accent-400 border-accent-500/30 font-medium'
+                  : 'bg-white/[0.03] border-line text-content hover:bg-white/[0.06] hover:text-content-strong'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <Calendar className="w-3.5 h-3.5 text-accent-400" />
               {start || end ? `${start || '...'} to ${end || '...'}` : 'Dates'}
             </button>
 
             {isDatesOpen && (
-              <div className="absolute right-0 top-9 mt-1 w-64 bg-[#0a0b0e] border border-white/[0.1] rounded-xl p-3 shadow-2xl z-50 backdrop-blur-md space-y-3 text-zinc-100">
-                <div className="font-mono text-[9px] text-zinc-500 font-semibold uppercase pb-1.5 border-b border-white/[0.06] select-none">
+              <div className="absolute right-0 top-9 mt-1 w-64 bg-canvas border border-white/[0.1] rounded-xl p-3 shadow-2xl z-50 backdrop-blur-md space-y-3 text-content-strong">
+                <div className="font-mono text-2xs text-content-faint font-medium pb-1.5 border-b border-line select-none">
                   Select Date Range
                 </div>
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-col gap-1">
-                    <span className="font-mono text-[9px] text-zinc-400 font-semibold uppercase select-none">Start Date</span>
+                    <span className="font-mono text-2xs text-content-muted font-medium select-none">Start Date</span>
                     <input
                       type="date"
                       value={start}
                       onChange={(e) => setStart(e.target.value)}
-                      className="bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/50 transition"
+                      className="bg-white/[0.03] border border-line rounded-lg px-2.5 py-1.5 text-xs text-content-strong focus:outline-none focus:border-accent-500/50 transition"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <span className="font-mono text-[9px] text-zinc-400 font-semibold uppercase select-none">End Date</span>
+                    <span className="font-mono text-2xs text-content-muted font-medium select-none">End Date</span>
                     <input
                       type="date"
                       value={end}
                       onChange={(e) => setEnd(e.target.value)}
-                      className="bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/50 transition"
+                      className="bg-white/[0.03] border border-line rounded-lg px-2.5 py-1.5 text-xs text-content-strong focus:outline-none focus:border-accent-500/50 transition"
                     />
                   </div>
                 </div>
@@ -2777,10 +2775,10 @@ export default function CandleChart({
           {/* Log Scale Toggle */}
           <button
             onClick={() => setLogScale(!logScale)}
-            className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
+            className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
               logScale
-                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
-                : 'bg-[#070b13]/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+                ? 'bg-accent-500/20 text-accent-400 border-accent-500/30'
+                : 'bg-canvas border-line text-content-muted hover:text-content hover:bg-surface-hover'
             }`}
           >
             LOG
@@ -2788,7 +2786,7 @@ export default function CandleChart({
 
           {/* Loading Spinner */}
           {loading && (
-            <div className="ml-1 text-indigo-400 animate-spin">
+            <div className="ml-1 text-accent-400 animate-spin">
               <Loader2 className="w-4 h-4" />
             </div>
           )}
@@ -2840,7 +2838,7 @@ export default function CandleChart({
                   type="button"
                   title={isLegendExpanded ? 'Göstergeleri Gizle' : 'Göstergeleri Göster'}
                   onClick={() => setIsLegendExpanded((v) => !v)}
-                  className="flex items-center justify-center w-5 h-5 rounded-md bg-[#0a0b0e]/90 border border-white/[0.08] text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/30 transition-colors shadow-md backdrop-blur-md cursor-pointer"
+                  className="flex items-center justify-center w-5 h-5 rounded-md bg-canvas border border-line text-content-muted hover:text-accent-400 hover:border-accent-500/30 transition-colors shadow-md backdrop-blur-md cursor-pointer"
                 >
                   <ChevronRight className={`w-3 h-3 transition-transform ${isLegendExpanded ? 'rotate-90' : ''}`} />
                 </button>
@@ -2856,7 +2854,7 @@ export default function CandleChart({
                   return (
                     <div
                       key={key}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100 transition-opacity ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-canvas border border-line text-2xs shadow-md backdrop-blur-md select-none text-content-strong transition-opacity ${
                         isHidden ? 'opacity-45' : ''
                       }`}
                     >
@@ -2864,11 +2862,11 @@ export default function CandleChart({
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: isHidden ? 'transparent' : color, border: `1px solid ${color}` }}
                       />
-                      <span className={`font-medium ${isHidden ? 'text-zinc-400 line-through decoration-zinc-500' : 'text-zinc-200'}`}>
+                      <span className={`font-medium ${isHidden ? 'text-content-muted line-through decoration-line-strong' : 'text-content'}`}>
                         {label}
                       </span>
                       {val !== undefined && val !== null && (
-                        <span className="font-mono text-zinc-400 text-[10px]">
+                        <span className="font-mono text-content-muted text-2xs">
                           {typeof val === 'number' ? formatPriceLabel(val) : formatPriceLabel(val.upper)}
                         </span>
                       )}
@@ -2877,7 +2875,7 @@ export default function CandleChart({
                         title={isHidden ? `${label} Göster` : `${label} Gizle`}
                         onClick={() => toggleIndicatorVisibility(key)}
                         className={`p-0.5 transition-colors cursor-pointer ${
-                          isHidden ? 'text-zinc-500 hover:text-zinc-200' : 'text-zinc-400 hover:text-emerald-400'
+                          isHidden ? 'text-content-faint hover:text-content' : 'text-content-muted hover:text-accent-400'
                         }`}
                       >
                         {isHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
@@ -2886,7 +2884,7 @@ export default function CandleChart({
                         type="button"
                         title={`${label} Ayarları`}
                         onClick={() => setEditingIndicator(key)}
-                        className="p-0.5 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                        className="p-0.5 text-content-muted hover:text-accent-400 transition-colors cursor-pointer"
                       >
                         <Settings2 className="w-3 h-3" />
                       </button>
@@ -2894,7 +2892,7 @@ export default function CandleChart({
                         type="button"
                         title="Kapat"
                         onClick={() => removeIndicator(key)}
-                        className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+                        className="p-0.5 text-content-faint hover:text-loss-400 transition-colors ml-0.5 cursor-pointer"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -2909,7 +2907,7 @@ export default function CandleChart({
                   return (
                     <div
                       key={item.id}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-[11px] shadow-md backdrop-blur-md select-none text-zinc-100 transition-opacity ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-canvas border border-line text-2xs shadow-md backdrop-blur-md select-none text-content-strong transition-opacity ${
                         item.visible ? '' : 'opacity-45'
                       }`}
                     >
@@ -2922,28 +2920,28 @@ export default function CandleChart({
                       />
                       <span
                         className={`font-medium font-mono ${
-                          item.visible ? 'text-zinc-200' : 'text-zinc-400 line-through decoration-zinc-500'
+                          item.visible ? 'text-content' : 'text-content-muted line-through decoration-line-strong'
                         }`}
                       >
                         {item.symbol}
                       </span>
                       {isLoading ? (
-                        <Loader2 className="w-3 h-3 text-zinc-400 animate-spin" />
+                        <Loader2 className="w-3 h-3 text-content-muted animate-spin" />
                       ) : pct !== undefined ? (
                         <span
-                          className={`font-mono text-[10px] ${pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                          className={`font-mono text-2xs ${pct >= 0 ? 'text-profit-400' : 'text-loss-400'}`}
                         >
                           {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                         </span>
                       ) : (
-                        <span className="font-mono text-[10px] text-zinc-500">veri yok</span>
+                        <span className="font-mono text-2xs text-content-faint">veri yok</span>
                       )}
                       <button
                         type="button"
                         title={item.visible ? `${item.symbol} Gizle` : `${item.symbol} Göster`}
                         onClick={() => compareStore.toggleVisible(item.id)}
                         className={`p-0.5 transition-colors cursor-pointer ${
-                          item.visible ? 'text-zinc-400 hover:text-emerald-400' : 'text-zinc-500 hover:text-zinc-200'
+                          item.visible ? 'text-content-muted hover:text-accent-400' : 'text-content-faint hover:text-content'
                         }`}
                       >
                         {item.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -2952,7 +2950,7 @@ export default function CandleChart({
                         type="button"
                         title={`${item.symbol} Ayarları`}
                         onClick={() => setEditingCompareId(item.id)}
-                        className="p-0.5 text-zinc-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                        className="p-0.5 text-content-muted hover:text-accent-400 transition-colors cursor-pointer"
                       >
                         <Settings2 className="w-3 h-3" />
                       </button>
@@ -2960,7 +2958,7 @@ export default function CandleChart({
                         type="button"
                         title="Kıyaslamadan Kaldır"
                         onClick={() => compareStore.remove(item.id)}
-                        className="p-0.5 text-zinc-500 hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
+                        className="p-0.5 text-content-faint hover:text-loss-400 transition-colors ml-0.5 cursor-pointer"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -2974,21 +2972,21 @@ export default function CandleChart({
 
       {/* Durum Gösterge Katmanları */}
       {loading && (
-        <div className="absolute inset-0 bg-[#0a0b0e]/85 backdrop-blur-xs z-20 flex flex-col items-center justify-center gap-3 text-zinc-100">
-          <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-          <span className="text-zinc-300 text-sm font-medium">Piyasa verileri yükleniyor...</span>
+        <div className="absolute inset-0 bg-canvas backdrop-blur-xs z-20 flex flex-col items-center justify-center gap-3 text-content-strong">
+          <Loader2 className="w-10 h-10 text-accent-400 animate-spin" />
+          <span className="text-content text-sm font-medium">Piyasa verileri yükleniyor...</span>
         </div>
       )}
 
       {error && !loading && (
-        <div className="absolute inset-0 bg-[#0a0b0e]/95 z-20 flex items-center justify-center p-4 text-zinc-100">
+        <div className="absolute inset-0 bg-canvas z-20 flex items-center justify-center p-4 text-content-strong">
           <div className="flex flex-col items-center text-center max-w-md p-6 space-y-3">
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-full text-red-400">
+            <div className="p-3 bg-loss-500/10 border border-loss-500/20 rounded-full text-loss-400">
               <AlertCircle className="w-8 h-8" />
             </div>
-            <h3 className="text-lg font-bold text-red-300">Veri Yüklenemedi</h3>
-            <p className="text-zinc-300 text-sm leading-relaxed">{error}</p>
-            <p className="text-zinc-500 text-xs">
+            <h3 className="text-lg font-medium text-loss-300">Veri Yüklenemedi</h3>
+            <p className="text-content text-sm leading-relaxed">{error}</p>
+            <p className="text-content-faint text-xs">
               Lütfen İnternet bağlantınızı kontrol edin veya yukarıdaki sembol aramasından başka bir parite seçin.
             </p>
           </div>
@@ -2996,13 +2994,13 @@ export default function CandleChart({
       )}
 
       {!error && data.length === 0 && !loading && (
-        <div className="absolute inset-0 bg-[#0a0b0e] z-20 flex items-center justify-center p-4 text-zinc-100">
+        <div className="absolute inset-0 bg-canvas z-20 flex items-center justify-center p-4 text-content-strong">
           <div className="flex flex-col items-center text-center max-w-sm p-6 space-y-3">
-            <div className="p-3 bg-white/[0.03] border border-white/[0.08] rounded-full text-zinc-400">
-              <BarChart3 className="w-8 h-8 text-emerald-400" />
+            <div className="p-3 bg-white/[0.03] border border-line rounded-full text-content-muted">
+              <BarChart3 className="w-8 h-8 text-accent-400" />
             </div>
-            <h3 className="text-lg font-semibold text-zinc-100">Grafik Yüklenmeye Hazır</h3>
-            <p className="text-zinc-400 text-sm leading-relaxed">
+            <h3 className="text-lg font-medium text-content-strong">Grafik Yüklenmeye Hazır</h3>
+            <p className="text-content-muted text-sm leading-relaxed">
               Yukarıdaki kontrol panelinden sembol (örn: BTCUSDT, THYAO, AAPL) veya zaman dilimi seçin.
             </p>
           </div>
@@ -3042,9 +3040,12 @@ export default function CandleChart({
 
       {/* Mum Seçim İpucu Banner */}
       {replayState.isReplayActive && replayState.isSelectingCutoff && (
-        <div className="absolute top-28 left-1/2 -translate-x-1/2 z-30 bg-amber-500/90 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-full shadow-lg border border-amber-300/50 backdrop-blur-md animate-bounce flex items-center gap-2 select-none pointer-events-none">
-          <Scissors className="w-4 h-4" />
-          <span>Grafikte kestirmek istediğiniz muma tıklayın!</span>
+        /* Zıplama animasyonu kaldırıldı: talimat şeridi zaten ekranın
+           ortasında ve tek başına duruyor, hareket okumayı kolaylaştırmıyordu
+           — bir kez belirmesi yeterli. */
+        <div className="pointer-events-none absolute left-1/2 top-28 z-30 flex -translate-x-1/2 animate-scaleUp select-none items-center gap-2 rounded-md border border-warn-500/40 bg-surface-overlay px-3.5 py-2 text-xs text-warn-300 shadow-lg">
+          <Scissors className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <span>Kesmek istediğiniz muma grafikte tıklayın</span>
         </div>
       )}
 
@@ -3052,14 +3053,14 @@ export default function CandleChart({
           (ör. replay konumu bu zaman diliminde yok, en eski muma taşındı).
           Grafiği kapatmaz; kullanıcı kapatabilir, sonraki yüklemede sıfırlanır. */}
       {notice && !loading && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 max-w-xl flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
-          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <span className="text-amber-100/90 text-xs leading-relaxed">{notice}</span>
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 max-w-xl flex items-start gap-2.5 bg-warn-500/10 border border-warn-500/30 rounded-lg px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
+          <AlertCircle className="w-4 h-4 text-warn-400 shrink-0 mt-0.5" />
+          <span className="text-warn-100/90 text-xs leading-relaxed">{notice}</span>
           <button
             type="button"
             title="Kapat"
             onClick={onDismissNotice}
-            className="p-0.5 text-amber-200/60 hover:text-amber-100 transition-colors shrink-0 cursor-pointer"
+            className="p-0.5 text-warn-200/60 hover:text-warn-100 transition-colors shrink-0 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -3074,7 +3075,7 @@ export default function CandleChart({
           <div
             key={item.id}
             style={{ top: `${item.y - 14}px` }}
-            className={`absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1 rounded-md bg-[#131722]/95 border border-slate-300 text-slate-100 text-xs font-mono font-medium shadow-2xl backdrop-blur-md transition-all duration-150 select-none group ${
+            className={`absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3 py-1 rounded-md bg-[#131722]/95 border border-line-strong text-content-strong text-xs font-mono font-medium shadow-2xl backdrop-blur-md transition-all duration-150 select-none group ${
               isNearLine ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none hover:opacity-100 hover:pointer-events-auto'
             }`}
           >
@@ -3087,7 +3088,7 @@ export default function CandleChart({
                 e.preventDefault();
                 alertStore.deleteAlert(item.id);
               }}
-              className="p-0.5 text-slate-300 hover:text-red-400 active:scale-90 transition-colors cursor-pointer shrink-0 ml-0.5"
+              className="p-0.5 text-content hover:text-loss-400 active:scale-90 transition-colors cursor-pointer shrink-0 ml-0.5"
               title="Alarmı Sil"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -3100,7 +3101,7 @@ export default function CandleChart({
       {(isHoveringPlusButton || plusMenu !== null) && currentCrosshairYRef.current !== null && (
         <div
           style={{ top: `${currentCrosshairYRef.current}px` }}
-          className="absolute left-0 right-[56px] border-b border-dashed border-slate-400/80 z-20 pointer-events-none"
+          className="absolute left-0 right-[56px] border-b border-dashed border-line-strong/80 z-20 pointer-events-none"
         />
       )}
 
@@ -3123,7 +3124,7 @@ export default function CandleChart({
           }
         }}
         style={{ display: 'none' }}
-        className="absolute right-[76px] z-30 w-6 h-6 rounded-full bg-[#1e222d] border border-slate-500 hover:border-amber-400 hover:bg-slate-800 text-slate-200 hover:text-amber-400 flex items-center justify-center shadow-xl cursor-pointer group"
+        className="absolute right-[76px] z-30 w-6 h-6 rounded-full bg-[#1e222d] border border-line-strong hover:border-warn-400 hover:bg-surface-hover text-content hover:text-warn-400 flex items-center justify-center shadow-xl cursor-pointer group"
         title="Alarm veya Seçenek Ekle (+)"
       >
         <Plus className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
@@ -3168,7 +3169,7 @@ export default function CandleChart({
                 console.error('Fast alert create error:', e);
               }
             }}
-            className="w-full px-3 py-2 flex items-center justify-between text-slate-200 hover:bg-[#2a2e39] hover:text-white transition group cursor-pointer"
+            className="w-full px-3 py-2 flex items-center justify-between text-content hover:bg-[#2a2e39] hover:text-content-strong transition group cursor-pointer"
           >
             <div className="flex items-center gap-2.5 truncate pr-2">
               <Bell className="w-4 h-4 text-[#f59e0b] shrink-0" />
@@ -3176,7 +3177,7 @@ export default function CandleChart({
                 {formatPriceLabel(plusMenu.price)} üzerinden {symbol} için alarm ekle
               </span>
             </div>
-            <span className="text-[10px] text-slate-400 font-mono shrink-0 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700">
+            <span className="text-2xs text-content-muted font-mono shrink-0 bg-surface-hover px-1.5 py-0.5 rounded border border-line-strong">
               Alt + A
             </span>
           </button>
@@ -3189,13 +3190,13 @@ export default function CandleChart({
       {(indicators.rsi || indicators.macd) && (
         <div className="absolute bottom-3 left-3 z-20 flex flex-wrap gap-2 pointer-events-auto">
           {indicators.rsi && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-xs shadow-md backdrop-blur-md select-none text-zinc-100">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-canvas border border-line text-xs shadow-md backdrop-blur-md select-none text-content-strong">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: indicatorSettings.rsi.color }} />
-              <span className="font-medium text-zinc-200">
+              <span className="font-medium text-content">
                 RSI ({indicatorSettings.rsi.period}, {indicatorSettings.rsi.overbought}, {indicatorSettings.rsi.oversold})
               </span>
               {latestIndicatorValues.rsi !== undefined && latestIndicatorValues.rsi !== null && (
-                <span className="font-mono font-bold text-emerald-400 ml-1">
+                <span className="font-mono font-medium text-accent-400 ml-1">
                   {latestIndicatorValues.rsi.toFixed(2)}
                 </span>
               )}
@@ -3203,7 +3204,7 @@ export default function CandleChart({
                 type="button"
                 title="RSI Ayarlarını Aç"
                 onClick={() => setEditingIndicator('rsi')}
-                className="p-1 rounded hover:bg-white/[0.08] text-zinc-400 hover:text-emerald-400 transition-colors ml-1 cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-content-muted hover:text-accent-400 transition-colors ml-1 cursor-pointer"
               >
                 <Settings2 className="w-3.5 h-3.5" />
               </button>
@@ -3211,7 +3212,7 @@ export default function CandleChart({
                 type="button"
                 title="RSI Kapat"
                 onClick={() => onToggleIndicator('rsi')}
-                className="p-1 rounded hover:bg-white/[0.08] text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-content-faint hover:text-loss-400 transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -3219,22 +3220,22 @@ export default function CandleChart({
           )}
 
           {indicators.macd && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0b0e]/90 border border-white/[0.08] text-xs shadow-md backdrop-blur-md select-none text-zinc-100">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-canvas border border-line text-xs shadow-md backdrop-blur-md select-none text-content-strong">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: indicatorSettings.macd.macdColor }} />
-              <span className="font-medium text-zinc-200">
+              <span className="font-medium text-content">
                 MACD ({indicatorSettings.macd.fastPeriod}, {indicatorSettings.macd.slowPeriod}, {indicatorSettings.macd.signalPeriod})
               </span>
               {latestIndicatorValues.macd && (
-                <span className="font-mono text-[11px] text-zinc-300 ml-1 flex items-center gap-1">
-                  <span className="text-emerald-400">{latestIndicatorValues.macd.macd.toFixed(2)}</span>
-                  <span className="text-amber-400">{latestIndicatorValues.macd.signal.toFixed(2)}</span>
+                <span className="font-mono text-2xs text-content ml-1 flex items-center gap-1">
+                  <span className="text-accent-400">{latestIndicatorValues.macd.macd.toFixed(2)}</span>
+                  <span className="text-warn-400">{latestIndicatorValues.macd.signal.toFixed(2)}</span>
                 </span>
               )}
               <button
                 type="button"
                 title="MACD Ayarlarını Aç"
                 onClick={() => setEditingIndicator('macd')}
-                className="p-1 rounded hover:bg-white/[0.08] text-zinc-400 hover:text-emerald-400 transition-colors ml-1 cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-content-muted hover:text-accent-400 transition-colors ml-1 cursor-pointer"
               >
                 <Settings2 className="w-3.5 h-3.5" />
               </button>
@@ -3242,7 +3243,7 @@ export default function CandleChart({
                 type="button"
                 title="MACD Kapat"
                 onClick={() => onToggleIndicator('macd')}
-                className="p-1 rounded hover:bg-white/[0.08] text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                className="p-1 rounded hover:bg-white/[0.08] text-content-faint hover:text-loss-400 transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

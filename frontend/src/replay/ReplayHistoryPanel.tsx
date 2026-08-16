@@ -30,7 +30,7 @@ import { journalStore, useJournalStore } from '../store/journalStore';
 import { useReplayStore } from '../store/replayStore';
 import { useDraggablePanel } from '../hooks/useDraggablePanel';
 import { logError, logEvent } from '../services/eventLog';
-import type { JournalTrade } from '../types/journal';
+import type { JournalTrade, PerformanceReport } from '../types/journal';
 
 interface ReplayHistoryPanelProps {
   symbol: string;
@@ -61,6 +61,32 @@ function formatPercent(value?: number | null): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
+
+/**
+ * Oturum özetindeki tek hücre.
+ *
+ * `tone` yalnızca vurgu içindir; "kötü" olan bir metriğin (max düşüş) her
+ * zaman kırmızı olması, iyi/kötü ayrımını okumayı kolaylaştırıyor.
+ */
+function SummaryCell({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  tone?: 'good' | 'bad' | 'neutral';
+}) {
+  const color =
+    tone === 'good' ? 'text-emerald-400' : tone === 'bad' ? 'text-red-400' : 'text-zinc-200';
+  return (
+    <div className="bg-[#0d1321] px-2 py-1.5 flex flex-col gap-0.5">
+      <span className="text-[8px] uppercase tracking-wider text-zinc-600">{label}</span>
+      <span className={`text-[11px] font-bold font-mono ${color}`}>{value}</span>
+    </div>
+  );
+}
+
 export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) {
   const { trades, loading } = useJournalStore();
   const [{ sessionId }] = useReplayStore();
@@ -73,22 +99,26 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
 
   // Toplam durum sunucudan gelir; ağırlıklı getiri burada HESAPLANMAZ
   // (RULES.md "Yasaklar"). İşlem listesi her değiştiğinde tazelenir.
-  const [totalPercent, setTotalPercent] = useState<number | null>(null);
+  //
+  // Rapor bütünüyle saklanır: oturum özeti (bakiye, düşüş, profit factor)
+  // aynı çağrıdan besleniyor, ayrıca istek atmaya gerek yok.
+  const [report, setReport] = useState<PerformanceReport | null>(null);
+  const totalPercent = report?.weighted_return_pct ?? null;
   const closedCount = useMemo(() => trades.filter((t) => t.status === 'CLOSED').length, [trades]);
 
   useEffect(() => {
     if (!sessionId || closedCount === 0) {
-      setTotalPercent(null);
+      setReport(null);
       return;
     }
     let cancelled = false;
     getPerformance({ symbol, sessionId, includeSaved: true })
-      .then((report) => {
-        if (!cancelled) setTotalPercent(report.weighted_return_pct ?? null);
+      .then((data) => {
+        if (!cancelled) setReport(data);
       })
       .catch(() => {
         // Özet ikincil bilgi; hata kullanıcıyı engellememeli.
-        if (!cancelled) setTotalPercent(null);
+        if (!cancelled) setReport(null);
       });
     return () => {
       cancelled = true;
@@ -230,6 +260,43 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
 
       {isOpen && (
         <>
+          {/*
+            Oturum özeti: "bu denemede ne yaptım" sorusunun cevabı.
+            Metrikler burada hesaplanmaz, /journal/performance'tan hazır gelir
+            (RULES.md "Yasaklar") — üstteki toplam getiri de aynı rapordan.
+          */}
+          {report && report.total_trades > 0 && (
+            <div className="grid grid-cols-3 gap-px bg-white/[0.06] border-t border-white/[0.06]">
+              <SummaryCell
+                label="Bakiye"
+                value={report.ending_balance.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
+                tone={report.ending_balance >= report.starting_balance ? 'good' : 'bad'}
+              />
+              <SummaryCell
+                label="Başarı"
+                value={report.win_rate === null ? '—' : `${report.win_rate.toFixed(0)}%`}
+              />
+              <SummaryCell
+                label="Max Düşüş"
+                value={report.max_drawdown_pct === null ? '—' : `${report.max_drawdown_pct.toFixed(1)}%`}
+                tone="bad"
+              />
+              <SummaryCell
+                label="İşlem"
+                value={String(report.total_trades)}
+              />
+              <SummaryCell
+                label="Profit F."
+                value={report.profit_factor === null ? '—' : report.profit_factor.toFixed(2)}
+              />
+              <SummaryCell
+                label="Beklenti"
+                value={report.expectancy === null ? '—' : report.expectancy.toFixed(1)}
+                tone={(report.expectancy ?? 0) >= 0 ? 'good' : 'bad'}
+              />
+            </div>
+          )}
+
           {ordered.length === 0 ? (
             <div className="px-2 py-3 text-[10px] text-zinc-500 text-center border-t border-white/[0.06]">
               Bu paritede henüz işlem yok.

@@ -173,6 +173,48 @@ export default function ReplayTradePanel({
     }
   }, [position, currentPrice, busy, currentBarIndex, barTimeIso, symbol, sessionId]);
 
+  // Klavye kısayolları: L (long), S (short), K (kapat).
+  //
+  // Replay'in hızı fareyle sınırlıydı — her işlem için panele nişan almak
+  // gerekiyordu. Mum ilerletme zaten boşluk tuşunda (bkz. CandleChart), işlem
+  // açma/kapatma da elin klavyeden ayrılmaması için buraya alındı.
+  //
+  // Dinleyici panelin kendisinde: kısayol yalnızca panel ekrandayken, yani
+  // gerçekten işlem yapılabilecek durumdayken çalışsın.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      // Form alanına yazarken kısayol tetiklenmemeli (stop/hedef girerken
+      // "s" yazmak short açardı).
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      // Tarayıcı/işletim sistemi kısayollarına karışma.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const key = e.key.toLowerCase();
+      if (key === 'l' && !position) {
+        e.preventDefault();
+        void handleOpen('long');
+      } else if (key === 's' && !position) {
+        e.preventDefault();
+        void handleOpen('short');
+      } else if (key === 'k' && position) {
+        e.preventDefault();
+        void handleClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleOpen, handleClose, position]);
+
   const disabled = busy || !currentPrice;
   const levelSuffix = levelMode === 'percent' ? '%' : '';
   // Alanlar dar tutulur: şerit tek satırda kaldığı sürece mumları örtmez.
@@ -233,7 +275,7 @@ export default function ReplayTradePanel({
             type="button"
             onClick={handleClose}
             disabled={disabled}
-            title="Pozisyonu kapat"
+            title="Pozisyonu kapat (K)"
             className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded bg-zinc-100 text-zinc-900 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
@@ -303,7 +345,7 @@ export default function ReplayTradePanel({
             type="button"
             onClick={() => handleOpen('long')}
             disabled={disabled}
-            title="Long pozisyon aç"
+            title="Long pozisyon aç (L)"
             className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-semibold rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <TrendingUp className="w-3 h-3" />
@@ -313,7 +355,7 @@ export default function ReplayTradePanel({
             type="button"
             onClick={() => handleOpen('short')}
             disabled={disabled}
-            title="Short pozisyon aç"
+            title="Short pozisyon aç (S)"
             className="flex items-center gap-0.5 px-2 py-1 text-[10px] font-semibold rounded bg-red-500/15 text-red-400 border border-red-500/40 hover:bg-red-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <TrendingDown className="w-3 h-3" />

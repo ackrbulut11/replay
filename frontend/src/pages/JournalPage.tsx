@@ -26,6 +26,7 @@ import { deleteTrade, getPerformance, getTrades, updateTrade } from '../services
 import { logError } from '../services/eventLog';
 import type { JournalTrade, PerformanceReport, TradeStatus } from '../types/journal';
 import { csvNumber, csvTimestamp, downloadCsv } from '../utils/csv';
+import SessionComparisonPanel from '../journal/SessionComparison';
 
 const STARTING_BALANCE = 10000;
 
@@ -189,6 +190,13 @@ export default function JournalPage() {
           <p className="text-sm font-semibold text-red-300">{error}</p>
         </div>
       )}
+
+      {/*
+        Manuel sonucu aynı pencerede strateji sonucuyla karşılaştırır.
+        Platformun asıl iddiası bu; iki motor da vardı ama yan yana
+        konmuyordu (bkz. backend engines/comparison.py).
+      */}
+      <SessionComparisonPanel trades={trades} />
 
       {performance && (
         <>

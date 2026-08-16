@@ -72,9 +72,10 @@ TradingResearchPlatform/
 │   │   │   ├── FilterPanel.tsx
 │   │   │   └── WatchlistPanel.tsx
 │   │   │
-│   │   ├── journal/                  # STUB
-│   │   │   ├── TradeJournalTable.tsx
-│   │   │   └── PerformanceReport.tsx
+│   │   ├── journal/
+│   │   │   ├── SessionComparison.tsx  # Manuel oturum ↔ strateji karşılaştırma paneli
+│   │   │   ├── TradeJournalTable.tsx  # STUB
+│   │   │   └── PerformanceReport.tsx  # STUB
 │   │   │
 │   │   ├── workspace/                # STUB
 │   │   │   ├── WorkspaceManager.ts
@@ -169,12 +170,16 @@ TradingResearchPlatform/
 │   │   ├── rules/                    # Rule/Strategy Engine — JSON kural ağacı
 │   │   │   ├── engine.py
 │   │   │   ├── conditions.py
-│   │   │   └── evaluator.py
+│   │   │   ├── evaluator.py
+│   │   │   ├── validation.py         # Kaydetme anında kural ağacı doğrulaması
+│   │   │   └── templates.py          # Hazır strateji şablonları
 │   │   │
 │   │   ├── engines/
 │   │   │   ├── strategy_engine.py
 │   │   │   ├── scanner_engine.py
 │   │   │   ├── replay_engine.py
+│   │   │   ├── execution.py           # Komisyon/slipaj, pozisyon boyutlandırma, portföy simülasyonu
+│   │   │   ├── comparison.py          # Manuel backtest ↔ strateji karşılaştırması
 │   │   │   └── backtest_engine.py     # STUB
 │   │   │
 │   │   ├── journal/

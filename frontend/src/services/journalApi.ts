@@ -12,6 +12,7 @@ import type {
   TradeOpenRequest,
   TradeStatus,
   TradeUpdateRequest,
+  SessionComparison,
 } from '../types/journal';
 
 import { ApiError, apiRequest as request, isTransientError } from './api';
@@ -197,4 +198,25 @@ export async function getPerformance(
     starting_balance: options.startingBalance,
   });
   return request<PerformanceReport>(`${API_BASE}/performance${query}`);
+}
+
+/**
+ * Manuel replay oturumunu bir stratejiyle AYNI PENCEREDE karşılaştırır.
+ *
+ * Strateji, oturumun ilk girişinden son çıkışına kadar olan aralıkta
+ * çalıştırılır — farklı aralık farklı piyasa demektir.
+ */
+export async function compareSessionWithStrategy(
+  sessionId: string,
+  strategyId: string,
+  options: { provider?: string; startingBalance?: number } = {},
+): Promise<SessionComparison> {
+  return request<SessionComparison>(`${API_BASE}/sessions/${sessionId}/compare`, {
+    method: 'POST',
+    body: JSON.stringify({
+      strategy_id: strategyId,
+      provider: options.provider,
+      starting_balance: options.startingBalance,
+    }),
+  });
 }

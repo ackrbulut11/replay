@@ -109,3 +109,35 @@ export interface PerformanceReport {
   ending_balance: number;
   equity_curve: number[];
 }
+
+// ─── Manuel vs Otomatik Karşılaştırma ────────────────────────────────────────
+
+/**
+ * Manuel replay oturumunun aynı pencerede çalıştırılmış strateji ile
+ * karşılaştırması (backend `engines/comparison.py`).
+ *
+ * İki taraf da aynı performans raporundan ve aynı başlangıç bakiyesinden
+ * geçer; aksi halde fark stratejiden değil varsayımlardan gelirdi.
+ */
+export interface SessionComparison {
+  symbol: string;
+  timeframe: string;
+  window: { start: string; end: string };
+  manual: PerformanceReport;
+  strategy: {
+    performance: PerformanceReport;
+    total_trades: number;
+    total_pnl_percent: number;
+    signals: Array<{ timestamp: number; signal: string; price?: number; pnl_percent?: number }>;
+    buy_and_hold?: { return_pct: number | null } | null;
+  };
+  /** Strateji − manuel. Pozitifse strateji önde. */
+  delta: {
+    net_profit: number | null;
+    win_rate: number | null;
+    profit_factor: number | null;
+    max_drawdown_pct: number | null;
+    total_trades: number | null;
+  };
+  verdict: 'strateji' | 'manuel' | 'berabere' | 'belirsiz';
+}

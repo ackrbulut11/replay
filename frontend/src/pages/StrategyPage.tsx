@@ -14,12 +14,19 @@ import {
   Layers,
   BarChart3,
   GripHorizontal,
+  Download,
 } from 'lucide-react';
 import StrategyList from '../strategy/StrategyList';
 import StrategyBuilder from '../strategy/StrategyBuilder';
 import BatchScannerTab from '../strategy/BatchScannerTab';
 import { useStrategyStore, strategyStore } from '../store/strategyStore';
-import type { Strategy, EvaluateRequest, SingleEvaluationLogItem } from '../types/strategy';
+import type {
+  Strategy,
+  EvaluateRequest,
+  EvaluateResponse,
+  SingleEvaluationLogItem,
+} from '../types/strategy';
+import { csvNumber, csvTimestamp, downloadCsv } from '../utils/csv';
 import { TIMEFRAMES } from '../types/strategy';
 import type { IndicatorsState } from '../charts/IndicatorToolbar';
 
@@ -43,6 +50,39 @@ interface StrategyPageProps {
 function formatMetric(value: number | null | undefined, suffix = ''): string {
   if (value == null || Number.isNaN(value)) return '—';
   return `${value.toFixed(2)}${suffix}`;
+}
+
+/**
+ * Test sonucundaki sinyalleri CSV olarak indirir.
+ *
+ * Hem sinyalin ÜRETİLDİĞİ mum hem de emrin GERÇEKLEŞTİĞİ mum yazılır: ikisi
+ * `bar_delay` yüzünden farklı olabiliyor ve dışarıda analiz eden biri için
+ * bu ayrım kritik.
+ */
+function exportSignalsCsv(result: EvaluateResponse): void {
+  const rows = result.signals.map((signal) => [
+    new Date(signal.timestamp * 1000).toISOString(),
+    signal.signal_timestamp ? new Date(signal.signal_timestamp * 1000).toISOString() : '',
+    signal.signal,
+    csvNumber(signal.price, 4),
+    csvNumber(signal.entry_price, 4),
+    csvNumber(signal.pnl_percent),
+    signal.conditions_met.join(' | '),
+  ]);
+
+  downloadCsv(
+    `${result.strategy_name}_${result.symbol}_${result.timeframe}_${csvTimestamp()}`,
+    [
+      'Gerçekleşme Zamanı',
+      'Sinyal Zamanı',
+      'Sinyal',
+      'Fiyat',
+      'Giriş Fiyatı',
+      'Kar/Zarar (%)',
+      'Karşılanan Koşullar',
+    ],
+    rows,
+  );
 }
 
 export default function StrategyPage({
@@ -654,6 +694,20 @@ export default function StrategyPage({
                                 ? `Strateji ${(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% önde`
                                 : `Strateji ${Math.abs(evaluateResult.outperformance_pct ?? 0).toFixed(2)}% geride`}
                             </span>
+                          </div>
+                        )}
+
+                        {/* Sinyal listesini dışa aktar */}
+                        {Array.isArray(evaluateResult.signals) && evaluateResult.signals.length > 0 && (
+                          <div className="flex justify-end mb-2">
+                            <button
+                              onClick={() => exportSignalsCsv(evaluateResult)}
+                              className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 rounded-lg px-2.5 py-1 transition-all cursor-pointer"
+                              title="Sinyal listesini CSV olarak indir (Excel uyumlu)"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              CSV indir
+                            </button>
                           </div>
                         )}
 

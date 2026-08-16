@@ -19,11 +19,13 @@ import {
   AlertTriangle,
   Save,
   ChevronDown,
+  Download,
 } from 'lucide-react';
 
 import { deleteTrade, getPerformance, getTrades, updateTrade } from '../services/journalApi';
 import { logError } from '../services/eventLog';
 import type { JournalTrade, PerformanceReport, TradeStatus } from '../types/journal';
+import { csvNumber, csvTimestamp, downloadCsv } from '../utils/csv';
 
 const STARTING_BALANCE = 10000;
 
@@ -76,6 +78,42 @@ const MetricCard: React.FC<{ label: string; value: string; tone?: 'good' | 'bad'
     </div>
   </div>
 );
+
+/**
+ * İşlem günlüğünü CSV olarak indirir.
+ *
+ * Ekrandaki filtre neyse o dışa aktarılır — kullanıcı "Kapalı" filtresini
+ * seçmişken tüm işlemleri indirmek şaşırtıcı olurdu.
+ */
+function exportTradesCsv(trades: JournalTrade[]): void {
+  const rows = trades.map((trade) => [
+    trade.symbol,
+    trade.side === 'long' ? 'Long' : 'Short',
+    trade.status === 'OPEN' ? 'Açık' : 'Kapalı',
+    csvNumber(trade.entry_price, 4),
+    csvNumber(trade.exit_price, 4),
+    csvNumber(trade.quantity, 4),
+    csvNumber(trade.stop_loss, 4),
+    csvNumber(trade.take_profit, 4),
+    csvNumber(trade.pnl),
+    csvNumber(trade.pnl_percent),
+    trade.exit_reason ?? '',
+    trade.entry_time ?? '',
+    trade.exit_time ?? '',
+    trade.reason ?? '',
+    trade.notes ?? '',
+  ]);
+
+  downloadCsv(
+    `islem-gunlugu_${csvTimestamp()}`,
+    [
+      'Sembol', 'Yön', 'Durum', 'Giriş', 'Çıkış', 'Miktar',
+      'Stop', 'Hedef', 'K/Z', 'K/Z (%)', 'Çıkış Sebebi',
+      'Giriş Zamanı', 'Çıkış Zamanı', 'Sebep', 'Not',
+    ],
+    rows,
+  );
+}
 
 export default function JournalPage() {
   const [trades, setTrades] = useState<JournalTrade[]>([]);
@@ -209,6 +247,17 @@ export default function JournalPage() {
                 {value === '' ? 'Tümü' : value === 'OPEN' ? 'Açık' : 'Kapalı'}
               </button>
             ))}
+
+            <button
+              type="button"
+              onClick={() => exportTradesCsv(trades)}
+              disabled={trades.length === 0}
+              title="Ekrandaki işlemleri CSV olarak indir (Excel uyumlu)"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer bg-slate-800/40 border-slate-700/60 text-slate-300 hover:bg-slate-800/70 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
           </div>
         </div>
 

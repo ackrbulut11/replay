@@ -354,7 +354,7 @@ export default function JournalPage() {
                             trade.status === 'OPEN'
                               ? 'text-content-faint'
                               : isProfit
-                              ? 'text-accent-400'
+                              ? 'text-profit-400'
                               : 'text-loss-400'
                           }`}
                         >

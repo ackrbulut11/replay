@@ -34,7 +34,7 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
 
       {tool === 'longPosition' || tool === 'shortPosition' ? (
         <div className="flex items-center gap-2">
-          <span className="text-2xs font-medium px-2 py-0.5 rounded bg-accent-500/20 text-accent-400 border border-accent-500/30">
+          <span className="text-2xs font-medium px-2 py-0.5 rounded bg-profit-500/20 text-profit-400 border border-profit-500/30">
             Kar Hedefi: Yeşil
           </span>
           <span className="text-2xs font-medium px-2 py-0.5 rounded bg-loss-500/20 text-loss-400 border border-loss-500/30">

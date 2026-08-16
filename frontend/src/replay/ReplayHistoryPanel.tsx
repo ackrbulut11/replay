@@ -324,7 +324,7 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
                     totalPercent === null
                       ? 'text-content-faint'
                       : totalPercent >= 0
-                        ? 'text-accent-400'
+                        ? 'text-profit-400'
                         : 'text-loss-400'
                   }`}
                 >

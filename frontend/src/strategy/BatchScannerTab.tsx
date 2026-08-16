@@ -720,11 +720,11 @@ export default function BatchScannerTab({
             </div>
 
             {/* Başarı Oranı (Win Rate) */}
-            <div className="bg-surface-raised border border-accent-500/30 rounded-xl p-3 flex flex-col justify-between">
-              <span className="text-2xs text-accent-400/90 font-medium">
+            <div className="bg-surface-raised border border-profit-500/30 rounded-xl p-3 flex flex-col justify-between">
+              <span className="text-2xs text-profit-400/90 font-medium">
                 BAŞARI ORANI (WIN RATE)
               </span>
-              <span className="text-xl font-medium text-accent-400 font-mono mt-1">
+              <span className="text-xl font-medium text-profit-400 font-mono mt-1">
                 %{summaryStats.avgWinRate}
               </span>
             </div>
@@ -745,7 +745,7 @@ export default function BatchScannerTab({
             <div
               className={`bg-surface-raised border rounded-xl p-3 flex flex-col justify-between ${
                 parseFloat(summaryStats.avgPnl) > 0
-                  ? 'border-accent-500/30'
+                  ? 'border-profit-500/30'
                   : parseFloat(summaryStats.avgPnl) < 0
                   ? 'border-loss-500/30'
                   : 'border-line'
@@ -757,7 +757,7 @@ export default function BatchScannerTab({
               <span
                 className={`text-xl font-medium font-mono mt-1 ${
                   parseFloat(summaryStats.avgPnl) > 0
-                    ? 'text-accent-400'
+                    ? 'text-profit-400'
                     : parseFloat(summaryStats.avgPnl) < 0
                     ? 'text-loss-400'
                     : 'text-content-muted'
@@ -898,7 +898,7 @@ export default function BatchScannerTab({
                         <span
                           className={`px-2 py-1 rounded-lg text-xs ${
                             item.win_rate >= 50
-                              ? 'text-accent-400 bg-accent-500/10 border border-accent-500/20'
+                              ? 'text-profit-400 bg-profit-500/10 border border-profit-500/20'
                               : item.win_rate > 0
                               ? 'text-warn-400 bg-warn-500/10 border border-warn-500/20'
                               : 'text-content-muted bg-surface-hover'
@@ -926,7 +926,7 @@ export default function BatchScannerTab({
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border ${
                             item.total_pnl_percent > 0
-                              ? 'text-accent-400 bg-accent-500/15 border-accent-500/30'
+                              ? 'text-profit-400 bg-profit-500/15 border-profit-500/30'
                               : item.total_pnl_percent < 0
                               ? 'text-loss-400 bg-loss-500/15 border-loss-500/30'
                               : 'text-content-muted bg-surface-hover border-line-strong'

@@ -230,7 +230,7 @@ export default function SessionComparisonPanel({ trades }: SessionComparisonPane
                         row.diffValue === null || row.diffValue === undefined
                           ? 'text-content-faint'
                           : (row.diffValue >= 0) === row.positiveIsBetter
-                            ? 'text-accent-400'
+                            ? 'text-profit-400'
                             : 'text-loss-400'
                       }`}
                     >

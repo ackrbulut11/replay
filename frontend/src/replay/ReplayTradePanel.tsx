@@ -346,7 +346,7 @@ export default function ReplayTradePanel({
             onClick={() => handleOpen('long')}
             disabled={disabled}
             title="Long pozisyon aç (L)"
-            className="flex items-center gap-0.5 px-2 py-1 text-2xs font-medium rounded bg-accent-500/15 text-accent-400 border border-accent-500/40 hover:bg-accent-300/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="flex items-center gap-0.5 px-2 py-1 text-2xs font-medium rounded bg-profit-500/15 text-profit-400 border border-profit-500/40 hover:bg-profit-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <TrendingUp className="w-3 h-3" />
             Long

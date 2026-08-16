@@ -223,6 +223,9 @@ class RuleEngine:
         signals: list[dict] = []
         position_state: str = "none"  # "none", "long", "short"
         last_entry_price: float | None = None
+        # Açık pozisyonun giriş anı — kapanışta işlem kaydına yazılır.
+        last_entry_timestamp: int | None = None
+        last_entry_bar_index: int | None = None
         # Kapanışta üretilmiş ama henüz gerçekleşmemiş sinyal (bkz. bar_delay).
         pending_signal: dict | None = None
         # Aralık boyunca aynı df sabit kaldığından, kullanılan her indikatör
@@ -275,6 +278,7 @@ class RuleEngine:
             TP/SL çıkışları böyledir (bkz. çağrı yeri).
             """
             nonlocal position_state, last_entry_price
+            nonlocal last_entry_timestamp, last_entry_bar_index
 
             # Slipaj gerçekleşme fiyatına gömülür: alış istenenin üstünde,
             # satış altında dolar. Böylece hem kâr/zarar hem grafikte gösterilen
@@ -293,33 +297,47 @@ class RuleEngine:
 
             # ── Açık pozisyonu kapat (varsa) ──────────────────────────────
             has_position = last_entry_price is not None and last_entry_price > 0
+            closed_side = None
             if signal == SignalType.BUY and position_state == "short" and has_position:
-                item["entry_price"] = round(last_entry_price, 4)
-                item["pnl_percent"] = round(
-                    net_pnl_percent("short", last_entry_price, exec_price, costs), 2
-                )
-                item["position_closed"] = "SHORT"
+                closed_side = "SHORT"
             elif signal == SignalType.SELL and position_state == "long" and has_position:
+                closed_side = "LONG"
+
+            if closed_side:
                 item["entry_price"] = round(last_entry_price, 4)
                 item["pnl_percent"] = round(
-                    net_pnl_percent("long", last_entry_price, exec_price, costs), 2
+                    net_pnl_percent(closed_side.lower(), last_entry_price, exec_price, costs), 2
                 )
-                item["position_closed"] = "LONG"
+                item["position_closed"] = closed_side
+                # Pozisyonun AÇILDIĞI an. Portföy simülasyonu sermayeyi
+                # kronolojik olarak tahsis ettiği için giriş zamanı şart:
+                # yalnızca çıkış zamanıyla "bu işlem hangi aralıkta sermaye
+                # bağladı" sorusu cevaplanamıyor.
+                item["entry_timestamp"] = last_entry_timestamp
+                item["entry_bar_index"] = last_entry_bar_index
 
             # ── Yeni pozisyon durumu ──────────────────────────────────────
             if not reverse:
                 # Risk yönetimi çıkışı: nakite geçilir, ters pozisyon açılmaz.
                 position_state = "none"
                 last_entry_price = None
+                last_entry_timestamp = None
+                last_entry_bar_index = None
             elif signal == SignalType.BUY:
                 position_state = "long"
                 last_entry_price = exec_price
+                last_entry_timestamp = timestamp
+                last_entry_bar_index = bar_index
             elif allow_short:
                 position_state = "short"
                 last_entry_price = exec_price
+                last_entry_timestamp = timestamp
+                last_entry_bar_index = bar_index
             else:
                 position_state = "none"
                 last_entry_price = None
+                last_entry_timestamp = None
+                last_entry_bar_index = None
 
             signals.append(item)
 

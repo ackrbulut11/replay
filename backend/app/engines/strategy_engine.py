@@ -22,11 +22,13 @@ from sqlalchemy.orm import Session
 
 from app.database.models import Strategy, StrategyEvaluation
 from app.engines.execution import (
+    DEFAULT_MAX_CONCURRENT_POSITIONS,
     ExecutionCosts,
     PositionSizing,
     fill_price,
     net_pnl_percent,
     simulate_account,
+    simulate_portfolio,
 )
 from app.reports.performance_report import calculate_performance, compound_return_pct
 from app.rules.engine import DEFAULT_BAR_DELAY, RuleEngine
@@ -536,6 +538,7 @@ class StrategyEngine:
                 "exit_price": signal.get("price"),
                 # Maliyetler zaten düşülmüş; yeniden hesaplanmasın.
                 "pnl_percent": signal.get("pnl_percent"),
+                "entry_timestamp": signal.get("entry_timestamp"),
                 "exit_timestamp": signal.get("timestamp"),
             })
         return positions
@@ -690,6 +693,10 @@ class StrategyEngine:
                 "sharpe_ratio": res["performance"].get("sharpe_ratio"),
                 "buy_and_hold_pct": res["buy_and_hold"].get("return_pct"),
                 "outperformance_pct": res.get("outperformance_pct"),
+                # Portfoy simulasyonu icin ham kapanmis pozisyonlar. Tarama
+                # tablosuna gitmez (route ayikliyor), yalnizca sermaye
+                # paylastirmali hesabin girdisidir.
+                "closed_positions": self._closed_positions(res["signals"]),
                 "error": None,
             }
         except Exception as e:
@@ -751,3 +758,38 @@ class StrategyEngine:
             reverse=True,
         )
         return results
+
+
+def portfolio_from_batch(
+    batch_results: list[dict],
+    starting_balance: float = DEFAULT_STARTING_BALANCE,
+    sizing: PositionSizing | None = None,
+    max_concurrent_positions: int = DEFAULT_MAX_CONCURRENT_POSITIONS,
+) -> dict:
+    """Toplu tarama sonucunu tek hesaplı bir portföy testine çevirir.
+
+    Toplu tarama her sembolü BAĞIMSIZ test eder: her biri sanki tüm sermaye
+    ona ayrılmış gibi hesaplanır. "10 sembolde %30 kazandım" bu yüzden
+    yanıltıcıdır — gerçekte o pozisyonlar aynı parayı paylaşır ve bir kısmına
+    hiç girilemez.
+
+    Burada tüm sembollerin işlemleri tek bir bakiye üzerinde kronolojik olarak
+    yürütülür ve sonuç `performance_report`'tan geçirilir; böylece portföy
+    sonucu tekli test sonuçlarıyla aynı metriklerle okunur.
+    """
+    trades_by_symbol = {
+        item["symbol"]: item.get("closed_positions") or []
+        for item in batch_results
+        if item.get("error") is None and item.get("symbol")
+    }
+
+    result = simulate_portfolio(
+        trades_by_symbol,
+        starting_balance=starting_balance,
+        sizing=sizing or PositionSizing(),
+        max_concurrent_positions=max_concurrent_positions,
+    )
+    result["performance"] = calculate_performance(
+        result["trades"], starting_balance=starting_balance
+    )
+    return result

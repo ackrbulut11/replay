@@ -248,3 +248,113 @@ def simulate_account(
         "ending_balance": equity,
         "trades": priced,
     }
+
+
+# Portföy testinde aynı anda taşınabilecek varsayılan pozisyon sayısı.
+# Sınırsız bırakmak "her sinyale gir" demek olurdu; bu da tek sembollü testlerin
+# toplamından farksız, gerçekte ise mümkün olmayan bir sonuç üretir.
+DEFAULT_MAX_CONCURRENT_POSITIONS = 5
+
+
+def simulate_portfolio(
+    trades_by_symbol: Mapping[str, Sequence[Mapping[str, Any]]],
+    starting_balance: float = 10_000.0,
+    sizing: PositionSizing | None = None,
+    max_concurrent_positions: int = DEFAULT_MAX_CONCURRENT_POSITIONS,
+) -> dict[str, Any]:
+    """Birden fazla sembolü TEK bir hesapla, kronolojik olarak simüle eder.
+
+    Toplu tarama sembolleri birbirinden bağımsız test eder: her biri sanki tüm
+    sermaye ona ayrılmış gibi hesaplanır. Bu, "10 sembolde %30 kazandım"
+    yanılsaması üretir — gerçekte o 10 pozisyon aynı parayı paylaşır ve
+    bazılarına hiç girilemez.
+
+    Burada işlemler GİRİŞ zamanına göre sıralanır ve tek bir bakiye üzerinden
+    yürütülür:
+      * Aynı anda en fazla `max_concurrent_positions` pozisyon taşınır.
+      * Sınır doluyken gelen sinyal ATLANIR ve `skipped_trades` içinde sayılır —
+        sessizce dahil etmek portföy kısıtını anlamsız kılardı.
+      * Pozisyon büyüklüğü, o an SERBEST olan nakde göre hesaplanır.
+
+    Giriş/çıkış zamanı olmayan işlemler atlanır: kronolojik sıra kurulamadan
+    portföy simülasyonu yapılamaz.
+    """
+    sizing = sizing or PositionSizing()
+
+    # Tüm sembollerin işlemlerini tek listede topla.
+    pending: list[dict[str, Any]] = []
+    for symbol, trades in trades_by_symbol.items():
+        for trade in trades:
+            entry_ts = trade.get("entry_timestamp")
+            exit_ts = trade.get("exit_timestamp")
+            if entry_ts is None or exit_ts is None:
+                continue
+            pending.append({**dict(trade), "symbol": symbol})
+
+    pending.sort(key=lambda t: (t["entry_timestamp"], t["exit_timestamp"]))
+
+    equity = float(starting_balance)
+    # Bağlı sermaye: (çıkış_zamanı, tutar, işlem)
+    open_positions: list[dict[str, Any]] = []
+    closed: list[dict[str, Any]] = []
+    skipped = 0
+
+    def _close_until(now_ts: int) -> None:
+        """`now_ts`'e kadar kapanmış pozisyonların sonucunu bakiyeye işler."""
+        nonlocal equity
+        still_open = []
+        for position in open_positions:
+            if position["exit_timestamp"] <= now_ts:
+                equity += position["pnl"]
+                closed.append({**position, "equity_after": equity})
+            else:
+                still_open.append(position)
+        open_positions[:] = still_open
+
+    for trade in pending:
+        _close_until(trade["entry_timestamp"])
+
+        if len(open_positions) >= max_concurrent_positions:
+            skipped += 1
+            continue
+
+        entry = float(trade.get("entry_price") or 0.0)
+        if entry <= 0:
+            continue
+
+        # Serbest nakit: toplam bakiyeden hâlâ açık pozisyonlara bağlı kısım düşülür.
+        committed = sum(p["capital"] for p in open_positions)
+        available = max(equity - committed, 0.0)
+        if available <= 0:
+            skipped += 1
+            continue
+
+        quantity = position_quantity(sizing, available, entry, trade.get("stop_price"))
+        capital = quantity * entry
+        if capital <= 0:
+            skipped += 1
+            continue
+
+        pnl_pct = float(trade.get("pnl_percent") or 0.0)
+        open_positions.append({
+            **trade,
+            "quantity": quantity,
+            "capital": capital,
+            "pnl": capital * pnl_pct / 100.0,
+        })
+
+    # Kalan açık pozisyonların hepsi kapanır (veri sonu).
+    _close_until(max((p["exit_timestamp"] for p in open_positions), default=0))
+
+    closed.sort(key=lambda t: t["exit_timestamp"])
+
+    return {
+        "starting_balance": float(starting_balance),
+        "ending_balance": equity,
+        "max_concurrent_positions": max_concurrent_positions,
+        "total_signals": len(pending),
+        # Portföy kısıtı yüzünden girilemeyen sinyaller. Yüksekse sınır
+        # stratejinin sinyal üretimine göre çok dar demektir.
+        "skipped_trades": skipped,
+        "trades": closed,
+    }

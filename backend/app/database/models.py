@@ -108,6 +108,9 @@ class StrategyScan(Base):
     status = Column(String(20), nullable=False, default="done")
     error = Column(Text, nullable=True)
     results = Column(JSON, nullable=False)
+    # Sermaye paylastirmali portfoy ozeti. Tarama bittiginde bir kez hesaplanir;
+    # bagimsiz tekli sonuclarin toplamindan farklidir (bkz. portfolio_from_batch).
+    portfolio = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

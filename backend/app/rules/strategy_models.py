@@ -378,6 +378,13 @@ class BatchEvaluateRequest(BaseModel):
     limit_bars: Optional[int] = Field(1000, description="Maksimum mum sayısı (azami: 10000)")
     allow_short: Optional[bool] = Field(None, description="Short pozisyon izni")
     param_overrides: Dict[str, Union[int, float]] = Field(default_factory=dict)
+    max_concurrent_positions: int = Field(
+        5, ge=1, le=100,
+        description=(
+            "Portfoy testinde ayni anda tasinabilecek azami pozisyon sayisi. "
+            "Sinir doluyken gelen sinyal atlanir."
+        ),
+    )
     starting_balance: float = Field(
         10000.0, gt=0, description="Nakit simulasyonu icin baslangic bakiyesi"
     )
@@ -432,6 +439,8 @@ class ScanHistoryItem(BaseModel):
     status: str = "done"
     error: Optional[str] = None
     results: List[BatchEvaluateResultItem]
+    # Sermaye paylastirmali portfoy sonucu (tarama bitince dolar).
+    portfolio: Optional[Dict[str, Any]] = None
 
 
 class SaveScanRequest(BaseModel):
@@ -440,4 +449,6 @@ class SaveScanRequest(BaseModel):
     provider: str
     timeframe: str
     results: List[BatchEvaluateResultItem]
+    # Sermaye paylastirmali portfoy sonucu (tarama bitince dolar).
+    portfolio: Optional[Dict[str, Any]] = None
 

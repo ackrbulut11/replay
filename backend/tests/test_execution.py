@@ -18,6 +18,7 @@ from app.engines.execution import (
     position_quantity,
     round_trip_commission_pct,
     simulate_account,
+    simulate_portfolio,
 )
 
 
@@ -150,6 +151,83 @@ class TestSimulateAccount(unittest.TestCase):
         )
         self.assertAlmostEqual(result["ending_balance"], 1098.0, places=6)
 
+
+
+class TestSimulatePortfolio(unittest.TestCase):
+    """Coklu sembol TEK hesabi paylasmali."""
+
+    @staticmethod
+    def _trade(entry_ts, exit_ts, pnl_pct, entry=100.0):
+        return {
+            "side": "long", "entry_price": entry, "exit_price": entry * (1 + pnl_pct / 100),
+            "pnl_percent": pnl_pct, "entry_timestamp": entry_ts, "exit_timestamp": exit_ts,
+        }
+
+    def test_sequential_trades_share_one_account(self):
+        """Ust uste binmeyen islemler sirayla ayni bakiyeyi kullanir."""
+        result = simulate_portfolio(
+            {"A": [self._trade(1, 2, 10.0)], "B": [self._trade(3, 4, 10.0)]},
+            starting_balance=1_000,
+            sizing=PositionSizing(SizingMode.PERCENT_EQUITY, 100),
+        )
+        # 1000 -> 1100 -> 1210 (bilesik, cunku ikinci islem birincinin ardindan)
+        self.assertAlmostEqual(result["ending_balance"], 1210.0, places=6)
+        self.assertEqual(result["skipped_trades"], 0)
+
+    def test_concurrent_positions_split_the_capital(self):
+        """Ayni anda acik iki pozisyon ayni parayi paylasir."""
+        overlapping = {
+            "A": [self._trade(1, 10, 10.0)],
+            "B": [self._trade(2, 10, 10.0)],
+        }
+        result = simulate_portfolio(
+            overlapping, starting_balance=1_000,
+            sizing=PositionSizing(SizingMode.PERCENT_EQUITY, 100),
+        )
+        # A tum sermayeyi baglar; B'ye serbest nakit kalmaz -> atlanir.
+        self.assertEqual(result["skipped_trades"], 1)
+        self.assertAlmostEqual(result["ending_balance"], 1100.0, places=6)
+
+    def test_max_concurrent_limit_skips_signals(self):
+        trades = {f"S{i}": [self._trade(1, 100, 5.0)] for i in range(8)}
+        result = simulate_portfolio(
+            trades, starting_balance=100_000,
+            sizing=PositionSizing(SizingMode.FIXED_CASH, 1_000),
+            max_concurrent_positions=3,
+        )
+        self.assertEqual(len(result["trades"]), 3)
+        self.assertEqual(result["skipped_trades"], 5)
+
+    def test_trades_without_timestamps_are_ignored(self):
+        result = simulate_portfolio(
+            {"A": [{"side": "long", "entry_price": 100, "exit_price": 110, "pnl_percent": 10}]},
+            starting_balance=1_000,
+        )
+        self.assertEqual(result["total_signals"], 0)
+        self.assertEqual(result["ending_balance"], 1_000)
+
+    def test_result_differs_from_independent_sum(self):
+        """Portfoy testinin varlik sebebi: bagimsiz toplamla ayni cikmamali."""
+        overlapping = {
+            "A": [self._trade(1, 10, 20.0)],
+            "B": [self._trade(2, 10, 20.0)],
+            "C": [self._trade(3, 10, 20.0)],
+        }
+        portfolio = simulate_portfolio(
+            overlapping, starting_balance=1_000,
+            sizing=PositionSizing(SizingMode.PERCENT_EQUITY, 100),
+        )
+        # Bagimsiz test her sembole 1000 verirdi -> 3 x %20 = +600
+        self.assertLess(portfolio["ending_balance"] - 1_000, 600)
+
+    def test_closed_trades_carry_running_equity(self):
+        result = simulate_portfolio(
+            {"A": [self._trade(1, 2, 10.0)], "B": [self._trade(3, 4, 10.0)]},
+            starting_balance=1_000,
+            sizing=PositionSizing(SizingMode.PERCENT_EQUITY, 100),
+        )
+        equities = [t["equity_after"] for t in result["trades"]]
+        self.assertEqual(equities, sorted(equities), "bakiye kronolojik ilerlemeli")
 
 if __name__ == "__main__":
     unittest.main()

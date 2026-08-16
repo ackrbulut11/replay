@@ -21,7 +21,11 @@ from app.data.loader import DataLoader, lookback_start_for_bars
 from app.utils.time import utc_now
 from app.engines.scanner_engine import ScannerEngine
 from app.engines.execution import PositionSizing
-from app.engines.strategy_engine import MultiTimeframeDataError, StrategyEngine
+from app.engines.strategy_engine import (
+    MultiTimeframeDataError,
+    StrategyEngine,
+    portfolio_from_batch,
+)
 from app.indicators.registry import IndicatorRegistry
 from app.rules.templates import list_templates
 from app.rules.validation import StrategyValidationError
@@ -396,6 +400,7 @@ def _run_batch_scan_job(
     allow_short: Optional[bool],
     starting_balance: float,
     sizing: Optional[Dict[str, Any]],
+    max_concurrent_positions: int,
 ) -> None:
     """Toplu taramayı arka planda (BackgroundTasks) çalıştırır.
 
@@ -441,6 +446,9 @@ def _run_batch_scan_job(
             for sym in symbols
         }
         pending = set(futures)
+        # Portfoy simulasyonu icin ham sonuclar (kapanmis pozisyonlar dahil).
+        # Veritabanina yazilan surumde bunlar pydantic tarafindan ayiklaniyor.
+        raw_results: list[dict] = []
         while pending:
             done, pending = wait(pending, timeout=ROUND_TIMEOUT_SECONDS, return_when=FIRST_COMPLETED)
             if not done:
@@ -462,9 +470,26 @@ def _run_batch_scan_job(
                     result = fut.result()
                 except Exception as e:
                     result = {"symbol": sym, "error": str(e)}
+                raw_results.append(result)
                 _scanner.append_scan_result(db, scan_id=scan_id, result=result)
 
-        _scanner.finish_scan(db, scan_id=scan_id)
+        # Sermaye paylastirmali portfoy sonucu. Tekli sonuclarin toplami
+        # DEGILDIR: o pozisyonlar ayni parayi paylasir ve bir kismina hic
+        # girilemez (bkz. portfolio_from_batch).
+        portfolio = None
+        try:
+            portfolio = portfolio_from_batch(
+                raw_results,
+                starting_balance=starting_balance,
+                sizing=PositionSizing.from_dict(sizing),
+                max_concurrent_positions=max_concurrent_positions,
+            )
+        except Exception as e:
+            # Portfoy ozeti "olsa iyi olur": hesabi patlarsa taramanin kendisi
+            # yine de tamamlanmis sayilmali.
+            print(f"Portfoy simulasyonu basarisiz ({scan_id}): {e}")
+
+        _scanner.finish_scan(db, scan_id=scan_id, portfolio=portfolio)
     except Exception as e:
         _scanner.fail_scan(db, scan_id=scan_id, error=str(e))
     finally:
@@ -543,6 +568,7 @@ def batch_evaluate_strategy(
         allow_short=request.allow_short,
         starting_balance=request.starting_balance,
         sizing=request.sizing,
+        max_concurrent_positions=request.max_concurrent_positions,
     )
 
     return scan

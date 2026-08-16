@@ -61,6 +61,7 @@ class ScannerEngine:
             status=row.status or "done",
             error=row.error,
             results=[BatchEvaluateResultItem(**r) for r in (row.results or [])],
+            portfolio=row.portfolio,
         ).model_dump()
 
     def save_scan(
@@ -200,12 +201,18 @@ class ScannerEngine:
         row.scanned_count = len(row.results)
         db.commit()
 
-    def finish_scan(self, db: Session, scan_id: str) -> None:
-        """Taramayı tamamlandı olarak işaretler ve eski kayıtları budar."""
+    def finish_scan(self, db: Session, scan_id: str, portfolio: dict | None = None) -> None:
+        """Taramayı tamamlandı olarak işaretler ve eski kayıtları budar.
+
+        `portfolio`, sermaye paylaştırmalı tek hesaplı sonuçtur; bağımsız
+        tekli sonuçların toplamından farklı olduğu için ayrı saklanır.
+        """
         row = db.query(StrategyScan).filter(StrategyScan.id == scan_id).first()
         if not row:
             return
         row.status = "done"
+        if portfolio is not None:
+            row.portfolio = portfolio
         db.commit()
         self._prune(db, row.strategy_id, row.user_id)
 

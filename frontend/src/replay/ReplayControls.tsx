@@ -9,10 +9,12 @@
  * ipuçları yalnızca onları duyurur.
  */
 
-import { useReplayStore } from '../store/replayStore';
+import { replayStore, useReplayStore } from '../store/replayStore';
 import {
   Play,
   Pause,
+  Eye,
+  EyeOff,
   SkipForward,
   Scissors,
   RotateCcw,
@@ -46,7 +48,7 @@ export default function ReplayControls({
   onResetToCutoff,
 }: ReplayControlsProps) {
   const [replayState, setReplayState] = useReplayStore();
-  const { isSelectingCutoff, currentIndex, isPlaying, speedMs } = replayState;
+  const { isSelectingCutoff, currentIndex, isPlaying, speedMs, isBlindMode } = replayState;
 
   const currentBar = currentIndex !== null ? currentIndex + 1 : totalBars;
   const isAtEnd = currentIndex !== null && currentIndex >= totalBars - 1;
@@ -86,6 +88,22 @@ export default function ReplayControls({
       </button>
 
       {/* Oynat / Durdur */}
+      {/*
+        Kör mod: sembol adını ve tarihi gizler. Manuel backtest'in bilinen en
+        büyük hilesi sonucu bilerek geçmişe bakmaktır; bu düğme onu kapatır.
+      */}
+      <button
+        onClick={() => replayStore.toggleBlindMode()}
+        title={isBlindMode ? 'Kör mod açık — sembol ve tarih gizli (B)' : 'Kör mod: sembolü ve tarihi gizle (B)'}
+        className={`p-1.5 rounded-md border transition-all cursor-pointer ${
+          isBlindMode
+            ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
+            : 'bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:text-zinc-200'
+        }`}
+      >
+        {isBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+      </button>
+
       <button
         onClick={onTogglePlay}
         disabled={isAtEnd}

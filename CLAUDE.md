@@ -131,6 +131,11 @@ Phases 1–4 are built; 5–6 have not started. Verify a module is real before w
 
 `main.py` mounts `auth`, `market`, `strategy`, `alerts`, `watchlist`, `chart_settings`, `journal`, `admin`, `analytics`, `waitlist` under `/api`. New routers must be added there explicitly.
 
+### Manual vs automatic comparison
+`POST /api/journal/sessions/{id}/compare` runs a strategy over the *same window* as a manual replay session and returns both performance reports plus per-metric deltas ([comparison.py](backend/app/engines/comparison.py)). The comparison is only meaningful because both sides share one report function, one starting balance, and one execution convention (`bar_delay`, TP/SL not delayed, commission/slippage) — change any of those on one side only and the delta stops measuring the strategy.
+
+Batch scanning also produces a capital-sharing **portfolio** result (`portfolio_from_batch`, stored in `strategy_scans.portfolio`): per-symbol results are independent by construction, so their sum overstates what one account could actually have earned.
+
 ## Deployment
 
 Frontend deploys to Vercel. **There are two `vercel.json` files and only one is live.** Vercel reads the config in the project's configured Root Directory: since `/api/*` is in fact proxied on the deployed site, [frontend/vercel.json](frontend/vercel.json) is the effective one and the repo-root [vercel.json](vercel.json) is ignored. Both now carry the same `/api/:path*` → `https://replay-xj3e.onrender.com/api/:path*` rewrite, so editing either one cannot silently break API routing — but **change both** or the next reader will hit the same trap. `.env.production` sets the same backend as `VITE_API_BASE_URL`, which `AuthContext`/`waitlistApi` use as an absolute URL while everything else relies on the relative `/api` rewrite.

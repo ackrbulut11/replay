@@ -782,6 +782,10 @@ export default function CandleChart({
       } else if (key === 'x') {
         e.preventDefault();
         handleToggleReplayMode();
+      } else if (key === 'b') {
+        // Kör mod: sembol adını ve tarihi gizle/göster.
+        e.preventDefault();
+        replayStore.toggleBlindMode();
       } else if (key === '1') {
         setReplayState({ speedMs: 200 });
       } else if (key === '2') {
@@ -2468,6 +2472,19 @@ export default function CandleChart({
     };
   }, [alertState.alerts, symbol, data, indicators, updateAlarmOverlays]);
 
+  // Kör mod: zaman ekseninin etiketlerini gizler.
+  //
+  // Sembol adını gizlemek tek başına yetmiyor — tarih de güçlü bir ipucu
+  // ("2020 Mart, çöküş vardı"). Mumlar ve fiyat ekseni görünür kalır; gizlenen
+  // yalnızca hangi tarihe bakıldığıdır.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({
+      timeScale: { visible: !replayState.isBlindMode },
+    });
+  }, [replayState.isBlindMode]);
+
   // Etkin alarmları sunucuya kontrol ettir.
   //
   // Replay'de KAPALIDIR: replay'de ekrandaki son mum geçmişten gelir ve
@@ -2521,7 +2538,12 @@ export default function CandleChart({
               <div className="flex items-center gap-1">
                 <span className="font-mono text-[9px] text-zinc-500 font-semibold uppercase select-none">Symbol:</span>
                 <span className="text-xs font-semibold text-zinc-100 font-mono tracking-tight group-hover:text-emerald-400">
-                  {symbol || 'ARA'}
+                  {/*
+                    Kör modda sembol adı gizlenir: "bu BTC, 2021'de yükseldi"
+                    bilgisi manuel backtest kararını önyargılı kılar. İşlem yine
+                    gerçek sembole kaydedilir, yalnızca gösterim maskelenir.
+                  */}
+                  {replayState.isBlindMode ? '???' : symbol || 'ARA'}
                 </span>
               </div>
             </button>

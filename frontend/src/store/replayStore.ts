@@ -20,6 +20,15 @@ export interface ReplayState {
    * işlem paneli o süre boyunca devre dışıdır.
    */
   sessionId: string | null;
+  /**
+   * Kör mod: sembol adı ve tarih gizlenir.
+   *
+   * Manuel backtest'in bilinen en büyük hilesi, sonucu bilerek geçmişe
+   * bakmaktır — "bu BTC, 2021'de yükseldi" bilgisi kararı önyargılı kılar.
+   * Kör modda grafikte hangi sembole ve hangi döneme baktığınız görünmez;
+   * işlemler yine gerçek sembole kaydedilir, yalnızca GÖSTERİM gizlenir.
+   */
+  isBlindMode: boolean;
 }
 
 export const INITIAL_REPLAY_STATE: ReplayState = {
@@ -31,6 +40,7 @@ export const INITIAL_REPLAY_STATE: ReplayState = {
   isPlaying: false,
   speedMs: 1000,
   sessionId: null,
+  isBlindMode: false,
 };
 
 type Listener = (state: ReplayState) => void;
@@ -97,8 +107,16 @@ export const replayStore = {
   },
 
   reset: () => {
-    currentState = { ...INITIAL_REPLAY_STATE };
+    // Kör mod tercihi replay oturumları arasında korunur: kullanıcı bunu bir
+    // kez açıp öyle çalışmayı seçiyor, her çıkışta kapanması can sıkıcı olurdu.
+    const { isBlindMode } = currentState;
+    currentState = { ...INITIAL_REPLAY_STATE, isBlindMode };
     pendingSession = null;
+    listeners.forEach((listener) => listener(currentState));
+  },
+
+  toggleBlindMode: () => {
+    currentState = { ...currentState, isBlindMode: !currentState.isBlindMode };
     listeners.forEach((listener) => listener(currentState));
   },
 };

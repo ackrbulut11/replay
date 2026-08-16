@@ -70,9 +70,12 @@ UI (React)
 - Kaydetme anında doğrulama (422 + hata listesi)
 - Hazır strateji şablonları
 
-## Faz 4.7 — Karşılaştırma Ekranı (sırada)
-- Aynı pencerede manuel sonuç vs strateji sonucu
-- "Şu 3 noktada erken çıkmışsın" tipi fark analizi
+## Faz 4.7 — Karşılaştırma ve Manuel Backtest Deneyimi ✅
+- Aynı pencerede manuel sonuç vs strateji sonucu (`engines/comparison.py`)
+- Portföy testi: çoklu sembol tek hesap, eş zamanlı pozisyon sınırı
+- İşlem listesi CSV dışa aktarımı
+- Replay klavye kısayolları (L/S/K) ve oturum özeti
+- Kör mod: sembol ve tarih gizli manuel test
 
 ## Faz 5 — Gelişmiş Analiz
 - Parameter Optimizer: parametre aralıklarının tüm kombinasyonlarını tarama

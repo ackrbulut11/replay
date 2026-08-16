@@ -9,8 +9,8 @@
     },
     {
       "name": "backend",
-      "runtimeExecutable": "backend/.venv/Scripts/python.exe",
-      "runtimeArgs": ["backend/main.py"],
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd backend && .venv\\Scripts\\python.exe main.py"],
       "port": 8000
     }
   ]

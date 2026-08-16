@@ -11,11 +11,24 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
+from app.data.loader import DataLoader, lookback_start_for_bars
 from app.database.models import JournalTrade, User
 from app.database.postgres import get_db
+from app.engines.comparison import (
+    ComparisonWindowError,
+    build_comparison,
+    manual_trades_payload,
+    session_window,
+)
+from app.engines.strategy_engine import (
+    DEFAULT_STARTING_BALANCE,
+    MultiTimeframeDataError,
+    StrategyEngine,
+)
 from app.journal.models import (
     PerformanceResponse,
     ReplaySessionCreateRequest,
@@ -23,12 +36,18 @@ from app.journal.models import (
     TradeCloseRequest,
     TradeOpenRequest,
     TradeResponse,
+    TradeStatus,
     TradeUpdateRequest,
 )
 from app.journal.trade_journal import TradeJournal
+from app.reports.performance_report import calculate_performance
 
 router = APIRouter(prefix="/journal", tags=["journal"])
 _journal = TradeJournal()
+# Karşılaştırma, stratejiyi aynı pencerede çalıştırmak için bunlara ihtiyaç
+# duyar; ikisi de durum tutmaz ve kendi önbelleklerine sahiptir.
+_strategy_engine = StrategyEngine()
+_loader = DataLoader()
 
 
 def get_owned_trade(
@@ -201,3 +220,114 @@ def delete_trade(
 ):
     """İşlemi siler."""
     _journal.delete_trade(db, trade)
+
+
+class SessionComparisonRequest(BaseModel):
+    """Manuel oturumu bir stratejiyle karşılaştırma isteği."""
+
+    strategy_id: str = Field(..., description="Karşılaştırılacak stratejinin kimliği")
+    provider: Optional[str] = Field(
+        None, description="Verilmezse oturumun işlemlerinden okunur"
+    )
+    starting_balance: Optional[float] = Field(
+        None, gt=0, description="Verilmezse oturumun kendi başlangıç bakiyesi kullanılır"
+    )
+
+
+@router.post("/sessions/{session_id}/compare")
+def compare_session_with_strategy(
+    session_id: str,
+    request: SessionComparisonRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manuel replay oturumunu bir stratejiyle AYNI PENCEREDE karşılaştırır.
+
+    "Elle 12 işlem yaptın, %8 kazandın; aynı dönemde stratejin 7 işlemle %14
+    kazanırdı" sorusunun cevabı. İki motor da vardı ama hiçbir yerde yan yana
+    konmuyordu (bkz. engines/comparison.py).
+
+    Strateji, oturumun ilk girişinden son çıkışına kadar olan aralıkta
+    çalıştırılır ve iki taraf da aynı performans raporundan, aynı başlangıç
+    bakiyesiyle geçer.
+    """
+    session = _journal.get_session(db, session_id, user_id=current_user.id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"Oturum bulunamadı: {session_id}")
+
+    strategy = _strategy_engine.get_strategy(db, request.strategy_id, current_user.id)
+    if strategy is None:
+        # Strateji sahiplik kapısı: 403 değil 404 (varlık sızmasın).
+        raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {request.strategy_id}")
+
+    trades = _journal.list_trades(
+        db, current_user.id, session_id=session_id, status=TradeStatus.CLOSED.value, limit=1000
+    )
+    if not trades:
+        raise HTTPException(
+            status_code=400,
+            detail="Bu oturumda kapanmış işlem yok; karşılaştırılacak bir sonuç bulunmuyor.",
+        )
+
+    try:
+        window = session_window(trades)
+    except ComparisonWindowError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    starting_balance = (
+        request.starting_balance or session.starting_balance or DEFAULT_STARTING_BALANCE
+    )
+    provider = request.provider or trades[0].provider or "binance"
+    symbol = session.symbol
+    timeframe = session.timeframe or trades[0].timeframe or "1h"
+
+    # Manuel taraf: oturumun kendi işlemleri.
+    manual_report = calculate_performance(
+        manual_trades_payload(trades), starting_balance=starting_balance
+    )
+
+    # Strateji tarafı: AYNI pencere, aynı sembol ve zaman dilimi.
+    try:
+        df = _loader.load_data(
+            provider_name=provider,
+            symbol=symbol,
+            timeframe=timeframe,
+            # Isınma payı: göstergelerin pencerenin başında hazır olması için
+            # geriye doğru fazladan veri istenir, değerlendirme yine pencerede.
+            start_time=lookback_start_for_bars(window[0], timeframe, 300),
+            end_time=window[1],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Piyasa verisi yüklenemedi: {e}")
+
+    if df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{symbol} için bu aralıkta veri bulunamadı ({window[0].date()} - {window[1].date()}).",
+        )
+
+    try:
+        multi_tf_data = _strategy_engine.load_multi_tf_data(
+            strategy=strategy, provider=provider, symbol=symbol,
+            loader=_loader, start_dt=window[0], end_dt=window[1],
+        )
+    except MultiTimeframeDataError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    try:
+        strategy_result = _strategy_engine.evaluate(
+            strategy=strategy,
+            df=df,
+            multi_tf_data=multi_tf_data or None,
+            starting_balance=starting_balance,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return build_comparison(
+        manual_report=manual_report,
+        strategy_result=strategy_result,
+        symbol=symbol,
+        timeframe=timeframe,
+        window=window,
+    )

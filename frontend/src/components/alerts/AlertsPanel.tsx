@@ -1,10 +1,11 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect } from 'react';
 import {
   Bell, Plus, Trash2, Power,
   TrendingUp, TrendingDown, Clock, GripVertical, X
 } from 'lucide-react';
 import { alertStore, useAlertStore, AlertItem } from '../../store/alertStore';
 import { watchlistStore, useWatchlistStore } from '../../store/watchlistStore';
+import { usePanelResize } from '../../hooks/usePanelResize';
 
 interface AlertsPanelProps {
   currentSymbol: string;
@@ -22,36 +23,12 @@ export default function AlertsPanel({
   const [watchlistState] = useWatchlistStore();
   const [alertState] = useAlertStore();
 
-  const isDraggingRef = useRef(false);
-  const dragStartXRef = useRef(0);
-  const dragStartWidthRef = useRef(watchlistState.panelWidth);
+  // Genişlik tutamacı — izleme listesi paneliyle aynı davranış.
+  const { panelRef, onResizePointerDown } = usePanelResize(watchlistState.panelWidth);
 
   useEffect(() => {
     alertStore.fetchAlerts();
   }, []);
-
-  // ---- Panel Resize Handlers ----
-  const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDraggingRef.current = true;
-    dragStartXRef.current = e.clientX;
-    dragStartWidthRef.current = watchlistState.panelWidth;
-
-    const onMouseMove = (me: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      const delta = dragStartXRef.current - me.clientX;
-      watchlistStore.setPanelWidth(dragStartWidthRef.current + delta);
-    };
-
-    const onMouseUp = () => {
-      isDraggingRef.current = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-  }, [watchlistState.panelWidth]);
 
   if (!watchlistState.isOpen || watchlistState.activeRightTool !== 'alerts') {
     return null;
@@ -96,22 +73,21 @@ export default function AlertsPanel({
        `style` yerine CSS değişkeniyle veriliyor — satır içi değer sınıfları
        ezer ve telefonda da masaüstü genişliğini dayatırdı. */
     <div
-      style={{ ['--panel-w' as string]: `${watchlistState.panelWidth}px` }}
+      ref={panelRef}
       /* Genişlik `vw` DEĞİL yüzde: panelin kabı ekrandan dar (solda gezinme
          rayı + dolgu), `86vw` o kabı aşıp sağ kenarından kırpılıyordu. */
-      /* `lg`de `relative` — bkz. WatchlistPanel: tutamacın kabı panelin
-         kendisi olmalı. Burada `backdrop-blur` tesadüfen aynı işi görüyordu,
-         ama filtreye bel bağlamak yerine açıkça yazılıyor. */
-      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] select-none flex-col overflow-hidden border-l border-line bg-canvas text-content-strong shadow-2xl backdrop-blur-md animate-fadeIn lg:relative lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
+      /* `--panel-w` ref üzerinden yazılıyor, `lg`de `relative`, tutamaç kenarın
+         üstünde ve `overflow-hidden` yok — hepsinin gerekçesi WatchlistPanel'de. */
+      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] select-none flex-col border-l border-line bg-canvas text-content-strong shadow-2xl backdrop-blur-md animate-fadeIn lg:relative lg:z-20 lg:w-[var(--panel-w,288px)] lg:max-w-none lg:shrink-0"
     >
-      {/* Resize handle (left edge) — fareyle sürüklenir; dokunmatikte panel
-          zaten tam boy açıldığı için gizli. */}
+      {/* Genişlik tutamacı — fareyle sürüklenir; dokunmatikte gizli. */}
       <div
-        onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors hidden lg:block"
+        onPointerDown={onResizePointerDown}
+        className="group absolute -left-[5px] top-0 bottom-0 z-30 hidden w-2.5 cursor-col-resize touch-none lg:block"
         title="Genişliği Ayarla"
       >
-        <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 transition-colors group-hover:bg-accent-600/50" />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100">
           <GripVertical className="w-3 h-3 text-content-muted group-hover:text-accent-300" />
         </div>
       </div>

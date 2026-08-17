@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useVisibleInterval } from '../../hooks/useVisibleInterval';
+import { usePanelResize } from '../../hooks/usePanelResize';
 import {
-  Plus, RefreshCw, ChevronDown, Flag, Trash2,
+  Plus, RefreshCw, ChevronDown, Flag,
   Sparkles, ArrowUpDown, GripVertical, StickyNote, X,
 } from 'lucide-react';
 import {
@@ -49,8 +50,6 @@ interface RowProps {
   isCurrent: boolean;
   onSelectSymbol: (symbol: string, provider: string) => void;
   onContextMenu: (e: React.MouseEvent, item: WatchlistItem) => void;
-  /** Satırın bulunduğu listeye göre doğru çıkarma işlemini yapar (bkz. panel). */
-  onRemove: () => void;
 }
 
 /**
@@ -61,7 +60,7 @@ interface RowProps {
  * dışarıdan sarmalayıcı tarafından verilir.
  */
 function WatchlistRow({
-  item, isCurrent, onSelectSymbol, onContextMenu, onRemove,
+  item, isCurrent, onSelectSymbol, onContextMenu,
   dragRef, dragStyle, dragProps, isDragging,
 }: RowProps & {
   dragRef?: (node: HTMLElement | null) => void;
@@ -119,30 +118,18 @@ function WatchlistRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 shrink-0">
-        <div className="flex flex-col items-end font-mono">
-          <span className="text-xs font-medium text-content-strong">
-            {formatPrice(item.lastPrice, item.provider)}
+      {/* Silme sağ tık menüsünden yapılır; burada buton yok, fiyat sağa dayanır. */}
+      <div className="flex flex-col items-end font-mono shrink-0">
+        <span className="text-xs font-medium text-content-strong">
+          {formatPrice(item.lastPrice, item.provider)}
+        </span>
+        {item.changePercent !== undefined && item.changePercent !== null ? (
+          <span className={`text-2xs font-medium ${isPositive ? 'text-profit-400' : 'text-loss-400'}`}>
+            {isPositive ? '+' : ''}{item.changePercent.toFixed(2)}%
           </span>
-          {item.changePercent !== undefined && item.changePercent !== null ? (
-            <span className={`text-2xs font-medium ${isPositive ? 'text-profit-400' : 'text-loss-400'}`}>
-              {isPositive ? '+' : ''}{item.changePercent.toFixed(2)}%
-            </span>
-          ) : (
-            <span className="text-2xs text-content-faint">—</span>
-          )}
-        </div>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="opacity-0 group-hover:opacity-100 touch:opacity-100 p-1 text-content-faint hover:text-loss-400 hover:bg-loss-950/40 rounded transition-all"
-          title="Listeden Çıkar"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        ) : (
+          <span className="text-2xs text-content-faint">—</span>
+        )}
       </div>
     </div>
   );
@@ -247,10 +234,8 @@ export default function WatchlistPanel({
     { mode: 'create'; afterItemId?: string } | { mode: 'rename'; sectionId: string } | null
   >(null);
 
-  // Resizable drag state
-  const isDraggingRef = useRef(false);
-  const dragStartXRef = useRef(0);
-  const dragStartWidthRef = useRef(0);
+  // Genişlik tutamacı — sürükleme sırasında store'a yazmaz (bkz. usePanelResize).
+  const { panelRef, onResizePointerDown } = usePanelResize(state.panelWidth);
 
   const activeGroup = state.lists.find((g) => g.id === state.activeListId) || state.lists[0];
 
@@ -281,30 +266,6 @@ export default function WatchlistPanel({
   // sunucu hiç uykuya geçemiyor ve kullanıcı başına istek sınırı boşuna
   // tükeniyordu (bkz. hooks/useVisibleInterval).
   useVisibleInterval(() => watchlistStore.fetchQuotes(), 15000, [state.activeListId]);
-
-  // ---- Panel Resize Handlers ----
-  const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDraggingRef.current = true;
-    dragStartXRef.current = e.clientX;
-    dragStartWidthRef.current = state.panelWidth;
-
-    const onMouseMove = (me: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      // Panel is on the right; dragging left increases width
-      const delta = dragStartXRef.current - me.clientX;
-      watchlistStore.setPanelWidth(dragStartWidthRef.current + delta);
-    };
-
-    const onMouseUp = () => {
-      isDraggingRef.current = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-  }, [state.panelWidth]);
 
   const openContextMenu = useCallback((e: React.MouseEvent, item: WatchlistItem | null) => {
     e.preventDefault();
@@ -338,17 +299,6 @@ export default function WatchlistPanel({
     } else {
       setSortField(field);
       setSortAsc(true);
-    }
-  };
-
-  const removeItemFromActiveList = (item: WatchlistItem) => {
-    // Türetilmiş piyasa listelerinde (BIST/NASDAQ/...) satır Favoriler'den
-    // gelir; oradan çıkarmak gerekir, yoksa liste bir sonraki türetmede geri gelir.
-    const isEditable = watchlistStore.editableLists().some((l) => l.id === state.activeListId);
-    if (isEditable) {
-      watchlistStore.removeSymbolFromList(state.activeListId, item.symbol, item.provider);
-    } else {
-      watchlistStore.removeSymbol(item.symbol, item.provider);
     }
   };
 
@@ -396,11 +346,15 @@ export default function WatchlistPanel({
        sınıfları ezerdi, yani sürüklenerek ayarlanan masaüstü genişliği
        telefonda da uygulanır ve bu düzeltme hiç çalışmazdı. */
     <div
-      style={{ ['--panel-w' as string]: `${state.panelWidth}px` }}
+      ref={panelRef}
       /* Genişlik `vw` DEĞİL yüzde: panelin kabı ekrandan dar (solda gezinme
          rayı + dolgu), `86vw` o kabı aşıp sağ kenarından kırpılıyordu.
          Kalan %14 grafiği gösterir — panelin üste binen bir katman olduğu
          böylece görünür. */
+      /* `--panel-w` React'in `style` niteliğiyle değil ref üzerinden
+         yazılıyor (bkz. usePanelResize): sürükleme ortasına denk gelen bir
+         render niteliği eski genişlikle geri yazardı. Yedek değer ilk
+         boyama için. */
       /* `lg`de `static` DEĞİL `relative`: static bir kutu, içindeki mutlak
          konumlu tutamacın kabı olmaz — tutamaç panelin değil dıştaki
          `relative` grafik alanının sol kenarına yapışıyor ve panel
@@ -408,16 +362,22 @@ export default function WatchlistPanel({
          hata `backdrop-blur` sayesinde gizleniyordu (filtre kendi kabını
          yaratır). Tüm ofsetler 0 olduğu için `relative` yerleşimi
          değiştirmez. */
-      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] flex-col overflow-hidden border-l border-line bg-canvas shadow-2xl animate-slideInRight lg:relative lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
+      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] flex-col border-l border-line bg-canvas shadow-2xl animate-slideInRight lg:relative lg:z-20 lg:w-[var(--panel-w,288px)] lg:max-w-none lg:shrink-0"
     >
-      {/* Resize handle (left edge) — fareyle sürüklenir; dokunmatikte panel
-          zaten tam boy açıldığı için gizli. */}
+      {/* Genişlik tutamacı — fareyle sürüklenir; dokunmatikte panel zaten tam
+          boy açıldığı için gizli.
+
+          Kenarın ÜSTÜNE oturur (`-left-[5px]` + 10px genişlik): tamamen panelin
+          içindeyken imleç kenarın sağında kalıyor, tuttuğunuz yer ile taşınan
+          çizgi çakışmıyordu. Panelde `overflow-hidden` bu yüzden yok — tutamacın
+          dışarı taşan yarısını kırpardı. */}
       <div
-        onMouseDown={onResizeMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-30 group hover:bg-accent-600/30 transition-colors hidden lg:block"
+        onPointerDown={onResizePointerDown}
+        className="group absolute -left-[5px] top-0 bottom-0 z-30 hidden w-2.5 cursor-col-resize touch-none lg:block"
         title="Genişliği Ayarla"
       >
-        <div className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 transition-colors group-hover:bg-accent-600/50" />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100">
           <GripVertical className="w-3 h-3 text-content-muted group-hover:text-accent-300" />
         </div>
       </div>
@@ -587,7 +547,6 @@ export default function WatchlistPanel({
               }
               onSelectSymbol={onSelectSymbol}
               onContextMenu={openContextMenu}
-              onRemove={() => removeItemFromActiveList(item)}
             />
           ))
         ) : (
@@ -603,7 +562,6 @@ export default function WatchlistPanel({
                   }
                   onSelectSymbol={onSelectSymbol}
                   onContextMenu={openContextMenu}
-                  onRemove={() => removeItemFromActiveList(item)}
                 />
               ))}
             </SortableContext>

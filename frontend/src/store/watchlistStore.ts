@@ -128,6 +128,10 @@ const DEFAULT_LISTS: WatchlistGroup[] = [
 const LOCAL_STORAGE_KEY = 'replay_watchlists_v2';
 const DEFAULT_PANEL_WIDTH = 288;
 
+/** Genişlik sınırları: sürükleme tutamacı (bkz. usePanelResize) da bunları kullanır. */
+export const PANEL_MIN_WIDTH = 220;
+export const PANEL_MAX_WIDTH = 480;
+
 /**
  * Ensures strict 1-to-1 equivalence between Favoriler and Market Lists (BIST, NASDAQ, Kripto, Forex):
  */
@@ -436,7 +440,7 @@ export const watchlistStore = {
   },
 
   setPanelWidth: (width: number) => {
-    const clamped = Math.max(220, Math.min(480, width));
+    const clamped = Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, width));
     applyState({ panelWidth: clamped });
   },
 

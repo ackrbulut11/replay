@@ -67,8 +67,9 @@ function WatchlistContextMenu({
     : [];
   const isCompared = symbolItem ? compareStore.isCompared(symbolItem.symbol, symbolItem.provider) : false;
   const isMarked = !!symbolItem?.markColor;
-  // Türetilmiş piyasa listelerinden satır çıkarılamaz (içerik Favoriler'den üretilir).
-  const canRemoveFromList = !!symbolItem && lists.some((l) => l.id === listId);
+  // Türetilmiş piyasa listeleri (BIST/NASDAQ/...) Favoriler'den üretilir; oradaki
+  // bir satır yalnızca Favoriler'den çıkarılınca gerçekten kaybolur.
+  const isEditableList = lists.some((l) => l.id === listId);
 
   // Ölçüldükten sonra ekran dışına taşmayacak şekilde yerleştir.
   useLayoutEffect(() => {
@@ -327,14 +328,18 @@ function WatchlistContextMenu({
         <span>Sembol ekle</span>
       </button>
 
-      {canRemoveFromList && symbolItem && (
+      {symbolItem && (
         <>
           <div className="h-px bg-white/[0.08] my-1.5" />
           <button
             type="button"
             className={`${itemClass} text-loss-400 hover:bg-loss-500/10`}
             onClick={() => {
-              watchlistStore.removeSymbolFromList(listId, symbolItem.symbol, symbolItem.provider);
+              if (isEditableList) {
+                watchlistStore.removeSymbolFromList(listId, symbolItem.symbol, symbolItem.provider);
+              } else {
+                watchlistStore.removeSymbol(symbolItem.symbol, symbolItem.provider);
+              }
               onClose();
             }}
           >

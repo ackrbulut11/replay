@@ -680,6 +680,34 @@ class DataLoader:
 
         return df
 
+    def _retention_clamped_start(
+        self, provider_name: str, timeframe: str, start_time: datetime, end_time: datetime
+    ) -> datetime:
+        """
+        İstenen başlangıcı, retention tavanının SAKLAYABİLECEĞİ en eskiye çeker.
+
+        RULES.md #24: her sembol+dilim için tutulan mum sayısı sabittir. İstenen
+        aralık bu tavandan genişse fazlalık zaten indirildikten hemen sonra
+        `_prune_to_retention` tarafından siliniyordu — yani sağlayıcıdan çekilen
+        sayfaların bir kısmı baştan çöpe gidiyordu. En ağır örnek Binance 1dk:
+        `/data`'nın varsayılan aralığı 182 gün = 262.080 mum, RETENTION_1M ise
+        100.000 — her soğuk yükleme 262 sayfa indirip 162.000 mumu anında
+        atıyordu. 1s'te de 3 yıl = 26.280 mum istenip 20.000'i saklanıyordu.
+
+        Kapalı piyasalarda takvim süresi mum sayısına eşit olmadığı için aralık
+        `calendar_stretch` ile genişletilir: kırpma asla tavanın ALTINA inmemeli,
+        yalnızca boşa indirmeyi engellemelidir.
+        """
+        limit = self._retention_limit(timeframe)
+        delta = TIMEFRAME_DELTAS.get(timeframe)
+        if limit is None or delta is None:
+            return start_time
+
+        max_span = delta * int(limit * calendar_stretch(provider_name, timeframe))
+        if end_time - start_time <= max_span:
+            return start_time
+        return max(end_time - max_span, WINDOW_MIN_START)
+
     def _prune_to_retention(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """RULES.md #24-27: her zaman dilimi için ham veriyi sınırsız biriktirmez."""
         limit = self._retention_limit(timeframe)
@@ -718,6 +746,14 @@ class DataLoader:
                 except Exception as e:
                     print(f"Warning: Failed to save resampled 4h cache: {e}")
             return df_4h
+
+        # Retention tavanının ötesindeki geçmişi İSTEMEDEN önce kırp: aşağıdaki
+        # bütün yollar (soğuk indirme, önek tamamlama, kapsama kontrolü) bu
+        # kırpılmış başlangıcı kullanır, böylece indirilip anında silinecek
+        # sayfalar hiç istenmez.
+        start_time = self._retention_clamped_start(
+            provider_name, timeframe, start_time, end_time
+        )
 
         cache_path = self._get_cache_path(provider_name, symbol, timeframe)
         file_lock = self._get_file_lock(cache_path)

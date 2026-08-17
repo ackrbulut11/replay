@@ -5,6 +5,7 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
 from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
 from app.auth.router import router as auth_router
@@ -119,6 +120,15 @@ origins = [
 ]
 if settings.FRONTEND_URL and settings.FRONTEND_URL not in origins:
     origins.append(settings.FRONTEND_URL)
+
+# Yanıt sıkıştırması. Piyasa uçları JSON mum dizisi döndürüyor ve bu diziler
+# büyük: 20.000 mumluk bir 1s yanıtı ~2,4 MB, 100.000 mumluk bir 5dk yanıtı
+# ~12 MB. Mumlar birbirine çok benzeyen kısa sayı dizileri olduğu için gzip
+# bunları ~10 katı sıkıştırır. Render ile tarayıcı arasındaki bu aktarım,
+# önbellek tamamen sıcakken bile "veri yükleniyor" süresinin büyük kısmıydı.
+#
+# `minimum_size`: küçük JSON yanıtlarını sıkıştırmak kazandırmaz, CPU harcar.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,

@@ -155,5 +155,65 @@ class TestCachedFrameNormalization(unittest.TestCase):
         self.assertEqual(raw["timestamp"].iloc[0], before)
 
 
+class TestRetentionClampedRequest(unittest.TestCase):
+    """
+    Retention'in SAKLAYAMAYACAGI gecmis, saglayicidan hic ISTENMEMELI.
+
+    Regresyon: /data'nin varsayilan araligi retention tavaninin cok
+    ustundeydi (Binance 1dk: 182 gun = 262.080 mum, RETENTION_1M = 100.000).
+    Fazlalik indiriliyor, birlestirmeden hemen sonra _prune_to_retention
+    tarafindan siliniyordu — yani her soguk yukleme 160'tan fazla sayfayi
+    bosuna cekiyordu.
+    """
+
+    RETENTION = 50
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp()
+        self.loader = DataLoader()
+        self.loader.project_root = self.tmp
+        self.loader._retention_limit = lambda timeframe: self.RETENTION
+        self.end = datetime(2024, 6, 1)
+        self.provider = CountingProvider(history_start=datetime(2000, 1, 1))
+        self.loader.providers["binance"] = self.provider
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_provider_is_not_asked_beyond_retention(self):
+        self.loader.load_data(
+            provider_name="binance", symbol="TEST", timeframe="1d",
+            start_time=self.end - timedelta(days=400), end_time=self.end,
+        )
+        self.assertTrue(self.provider.calls)
+        asked_start, _ = self.provider.calls[0]
+        # Kripto icin takvim esneme katsayisi 1.0: tavan tam RETENTION gundur.
+        self.assertGreaterEqual(
+            asked_start, self.end - timedelta(days=self.RETENTION + 1),
+            "retention'in saklayamayacagi gecmis saglayicidan istendi",
+        )
+
+    def test_request_within_retention_is_untouched(self):
+        start = self.end - timedelta(days=10)
+        self.loader.load_data(
+            provider_name="binance", symbol="TEST", timeframe="1d",
+            start_time=start, end_time=self.end,
+        )
+        self.assertEqual(self.provider.calls[0][0], start)
+
+    def test_closed_market_stretch_widens_the_clamp(self):
+        """
+        Hisse senedinde 50 mum 50 TAKVIM gunu degildir; kirpma tavanin
+        altina inmemeli, yoksa istenen mum sayisi hicbir zaman dolmaz.
+        """
+        crypto = self.loader._retention_clamped_start(
+            "binance", "1d", self.end - timedelta(days=400), self.end
+        )
+        equity = self.loader._retention_clamped_start(
+            "bist", "1d", self.end - timedelta(days=400), self.end
+        )
+        self.assertLess(equity, crypto)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,10 @@ import {
   Eraser,
   ArrowUpRight,
   ArrowDownRight,
+  Pencil,
+  Highlighter,
 } from 'lucide-react';
+import { TEMP_DRAWING_MS } from './types';
 import type { DrawingTool } from './types';
 
 function ParallelChannelIcon() {
@@ -27,6 +30,28 @@ function ParallelChannelIcon() {
       <line x1="3" y1="8" x2="19" y2="4" />
       <line x1="5" y1="20" x2="21" y2="16" />
       <line x1="4" y1="14" x2="20" y2="10" strokeDasharray="2.2 2.2" strokeWidth="1.25" />
+    </svg>
+  );
+}
+
+/** Üst üste binen yatay çizgiler — Fibonacci araçlarının ortak simgesi. */
+function FibIcon({ extension = false }: { extension?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+    >
+      <line x1="3" y1="5" x2="21" y2="5" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="3" y1="14" x2="21" y2="14" />
+      <line x1="3" y1="19" x2="21" y2="19" strokeDasharray={extension ? '2.5 2.5' : undefined} />
+      {/* Uzantıda ölçülen hareketi temsil eden köşegen; düzeltmede yok. */}
+      {extension && <line x1="5" y1="19" x2="19" y2="5" strokeWidth="1.1" strokeDasharray="2 2" />}
     </svg>
   );
 }
@@ -49,6 +74,14 @@ const tools: { tool: DrawingTool; icon: React.ReactNode; label: string }[] = [
   { tool: 'horizontalRay', icon: <Minus className="w-4 h-4" />, label: 'Yatay Işın' },
   { tool: 'rectangle', icon: <Square className="w-4 h-4" />, label: 'Dikdörtgen' },
   { tool: 'parallelChannel', icon: <ParallelChannelIcon />, label: 'Paralel Kanal' },
+  { tool: 'brush', icon: <Pencil className="w-4 h-4" />, label: 'Kalem (Serbest Çizim — kalıcı)' },
+  {
+    tool: 'brushTemp',
+    icon: <Highlighter className="w-4 h-4" />,
+    label: `Geçici Kalem (${Math.round(TEMP_DRAWING_MS / 1000)} sn sonra kendiliğinden silinir)`,
+  },
+  { tool: 'fibRetracement', icon: <FibIcon />, label: 'Fibonacci Düzeltme (Retracement)' },
+  { tool: 'fibExtension', icon: <FibIcon extension />, label: 'Fibonacci Uzantı (Extension)' },
 ];
 
 export default function DrawingToolbar({

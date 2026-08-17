@@ -3,6 +3,7 @@ import { apiRequest } from '../services/api';
 import { TOKEN_STORAGE_KEY } from '../context/AuthContext';
 import {
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY, DEFAULT_LINE_STYLE,
+  DEFAULT_BRUSH_COLOR, DEFAULT_FIB_RETRACEMENT_LEVELS, DEFAULT_FIB_EXTENSION_LEVELS,
 } from '../charts/drawings/types';
 import type { Drawing, DrawingTool, DrawingEditOptions } from '../charts/drawings/types';
 
@@ -135,6 +136,19 @@ export const DEFAULT_DRAWING_DEFAULTS: Record<DrawingTool, DrawingEditOptions> =
   horizontalRay: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE },
   rectangle: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE, fillOpacity: 0.16 },
   parallelChannel: { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE },
+  // Kalem elle çizildiği için biraz daha kalın; iki modu da aynı sarıyı kullanır.
+  brush: { color: DEFAULT_BRUSH_COLOR, lineWidth: 3, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE },
+  brushTemp: { color: DEFAULT_BRUSH_COLOR, lineWidth: 3, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE },
+  // Fibonacci'de `color` yalnızca tutamaç konturunda kullanılır; seviye
+  // çizgilerinin rengi fibLevels içinde tek tek tutulur.
+  fibRetracement: {
+    color: DEFAULT_DRAWING_COLOR, lineWidth: 1, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE,
+    fibLevels: DEFAULT_FIB_RETRACEMENT_LEVELS.map((l) => ({ ...l })),
+  },
+  fibExtension: {
+    color: DEFAULT_DRAWING_COLOR, lineWidth: 1, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE,
+    fibLevels: DEFAULT_FIB_EXTENSION_LEVELS.map((l) => ({ ...l })),
+  },
 };
 
 /** Çizimler "PROVIDER:SYMBOL" anahtarıyla saklanır (bkz. CandleChart currentDrawingKeyRef). */

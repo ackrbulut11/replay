@@ -11,6 +11,7 @@ import { DrawingsPrimitive, RECT_HANDLE_LABELS, POSITION_HANDLE_LABELS, CHANNEL_
 import {
   TOOL_CONFIG, generateDrawingId,
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY, DEFAULT_LINE_STYLE,
+  FREEHAND_TOOLS, TRANSIENT_TOOLS, TEMP_DRAWING_MS,
 } from './drawings/types';
 import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './drawings/types';
 import { logDrawingUsage } from '../services/chartAnalytics';
@@ -45,6 +46,16 @@ import CompareSettingsModal from './CompareSettingsModal';
 // aralığıyla (15 sn) aynı büyüklük mertebesinde ve gecikme kullanıcı için
 // fark edilir değil.
 const ALERT_CHECK_INTERVAL_MS = 30_000;
+
+/**
+ * Kalemle çizerken iki nokta arasındaki en küçük piksel mesafesi.
+ *
+ * Her fare hareketi kaydedilirse tek bir darbe yüzlerce nokta üretir; bu hem
+ * kaydedilen veriyi hem de her imleç hareketinde çalışan vuruş testini
+ * gereksiz yere şişirir. 3px, çizginin pürüzsüzlüğünü gözle görülür şekilde
+ * bozmayan en büyük değer.
+ */
+const FREEHAND_MIN_PX = 3;
 
 interface CandleData {
   time: number;
@@ -263,6 +274,15 @@ export default function CandleChart({
   const getPointFromPixelRef = useRef<((x: number, y: number, snap: boolean) => DrawingPoint | null) | null>(null);
   const applyDragRef = useRef<((drawingId: string, handleIndex: number, point: DrawingPoint) => Drawing | null) | null>(null);
   const persistDrawingsRef = useRef<((key: string, drawings: Drawing[]) => void) | null>(null);
+
+  // Kalem (serbest el): fare basılıyken biriken noktalar. null ise o an
+  // çizim yapılmıyor demektir.
+  const freehandRef = useRef<DrawingPoint[] | null>(null);
+  // Son eklenen noktanın pikseli — noktalar bu mesafeye göre seyreltilir.
+  const freehandLastPxRef = useRef<{ x: number; y: number } | null>(null);
+  const finishFreehandRef = useRef<(() => void) | null>(null);
+  // Geçici kalem çizimlerinin silme zamanlayıcıları (çizim id'si -> timer).
+  const tempTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const ctrlPressedRef = useRef(false);
@@ -845,6 +865,35 @@ export default function CandleChart({
   // Çizim tutamacı sürüklemesi için pencere düzeyinde fare dinleyicileri
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      // Kalem darbesi: noktalar biriktikçe çizgi anında güncellenir.
+      if (freehandRef.current && chartContainerRef.current && primitiveRef.current) {
+        const rect = chartContainerRef.current.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+
+        // Seyreltme: her piksel hareketi kaydedilirse yüzlerce noktalık,
+        // kaydedilmesi ve vuruş testi pahalı bir çizim çıkar.
+        const lastPx = freehandLastPxRef.current;
+        if (lastPx && Math.hypot(px - lastPx.x, py - lastPx.y) < FREEHAND_MIN_PX) return;
+
+        const point = getPointFromPixelRef.current?.(px, py, false);
+        if (!point) return;
+        freehandRef.current.push(point);
+        freehandLastPxRef.current = { x: px, y: py };
+
+        const settings = toolSettingsRef.current[activeToolRef.current];
+        primitiveRef.current.setPreview({
+          id: 'preview',
+          tool: activeToolRef.current,
+          points: [...freehandRef.current],
+          color: settings?.color ?? DEFAULT_DRAWING_COLOR,
+          lineWidth: settings?.lineWidth ?? DEFAULT_LINE_WIDTH,
+          opacity: settings?.opacity ?? DEFAULT_OPACITY,
+          lineStyle: settings?.lineStyle ?? DEFAULT_LINE_STYLE,
+        });
+        return;
+      }
+
       // Çizim handle sürükleme
       if (dragStateRef.current && chartContainerRef.current && primitiveRef.current) {
         isDraggingDrawingRef.current = true;
@@ -868,6 +917,11 @@ export default function CandleChart({
     };
 
     const handleMouseUp = () => {
+      if (freehandRef.current) {
+        finishFreehandRef.current?.();
+        return;
+      }
+
       // Çizim handle sürükleme bitişi
       if (dragStateRef.current) {
         persistDrawingsRef.current?.(currentDrawingKeyRef.current, drawingsRef.current);
@@ -896,16 +950,26 @@ export default function CandleChart({
     primitiveRef.current?.setPreview(null);
   }, []);
 
+  /** Yarım kalmış kalem darbesini kaydetmeden atar (Escape / araç değişimi). */
+  const abortFreehand = useCallback(() => {
+    if (!freehandRef.current) return;
+    freehandRef.current = null;
+    freehandLastPxRef.current = null;
+    primitiveRef.current?.setPreview(null);
+    chartRef.current?.applyOptions({ handleScroll: true, handleScale: true });
+  }, []);
+
   // Çizim setini kullanıcıya bağlı olarak sunucuda kalıcılaştırır. Cetvel
   // (ruler) her tıklamada zaten temizlenen geçici bir ölçüm aracı olduğu
   // için hiç kaydedilmez — aksi halde bir sonraki girişte anlamsız bir
   // ölçüm çizgisiyle karşılaşılır.
   const persistDrawings = useCallback((key: string, drawings: Drawing[]) => {
-    chartSettingsApi.setSymbolDrawings(key, drawings.filter(d => d.tool !== 'ruler'));
+    chartSettingsApi.setSymbolDrawings(key, drawings.filter(d => !TRANSIENT_TOOLS.has(d.tool)));
   }, [chartSettingsApi]);
   persistDrawingsRef.current = persistDrawings;
 
   const changeTool = useCallback((tool: DrawingTool) => {
+    abortFreehand();
     activeToolRef.current = tool;
     setActiveTool(tool);
     if (drawingsRef.current.some(d => d.tool === 'ruler')) {
@@ -919,10 +983,12 @@ export default function CandleChart({
       const settings = toolSettingsRef.current[tool] || { color: DEFAULT_DRAWING_COLOR, lineWidth: DEFAULT_LINE_WIDTH, opacity: DEFAULT_OPACITY, lineStyle: DEFAULT_LINE_STYLE };
       setEditOptions(settings);
     }
-  }, [cancelDrawing]);
+  }, [cancelDrawing, abortFreehand]);
 
   const clearAll = useCallback(() => {
     if (!window.confirm('Tüm çizimler silinecek. Emin misiniz?')) return;
+    tempTimersRef.current.forEach(clearTimeout);
+    tempTimersRef.current.clear();
     drawingsRef.current = [];
     primitiveRef.current?.setDrawings([]);
     currentPointsRef.current = [];
@@ -1032,6 +1098,7 @@ export default function CandleChart({
         opacity: drawing.opacity,
         lineStyle: drawing.lineStyle,
         fillOpacity: drawing.fillOpacity,
+        fibLevels: drawing.fibLevels,
       });
     }
   }, []);
@@ -1051,6 +1118,68 @@ export default function CandleChart({
     deselectDrawing();
   }, [deselectDrawing, persistDrawings]);
 
+  /** Geçici kalem çizimini TEMP_DRAWING_MS sonunda kendiliğinden siler. */
+  const scheduleTempRemoval = useCallback((drawingId: string) => {
+    const timer = setTimeout(() => {
+      tempTimersRef.current.delete(drawingId);
+      drawingsRef.current = drawingsRef.current.filter(d => d.id !== drawingId);
+      primitiveRef.current?.setDrawings(drawingsRef.current);
+      if (selectedDrawingRef.current?.id === drawingId) deselectDrawing();
+    }, TEMP_DRAWING_MS);
+    tempTimersRef.current.set(drawingId, timer);
+  }, [deselectDrawing]);
+
+  /** Kalem darbesini sonlandırır: kalıcı modda kaydeder, geçici modda sayacı başlatır. */
+  const finishFreehand = useCallback(() => {
+    const points = freehandRef.current;
+    freehandRef.current = null;
+    freehandLastPxRef.current = null;
+    primitiveRef.current?.setPreview(null);
+    // Kalem basılıyken kapatılan kaydırma/yakınlaştırma geri açılır.
+    chartRef.current?.applyOptions({ handleScroll: true, handleScale: true });
+
+    const tool = activeToolRef.current;
+    if (!points || points.length === 0 || !FREEHAND_TOOLS.has(tool)) return;
+
+    const settings = toolSettingsRef.current[tool] || {
+      color: DEFAULT_DRAWING_COLOR,
+      lineWidth: DEFAULT_LINE_WIDTH,
+      opacity: DEFAULT_OPACITY,
+      lineStyle: DEFAULT_LINE_STYLE,
+    };
+
+    const drawing: Drawing = {
+      id: generateDrawingId(),
+      tool,
+      points,
+      color: settings.color,
+      lineWidth: settings.lineWidth,
+      opacity: settings.opacity,
+      lineStyle: settings.lineStyle ?? DEFAULT_LINE_STYLE,
+    };
+
+    drawingsRef.current = [...drawingsRef.current, drawing];
+    primitiveRef.current?.setDrawings(drawingsRef.current);
+
+    if (TRANSIENT_TOOLS.has(tool)) {
+      scheduleTempRemoval(drawing.id);
+    } else {
+      const [drawingProvider, drawingSymbol] = currentDrawingKeyRef.current.split(':');
+      logDrawingUsage(tool, drawingSymbol, drawingProvider.toLowerCase());
+      persistDrawingsRef.current?.(currentDrawingKeyRef.current, drawingsRef.current);
+    }
+    // Araç seçili kalır: kalemle arka arkaya çizim yapılabilsin.
+  }, [scheduleTempRemoval]);
+  finishFreehandRef.current = finishFreehand;
+
+  useEffect(() => {
+    const timers = tempTimersRef.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      timers.clear();
+    };
+  }, []);
+
   const updateSelectedOptions = useCallback((opts: DrawingEditOptions) => {
     setEditOptions(opts);
     const sel = selectedDrawingRef.current;
@@ -1060,6 +1189,7 @@ export default function CandleChart({
       sel.opacity = opts.opacity;
       sel.lineStyle = opts.lineStyle;
       sel.fillOpacity = opts.fillOpacity;
+      sel.fibLevels = opts.fibLevels;
       drawingsRef.current = drawingsRef.current.map(d => d.id === sel.id ? sel : d);
       primitiveRef.current?.setDrawings(drawingsRef.current);
       persistDrawings(currentDrawingKeyRef.current, drawingsRef.current);
@@ -1398,6 +1528,10 @@ export default function CandleChart({
       }
 
       const tool = activeToolRef.current;
+      // Kalem tıklamayla değil sürüklemeyle çizilir (bkz. handleChartMouseDown);
+      // tıklama sayacına girerse noktalar hiç tamamlanmadan birikir.
+      if (FREEHAND_TOOLS.has(tool)) return;
+
       const config = TOOL_CONFIG[tool];
       if (!config) return;
 
@@ -1459,6 +1593,9 @@ export default function CandleChart({
           opacity: settings.opacity,
           lineStyle: settings.lineStyle ?? DEFAULT_LINE_STYLE,
           fillOpacity: settings.fillOpacity ?? 0.18,
+          // Her Fibonacci çizimi kendi seviye setini taşır; sonradan aracın
+          // varsayılanı değişse bile eski çizimler olduğu gibi kalır.
+          fibLevels: settings.fibLevels?.map((l) => ({ ...l })),
         };
 
         // Çizim tamamlandı: yarı saydam önizleme ("hayalet") her araçta
@@ -1466,14 +1603,14 @@ export default function CandleChart({
         // edip ancak bir sonraki çizimde siliniyor.
         primitive.setPreview(null);
 
-        if (tool !== 'ruler') {
+        if (!TRANSIENT_TOOLS.has(tool)) {
           // Cetvel geçici bir ölçüm aracı olduğu için istatistiklere dahil edilmez.
           const [drawingProvider, drawingSymbol] = currentDrawingKeyRef.current.split(':');
           logDrawingUsage(tool, drawingSymbol, drawingProvider.toLowerCase());
         }
         drawingsRef.current = [...drawingsRef.current, drawing];
         primitive.setDrawings(drawingsRef.current);
-        if (tool !== 'ruler') {
+        if (!TRANSIENT_TOOLS.has(tool)) {
           persistDrawingsRef.current?.(currentDrawingKeyRef.current, drawingsRef.current);
         }
         currentPointsRef.current = [];
@@ -1577,6 +1714,9 @@ export default function CandleChart({
         color: settings ? settings.color : 'rgba(59, 130, 246, 0.5)',
         lineWidth: settings ? settings.lineWidth : DEFAULT_LINE_WIDTH,
         opacity: settings ? settings.opacity : DEFAULT_OPACITY,
+        // Fibonacci'de seviyeler çizim bitmeden de görünmeli, yoksa ikinci
+        // tıklamaya kadar yalnızca boş bir çizgi görünür.
+        fibLevels: settings?.fibLevels,
       });
     });
 
@@ -1602,6 +1742,24 @@ export default function CandleChart({
         drawingsRef.current = drawingsRef.current.filter(d => d.tool !== 'ruler');
         primitive.setDrawings(drawingsRef.current);
         primitive.setPreview(null);
+      }
+
+      // Kalem: tıklamayla değil, basılı tutup sürükleyerek çizilir. Grafiğin
+      // kendi kaydırması bu sırada kapatılır, aksi halde çizim yerine grafik
+      // kayar.
+      if (FREEHAND_TOOLS.has(activeToolRef.current) && chartContainerRef.current) {
+        const rect = chartContainerRef.current.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const point = getPointFromPixelRef.current?.(px, py, false);
+        if (point) {
+          freehandRef.current = [point];
+          freehandLastPxRef.current = { x: px, y: py };
+          chartRef.current?.applyOptions({ handleScroll: false, handleScale: false });
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
       }
 
       // Pointer modundaysak ve imleç bir çizim/tutamaç üzerindeyse sürüklemeyi (drag) başlat
@@ -1643,7 +1801,9 @@ export default function CandleChart({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (dragStateRef.current) {
+        if (freehandRef.current) {
+          abortFreehand();
+        } else if (dragStateRef.current) {
           dragStateRef.current = null;
           primitive.setPreview(null);
         } else if (activeToolRef.current !== 'pointer') {

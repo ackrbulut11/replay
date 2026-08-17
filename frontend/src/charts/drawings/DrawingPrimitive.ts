@@ -10,8 +10,12 @@ import type {
   Time,
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
-import type { Drawing, DrawingLineStyle, DrawingPoint } from './types';
-import { HIT_THRESHOLD, LINE_STYLE_CAPABLE_TOOLS, MIN_DOTTED_LINE_WIDTH } from './types';
+import type { Drawing, DrawingLineStyle, DrawingPoint, FibLevel } from './types';
+import {
+  HIT_THRESHOLD, LINE_STYLE_CAPABLE_TOOLS, MIN_DOTTED_LINE_WIDTH,
+  FREEHAND_TOOLS, FIB_TOOLS, FIB_ANCHOR_COLOR,
+  DEFAULT_FIB_RETRACEMENT_LEVELS, DEFAULT_FIB_EXTENSION_LEVELS,
+} from './types';
 
 export interface CandleData {
   time: number;
@@ -27,6 +31,19 @@ export interface PixelPoint {
   y: number;
 }
 
+/**
+ * Ekrana düşmüş tek bir Fibonacci seviyesi.
+ *
+ * `y` fiyat ölçeğinden geçirilerek hesaplanır (bkz. `_fibLinesFor`); piksel
+ * uzayında oranlayarak türetilmez, çünkü logaritmik ölçekte fiyat ile piksel
+ * arasındaki ilişki doğrusal değildir ve seviyeler kayardı.
+ */
+export interface PixelFibLine {
+  y: number;
+  color: string;
+  label: string;
+}
+
 export interface PixelDrawing {
   id?: string;
   tool: Drawing['tool'];
@@ -37,6 +54,7 @@ export interface PixelDrawing {
   lineStyle?: DrawingLineStyle;
   fillOpacity?: number;
   logicalPoints?: DrawingPoint[];
+  fibLines?: PixelFibLine[];
 }
 
 /**
@@ -176,6 +194,10 @@ function getHandlePositions(d: PixelDrawing): PixelPoint[] {
   if (d.tool === 'rectangle' || d.tool === 'ruler') return getRectHandlePositions(d);
   if (d.tool === 'longPosition' || d.tool === 'shortPosition') return getPositionHandlePositions(d);
   if (d.tool === 'parallelChannel') return getChannelHandlePositions(d);
+  // Serbest el çiziminde yüzlerce nokta var; her birine tutamaç koymak hem
+  // ekranı doldurur hem de vuruş testini anlamsızlaştırır. Kalem seçilebilir
+  // ve silinebilir, ama noktaları tek tek taşınmaz.
+  if (FREEHAND_TOOLS.has(d.tool)) return [];
   return d.points;
 }
 
@@ -188,6 +210,44 @@ function formatNumberTR(val: number, decimals: number = 2): string {
     return intPart;
   }
   return intPart;
+}
+
+/** Etiketlerde okunabilir ondalık sayısı: ucuz paritelerde 2 hane yetmiyor. */
+function priceDecimalsFor(price: number): number {
+  const abs = Math.abs(price);
+  if (abs >= 100) return 2;
+  if (abs >= 1) return 4;
+  return 6;
+}
+
+/**
+ * Bir Fibonacci seviyesinin fiyatı.
+ *
+ * Düzeltme iki noktayla ölçülür: oran 0 hareketin **bitişine** (p1), oran 1
+ * başlangıcına (p0) denk gelir — dipten tepeye çizildiğinde %0'ın tepede
+ * çıkması beklenen davranıştır.
+ *
+ * Uzantı trend tabanlıdır: A→B hareketinin boyu C noktasından ileri taşınır.
+ */
+export function fibLevelPrice(
+  tool: Drawing['tool'],
+  points: DrawingPoint[],
+  level: number,
+): number | null {
+  if (tool === 'fibRetracement') {
+    if (points.length < 2) return null;
+    return points[1].price + (points[0].price - points[1].price) * level;
+  }
+  if (tool === 'fibExtension') {
+    if (points.length < 3) return null;
+    return points[2].price + (points[1].price - points[0].price) * level;
+  }
+  return null;
+}
+
+function fibLevelLabel(level: number, price: number): string {
+  const pct = formatNumberTR(level * 100, 1);
+  return `${pct}%  ${formatNumberTR(price, priceDecimalsFor(price))}`;
 }
 
 function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -304,6 +364,8 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
   private _selectedId: string | null = null;
   private _hoveredId: string | null = null;
   private _candles: CandleData[] = [];
+  /** Fibonacci seviyeleri sağ kenara kadar uzatılır; genişlik draw() sırasında alınır. */
+  private _width = 0;
 
   setDrawings(drawings: PixelDrawing[]) {
     this._drawings = drawings;
@@ -326,7 +388,8 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
   }
 
   draw(target: CanvasRenderingTarget2D): void {
-    target.useMediaCoordinateSpace(({ context: ctx }) => {
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      this._width = mediaSize.width;
       // Her çizim kendi save/restore çiftiyle tam izole edilir: bir çizimin
       // rengi, dash deseni veya globalAlpha'sı bir sonrakine sızamaz.
       for (const d of this._drawings) {
@@ -353,12 +416,18 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
   private _render(ctx: CanvasRenderingContext2D, d: PixelDrawing, isPreview: boolean, showHandles: boolean) {
     if (d.points.length < 1) return;
 
-    const lw = isPreview ? 1.5 : d.lineWidth;
+    // Serbest el çizimde "önizleme" aslında kullanıcının o an çizmekte olduğu
+    // çizginin kendisidir — ince kesikli bir taslağa dönüştürülürse kalem
+    // bırakılana kadar çizginin gerçek hali görünmez.
+    const isFreehand = FREEHAND_TOOLS.has(d.tool);
+    const isSketch = isPreview && !isFreehand;
+
+    const lw = isSketch ? 1.5 : d.lineWidth;
     // Önizleme her zaman kesikli bir "taslak" olarak gösterilir. Kalıcı çizimde
     // kullanıcının seçtiği stil yalnızca çizgi tabanlı araçlarda geçerlidir;
     // cetvel/pozisyon araçları kendi sabit stilini kullandığı için 'solid'e
     // sabitlenir, aksi halde bir önceki çizimin deseni onlara sızar.
-    const effectiveStyle: DrawingLineStyle = isPreview
+    const effectiveStyle: DrawingLineStyle = isSketch
       ? 'dashed'
       : (LINE_STYLE_CAPABLE_TOOLS.has(d.tool) ? (d.lineStyle ?? 'solid') : 'solid');
     applyLineStyle(ctx, d.color, lw, effectiveStyle);
@@ -378,6 +447,96 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
         ctx.moveTo(d.points[0].x, d.points[0].y);
         ctx.lineTo(d.points[0].x + 99999, d.points[0].y);
         ctx.stroke();
+        break;
+      }
+
+      case 'brush':
+      case 'brushTemp': {
+        // Tek noktalık dokunuş da görünmeli: sıfır uzunluklu bir çizgi hiçbir
+        // şey çizmediği için o durumda küçük bir daire konur.
+        if (d.points.length === 1) {
+          ctx.beginPath();
+          ctx.arc(d.points[0].x, d.points[0].y, Math.max(1, lw / 2), 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        // Kalemin tutamacı yok (bkz. getHandlePositions), bu yüzden seçili ya
+        // da imlecin altındaki darbe ancak çevresindeki hâle ile belli olur.
+        if (showHandles) {
+          ctx.save();
+          ctx.setLineDash([]);
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+          ctx.lineWidth = lw + 6;
+          ctx.beginPath();
+          ctx.moveTo(d.points[0].x, d.points[0].y);
+          for (let i = 1; i < d.points.length; i++) {
+            ctx.lineTo(d.points[i].x, d.points[i].y);
+          }
+          ctx.stroke();
+          ctx.restore();
+          applyLineStyle(ctx, d.color, lw, effectiveStyle);
+        }
+
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(d.points[0].x, d.points[0].y);
+        for (let i = 1; i < d.points.length; i++) {
+          ctx.lineTo(d.points[i].x, d.points[i].y);
+        }
+        ctx.stroke();
+        break;
+      }
+
+      case 'fibRetracement':
+      case 'fibExtension': {
+        if (d.points.length < 2) return;
+
+        // Uçları birleştiren yardımcı çizgi: hangi hareketin ölçüldüğünü
+        // gösterir, seviye çizgilerinden ayrılsın diye her zaman kesikli.
+        ctx.save();
+        applyLineStyle(ctx, FIB_ANCHOR_COLOR, Math.max(1, lw - 0.5), 'dashed');
+        ctx.beginPath();
+        ctx.moveTo(d.points[0].x, d.points[0].y);
+        for (let i = 1; i < d.points.length; i++) {
+          ctx.lineTo(d.points[i].x, d.points[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        const lines = d.fibLines ?? [];
+        if (lines.length === 0) break;
+
+        const startX = Math.min(...d.points.map((p) => p.x));
+        const maxPointX = Math.max(...d.points.map((p) => p.x));
+        // Seviyeler sağ kenara kadar uzatılır (fiyat oraya gelmeden önce
+        // seviyeyi görmek gerekir); genişlik bilinmiyorsa hareketin sağına
+        // makul bir pay eklenir.
+        const endX = this._width > 0 ? this._width : maxPointX + 240;
+
+        for (const line of lines) {
+          if (!isFinite(line.y)) continue;
+          applyLineStyle(ctx, line.color, lw, effectiveStyle);
+          ctx.beginPath();
+          ctx.moveTo(startX, line.y);
+          ctx.lineTo(endX, line.y);
+          ctx.stroke();
+
+          ctx.save();
+          ctx.setLineDash([]);
+          ctx.font = '10px monospace';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          const textW = ctx.measureText(line.label).width;
+          // Etiket zeminini koyulaştır — mumların üstünde gri metin okunmuyor.
+          ctx.fillStyle = 'rgba(9, 13, 22, 0.72)';
+          ctx.fillRect(startX + 3, line.y - 14, textW + 6, 13);
+          ctx.fillStyle = line.color;
+          ctx.fillText(line.label, startX + 6, line.y - 3);
+          ctx.restore();
+        }
         break;
       }
 
@@ -772,6 +931,28 @@ function getDrawingSegments(d: PixelDrawing): [PixelPoint, PixelPoint][] {
     case 'trendLine':
       segs.push([d.points[0], d.points[1]]);
       break;
+    case 'brush':
+    case 'brushTemp': {
+      // Serbest el çizimin gövdesi ardışık noktaların oluşturduğu poligondur;
+      // tutamacı olmadığı için seçilebilmesinin tek yolu budur.
+      for (let i = 1; i < d.points.length; i++) {
+        segs.push([d.points[i - 1], d.points[i]]);
+      }
+      break;
+    }
+    case 'fibRetracement':
+    case 'fibExtension': {
+      // Hem uçları birleştiren yardımcı çizgi hem de seviye çizgileri tıklanabilir.
+      for (let i = 1; i < d.points.length; i++) {
+        segs.push([d.points[i - 1], d.points[i]]);
+      }
+      const startX = Math.min(...d.points.map((p) => p.x));
+      for (const line of d.fibLines ?? []) {
+        if (!isFinite(line.y)) continue;
+        segs.push([{ x: startX, y: line.y }, { x: startX + 99999, y: line.y }]);
+      }
+      break;
+    }
     case 'rectangle':
     case 'ruler': {
       const x1 = Math.min(d.points[0].x, d.points[1].x);
@@ -991,7 +1172,30 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
       lineStyle: d.lineStyle,
       fillOpacity: d.fillOpacity,
       logicalPoints: d.points,
+      fibLines: this._fibLinesFor(d),
     };
+  }
+
+  /**
+   * Fibonacci seviyelerini fiyat ölçeğinden geçirip piksel karşılıklarını
+   * üretir. Ölçek dönüşümü burada yapılır ki logaritmik ölçekte de doğru
+   * yerde dursunlar (bkz. PixelFibLine).
+   */
+  private _fibLinesFor(d: Drawing): PixelFibLine[] | undefined {
+    if (!FIB_TOOLS.has(d.tool) || !this._series) return undefined;
+    const levels: FibLevel[] = d.fibLevels ?? (
+      d.tool === 'fibRetracement' ? DEFAULT_FIB_RETRACEMENT_LEVELS : DEFAULT_FIB_EXTENSION_LEVELS
+    );
+    const lines: PixelFibLine[] = [];
+    for (const level of levels) {
+      if (!level.enabled) continue;
+      const price = fibLevelPrice(d.tool, d.points, level.value);
+      if (price === null || !isFinite(price)) continue;
+      const y = this._series.priceToCoordinate(price);
+      if (y === null) continue;
+      lines.push({ y, color: level.color, label: fibLevelLabel(level.value, price) });
+    }
+    return lines;
   }
 
   get drawings(): Drawing[] { return this._drawings; }

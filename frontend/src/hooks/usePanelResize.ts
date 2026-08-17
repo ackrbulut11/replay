@@ -25,16 +25,32 @@ function clampWidth(width: number): number {
 }
 
 export function usePanelResize(storedWidth: number) {
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const widthRef = useRef(storedWidth);
+  widthRef.current = storedWidth;
 
-  // Store'daki genişlik (ilk boyama, başka bir panelde yapılan değişiklik)
-  // panele buradan uygulanır; boyama öncesi çalışsın diye layout effect.
+  /**
+   * Callback ref: genişlik, düğüm DOM'a bağlandığı anda yazılır.
+   *
+   * Yalnızca layout effect yetmiyor. Paneller App içinde her zaman takılı
+   * duruyor, kapalıyken yalnızca `null` render ediyorlar; diğer araca geçilince
+   * düğüm yeniden oluşur ama `storedWidth` değişmediği için effect tetiklenmez
+   * ve panel, sürüklenerek ayarlanmış genişliği unutup sınıftaki yedek değere
+   * (288px) dönerdi.
+   */
+  const panelRef = useCallback((node: HTMLDivElement | null) => {
+    nodeRef.current = node;
+    node?.style.setProperty('--panel-w', `${widthRef.current}px`);
+  }, []);
+
+  // Store'daki genişlik değişince (ör. diğer panelde sürüklendi) uygulanır;
+  // boyama öncesi çalışsın diye layout effect.
   useLayoutEffect(() => {
-    panelRef.current?.style.setProperty('--panel-w', `${storedWidth}px`);
+    nodeRef.current?.style.setProperty('--panel-w', `${storedWidth}px`);
   }, [storedWidth]);
 
   const onResizePointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
-    const panel = panelRef.current;
+    const panel = nodeRef.current;
     if (!panel || e.button !== 0) return;
     e.preventDefault();
 
@@ -48,10 +64,16 @@ export function usePanelResize(storedWidth: number) {
       panel.style.setProperty('--panel-w', `${width}px`);
     };
 
-    // Fare panelden hızlıca çıkıp grafiğin üstüne kaçtığında da olaylar
-    // gelmeye devam etsin diye işaretçi tutamaca kilitlenir.
+    // Fare panelden hızlıca çıkıp grafiğin (canvas) üstüne kaçtığında da
+    // olaylar gelmeye devam etsin diye işaretçi tutamaca kilitlenir. Dinleyiciler
+    // yine de `window`da: kilitlenen olaylar da oraya kabarır ve kilit kurulamazsa
+    // sürükleme çalışmaya devam eder.
     const handle = e.currentTarget;
-    handle.setPointerCapture(e.pointerId);
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      /* işaretçi artık etkin değilse önemsiz */
+    }
 
     // Sürükleme boyunca imleç her yerde aynı kalsın ve metin seçilmesin.
     const previousCursor = document.body.style.cursor;
@@ -70,10 +92,14 @@ export function usePanelResize(storedWidth: number) {
         cancelAnimationFrame(frame);
         paint();
       }
-      handle.releasePointerCapture(e.pointerId);
-      handle.removeEventListener('pointermove', onPointerMove);
-      handle.removeEventListener('pointerup', onPointerUp);
-      handle.removeEventListener('pointercancel', onPointerUp);
+      try {
+        handle.releasePointerCapture(e.pointerId);
+      } catch {
+        /* kilit hiç kurulmamış olabilir */
+      }
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousSelect;
 
@@ -82,10 +108,9 @@ export function usePanelResize(storedWidth: number) {
       watchlistStore.setPanelWidth(width);
     };
 
-    // İşaretçi kilitlendiği için olaylar `window`a değil tutamaca gelir.
-    handle.addEventListener('pointermove', onPointerMove);
-    handle.addEventListener('pointerup', onPointerUp);
-    handle.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
   }, []);
 
   return { panelRef, onResizePointerDown };

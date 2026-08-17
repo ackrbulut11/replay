@@ -102,7 +102,9 @@ TradingResearchPlatform/
 │   │   │   └── userStore.ts          # STUB
 │   │   │
 │   │   ├── hooks/
-│   │   │   └── useDraggablePanel.ts   # yüzen panelleri sürüklenebilir yapar
+│   │   │   ├── useDraggablePanel.ts   # yüzen panelleri sürüklenebilir yapar
+│   │   │   ├── usePanelResize.ts      # sağ yan panelin genişlik tutamacı
+│   │   │   └── useVisibleInterval.ts  # yalnızca sekme görünürken periyodik iş
 │   │   │
 │   │   ├── types/
 │   │   │

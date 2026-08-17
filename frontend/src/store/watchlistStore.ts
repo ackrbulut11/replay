@@ -408,12 +408,18 @@ export const watchlistStore = {
     listeners.forEach((listener) => listener(currentState));
   },
 
+  /**
+   * Yan paneli açar/kapatır — hangi araç açıksa onu kapatır.
+   *
+   * Eskiden yalnızca izleme listesi için "açık" sayıyordu: alarmlar açıkken
+   * kapatma düğmesi paneli kapatmak yerine izleme listesine geçiriyordu.
+   */
   togglePanel: () => {
-    const nextOpen = !(currentState.isOpen && currentState.activeRightTool === 'watchlist');
-    applyState({
-      isOpen: nextOpen,
-      activeRightTool: nextOpen ? 'watchlist' : null,
-    });
+    if (currentState.isOpen) {
+      applyState({ isOpen: false, activeRightTool: null });
+    } else {
+      applyState({ isOpen: true, activeRightTool: currentState.activeRightTool || 'watchlist' });
+    }
   },
 
   setActiveRightTool: (tool: 'watchlist' | 'alerts' | null) => {

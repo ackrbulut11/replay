@@ -401,7 +401,14 @@ export default function WatchlistPanel({
          rayı + dolgu), `86vw` o kabı aşıp sağ kenarından kırpılıyordu.
          Kalan %14 grafiği gösterir — panelin üste binen bir katman olduğu
          böylece görünür. */
-      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] flex-col overflow-hidden border-l border-line bg-canvas shadow-2xl animate-slideInRight lg:static lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
+      /* `lg`de `static` DEĞİL `relative`: static bir kutu, içindeki mutlak
+         konumlu tutamacın kabı olmaz — tutamaç panelin değil dıştaki
+         `relative` grafik alanının sol kenarına yapışıyor ve panel
+         genişliği sürüklenerek ayarlanamıyordu. Alarmlar panelinde aynı
+         hata `backdrop-blur` sayesinde gizleniyordu (filtre kendi kabını
+         yaratır). Tüm ofsetler 0 olduğu için `relative` yerleşimi
+         değiştirmez. */
+      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] flex-col overflow-hidden border-l border-line bg-canvas shadow-2xl animate-slideInRight lg:relative lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
     >
       {/* Resize handle (left edge) — fareyle sürüklenir; dokunmatikte panel
           zaten tam boy açıldığı için gizli. */}

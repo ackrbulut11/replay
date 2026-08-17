@@ -99,7 +99,10 @@ export default function AlertsPanel({
       style={{ ['--panel-w' as string]: `${watchlistState.panelWidth}px` }}
       /* Genişlik `vw` DEĞİL yüzde: panelin kabı ekrandan dar (solda gezinme
          rayı + dolgu), `86vw` o kabı aşıp sağ kenarından kırpılıyordu. */
-      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] select-none flex-col overflow-hidden border-l border-line bg-canvas text-content-strong shadow-2xl backdrop-blur-md animate-fadeIn lg:static lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
+      /* `lg`de `relative` — bkz. WatchlistPanel: tutamacın kabı panelin
+         kendisi olmalı. Burada `backdrop-blur` tesadüfen aynı işi görüyordu,
+         ama filtreye bel bağlamak yerine açıkça yazılıyor. */
+      className="absolute inset-y-0 right-0 z-40 flex w-[86%] max-w-[320px] select-none flex-col overflow-hidden border-l border-line bg-canvas text-content-strong shadow-2xl backdrop-blur-md animate-fadeIn lg:relative lg:z-20 lg:w-[var(--panel-w)] lg:max-w-none lg:shrink-0"
     >
       {/* Resize handle (left edge) — fareyle sürüklenir; dokunmatikte panel
           zaten tam boy açıldığı için gizli. */}

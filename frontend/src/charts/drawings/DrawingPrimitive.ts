@@ -1104,6 +1104,66 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
   get chart() { return this._chart; }
   get series() { return this._series; }
 
+  /**
+   * `_candles` içindeki ardışık mumlar arasındaki EN KÜÇÜK pozitif zaman farkı
+   * — tek bir mumun süresi. Son iki muma bakmak yetmiyordu: gün içi dilimlerde
+   * seans kapanışı/açılışı ya da hafta sonu arasındaki sıçrama son çift olarak
+   * yakalanırsa "adım" yanlış hesaplanıp ekstrapolasyon saçmalıyordu. En küçük
+   * fark neredeyse her zaman GERÇEK mum süresidir; seans/hafta sonu
+   * sıçramaları bundan büyüktür.
+   */
+  private _barStep(candles: CandleData[]): number {
+    let step = Infinity;
+    for (let i = 1; i < candles.length; i++) {
+      const d = candles[i].time - candles[i - 1].time;
+      if (d > 0 && d < step) step = d;
+    }
+    return isFinite(step) ? step : 86400;
+  }
+
+  /**
+   * Verilen zamanı, yüklü mum dizisine göre mantıksal (logical) bar konumuna
+   * çevirir — dizinin öncesi, sonrası ya da ARASINDAKİ bir boşluk fark etmez.
+   *
+   * Neden gerekli: `timeScale().timeToCoordinate()` yalnızca dizide TAM o
+   * zamanda bir mum varsa çalışır. Bir çizim başka bir zaman diliminde
+   * çizildiyse (ör. 1g'de gece yarısına hizalı bir nokta, 15dk'da seans dışı
+   * olduğu için hiç mum yok) ya da hafta sonu/seans kapanışı gibi bir boşluğa
+   * denk geldiyse, zaman dizide YOKTUR — ama dizinin baştan/sondan İLERİSİNDE
+   * de değildir. Eski kod yalnızca baştan/sondan ekstrapole ediyordu; bu
+   * "arada kalan" durumu atlıyor, nokta `null` dönüp ÇİZİMİN TAMAMI
+   * kayboluyordu (bir noktası çözülemeyen çizim hiç render edilmiyor, bkz.
+   * `_toPixelDrawingOrNull`). Üst zaman diliminde çizilen bir şeklin alt
+   * zaman dilimine geçince kaybolması şikâyetinin kök nedeni buydu — ve
+   * simetrik olduğu için ters yönde de (alt dilimde çizilen üstte) aynı
+   * şekilde oluyordu.
+   *
+   * Çözüm: zamanı kapsayan iki mum arasında ikili aramayla bulunup ORANTILI
+   * konumlandırılır. Dizi sınırlarının dışındaysa aynı mantık en uç mumdan
+   * EKSTRAPOLE eder (eski davranışla aynı sonucu verir).
+   */
+  private _logicalIndexForTime(time: number, candles: CandleData[]): number {
+    const step = this._barStep(candles);
+    const lastIdx = candles.length - 1;
+
+    if (time <= candles[0].time) {
+      return -((candles[0].time - time) / step);
+    }
+    if (time >= candles[lastIdx].time) {
+      return lastIdx + (time - candles[lastIdx].time) / step;
+    }
+
+    let lo = 0;
+    let hi = lastIdx;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (candles[mid].time <= time) lo = mid; else hi = mid;
+    }
+    const span = candles[hi].time - candles[lo].time;
+    const frac = span > 0 ? (time - candles[lo].time) / span : 0;
+    return lo + frac * (hi - lo);
+  }
+
   pointToPixel(time: number, price: number): PixelPoint | null {
     if (!this._chart || !this._series) return null;
     const y = this._series.priceToCoordinate(price);
@@ -1111,26 +1171,10 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
 
     let x = this._chart.timeScale().timeToCoordinate(time as any);
     if (x === null) {
-      // Future or past timestamp handling via logical index extrapolation
       const candles = this._candles;
       if (candles && candles.length > 0) {
-        const lastCandle = candles[candles.length - 1];
-        const prevCandle = candles[Math.max(0, candles.length - 2)];
-        const step = (candles.length > 1 && lastCandle.time > prevCandle.time)
-          ? (lastCandle.time - prevCandle.time)
-          : 86400;
-
-        const lastIdx = candles.length - 1;
-        if (time > lastCandle.time) {
-          const barsAhead = (time - lastCandle.time) / step;
-          const targetLogical = lastIdx + barsAhead;
-          x = this._chart.timeScale().logicalToCoordinate(targetLogical as any);
-        } else if (time < candles[0].time) {
-          const firstCandle = candles[0];
-          const barsBefore = (firstCandle.time - time) / step;
-          const targetLogical = -barsBefore;
-          x = this._chart.timeScale().logicalToCoordinate(targetLogical as any);
-        }
+        const targetLogical = this._logicalIndexForTime(time, candles);
+        x = this._chart.timeScale().logicalToCoordinate(targetLogical as any);
       }
     }
 

@@ -12,7 +12,14 @@ class ForexProvider(IDataProvider):
     Örn: EUR/USD -> EURUSD=X, USD/TRY -> USDTRY=X
     """
 
-    def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
+    def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        allow_gap_fill: bool = True,
+    ) -> pd.DataFrame:
         sym_clean = symbol.upper().replace("/", "").replace("-", "").strip()
         
         # Ticker hazırlama (Yahoo Finance Forex ticker formatı: EURUSD=X)
@@ -123,9 +130,11 @@ class ForexProvider(IDataProvider):
             df = pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
 
         # Yahoo'nun intraday penceresi istenen başlangıcın gerisinde kaldıysa
-        # (bkz. max_start yukarıda) boşluğu Twelve Data'dan doldur.
+        # (bkz. max_start yukarıda) boşluğu Twelve Data'dan doldur. `allow_gap_fill`
+        # kapalıysa (replay pencere yolu — bkz. IDataProvider docstring'i) bu
+        # adım tamamen atlanır.
         gap_end = min(max_start, end_time) if max_start is not None else None
-        if gap_end is not None and requested_start < gap_end and twelvedata.is_configured():
+        if allow_gap_fill and gap_end is not None and requested_start < gap_end and twelvedata.is_configured():
             older = twelvedata.fetch_ohlcv(
                 sym_clean, timeframe, requested_start, gap_end, symbol_style="forex"
             )

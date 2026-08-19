@@ -20,7 +20,6 @@ from app.core.config import settings
 from app.core.security import RateLimiter
 from app.data.loader import (
     DataLoader,
-    SOURCE_TIMEFRAME_COLUMN,
     WINDOW_BARS_AFTER,
     WINDOW_BARS_BEFORE,
 )
@@ -158,10 +157,6 @@ def _to_chart_candles(df) -> list[dict]:
     """
     DataFrame'i lightweight-charts'ın beklediği biçime çevirir (zaman = saniye).
 
-    Karma pencerede (bkz. loader `_stitched_window`) her mum, geldiği zaman
-    dilimini `tf` alanıyla taşır; istemci dikişin nerede olduğunu buradan
-    anlar. Tek dilimli pencerelerde alan hiç eklenmez.
-
     Dönüşüm VEKTÖRELDİR. Eskiden `df.iterrows()` ile satır satır dönülüyordu ve
     bu, önbellek tamamen sıcakken bile isteğin en pahalı adımıydı: pandas her
     satır için bir Series kurduğundan 20.000 mumluk bir 1h yanıtı 2,0 s,
@@ -181,15 +176,6 @@ def _to_chart_candles(df) -> list[dict]:
     lows = df["low"].astype(float).tolist()
     closes = df["close"].astype(float).tolist()
     volumes = df["volume"].astype(float).tolist()
-
-    if SOURCE_TIMEFRAME_COLUMN in df.columns:
-        sources = df[SOURCE_TIMEFRAME_COLUMN].astype(str).tolist()
-        return [
-            {"time": t, "open": o, "high": h, "low": lo, "close": c, "volume": v, "tf": tf}
-            for t, o, h, lo, c, v, tf in zip(
-                times, opens, highs, lows, closes, volumes, sources
-            )
-        ]
 
     return [
         {"time": t, "open": o, "high": h, "low": lo, "close": c, "volume": v}
@@ -216,10 +202,11 @@ def get_market_window(
     Burada her zaman `bars_before + bars_after` mum çekilir — ölçümde 2019 da
     2022 de 0,65 s.
 
-    Çapa, sağlayıcının bu zaman dilimindeki geçmişinden eskiyse pencere KARMA
-    döner: geçmiş bölüm bir üst zaman diliminden, ince mumların başladığı
-    tarihten sonrası istenen dilimden. O durumda her mum geldiği dilimi `tf`
-    alanıyla taşır (bkz. `_to_chart_candles`).
+    Çapa, sağlayıcının bu zaman dilimindeki geçmişinden eskiyse pencerenin
+    TAMAMI çapanın ilerisinde döner (bu dilimde ulaşılabilen en eski muma
+    çapalanmış hâli, bkz. loader `_earliest_window`); ikincil bir kaynaktan
+    dolgu ya da başka bir dilimle dikiş yapılmaz — istemci bunu görüp replay
+    konumunu oraya taşır ve uyarı gösterir.
     """
     try:
         df = loader.get_window(

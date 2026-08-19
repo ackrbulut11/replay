@@ -45,15 +45,18 @@ MIN_REQUEST_INTERVAL_SECONDS = 8.0
 
 # Tek bir `fetch_ohlcv` çağrısının throttle kuyruğunda toplam bekleyebileceği
 # süre. Bu tavan olmadan derin bir geçmiş isteği 20 sayfaya kadar çıkıp her
-# sayfada 8 sn bekleyebiliyordu; ölçümde replay'de 1g -> 15dk geçişinin
-# arkaplan derinleştirmesi 16 sn sürüyor ve o süre boyunca süreç genelindeki
-# throttle'ı işgal ettiği için kullanıcının BİR SONRAKİ zaman dilimi geçişi de
-# arkasında kuyruğa giriyordu ("10 saniyeden uzun bekletiyor" şikâyeti).
+# sayfada 8 sn bekleyebiliyordu ve o süre boyunca süreç genelindeki throttle'ı
+# işgal ediyordu — aynı anda başka bir kullanıcının/sekmenin isteği de arkasına
+# takılıyordu.
 #
-# Bütçe dolunca elde ne varsa onunla dönülür: eksik geçmiş hata değildir —
-# çağıran taraf (`get_window` -> `_stitched_window`) bunu zaten tolere ediyor ve
-# kalıcı pencere deposu (bkz. loader `_write_window_store`) her çağrıda biraz
-# daha derine indiği için geçmiş turlar içinde kendiliğinden tamamlanır.
+# Not: replay'in kendi pencere yolu (`DataLoader.get_window`) artık bu modülü
+# HİÇ çağırmıyor (bkz. `IDataProvider.fetch_ohlcv`'nin `allow_gap_fill`
+# parametresi) — dolgu/dikiş kaldırıldı, replay yalnızca sağlayıcının kendi
+# native geçmişini kullanıyor. Bu modül yalnızca normal `/data` (tarih aralığı)
+# isteklerinde, sağlayıcının intraday tavanının gerisi istendiğinde devreye
+# giriyor. Bütçe dolunca elde ne varsa onunla dönülür: eksik geçmiş hata
+# değildir, çağıran tarafın kendi retry/kapsama kontrolü (`_read_cache_window`)
+# zaten tolere eder.
 MAX_THROTTLE_WAIT_SECONDS = 10.0
 
 # Mum süreleri — istenen aralık için kaç mum gerektiğini kestirmekte kullanılır.

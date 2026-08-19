@@ -279,7 +279,17 @@ class BinanceProvider(IDataProvider):
                 return response.json()
         return None
 
-    def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
+    def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        allow_gap_fill: bool = True,
+    ) -> pd.DataFrame:
+        # `allow_gap_fill` burada kullanılmıyor: Binance'in ikincil bir dolgu
+        # kaynağı yok (KuCoin yedeği ERİŞİLEMEZLİK için, geçmiş DERİNLİĞİ için
+        # değil). Parametre yalnızca `IDataProvider` arayüzüyle tutarlılık için var.
         # Zaman dilimlerini Binance aralıklarına eşle
         interval = TF_TO_INTERVAL.get(timeframe)
         if not interval:

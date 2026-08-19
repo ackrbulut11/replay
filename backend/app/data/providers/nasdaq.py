@@ -50,7 +50,14 @@ SYMBOL_ALIASES = {
 }
 
 class NasdaqProvider(IDataProvider):
-    def fetch_ohlcv(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> pd.DataFrame:
+    def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        allow_gap_fill: bool = True,
+    ) -> pd.DataFrame:
         sym = symbol.upper().strip()
         ticker = SYMBOL_ALIASES.get(sym, sym)
 
@@ -173,8 +180,12 @@ class NasdaqProvider(IDataProvider):
         # Yahoo'nun intraday penceresi istenen başlangıcın gerisinde kaldıysa
         # (bkz. max_start yukarıda) boşluğu Twelve Data'dan doldur. Yalnızca
         # gerçekten Yahoo'nun ulaşamadığı kısım istenir — kotayı korumak için.
+        #
+        # `allow_gap_fill=False` iken bu adım tamamen atlanır (bkz. IDataProvider
+        # docstring'i): replay pencere yolu bunu bilerek kapatır, çünkü ikincil
+        # kaynağa düşmek saniyeler süren bir gecikme demekti.
         gap_end = min(max_start, end_time) if max_start is not None else None
-        if gap_end is not None and requested_start < gap_end and twelvedata.is_configured():
+        if allow_gap_fill and gap_end is not None and requested_start < gap_end and twelvedata.is_configured():
             older = twelvedata.fetch_ohlcv(
                 ticker, timeframe, requested_start, gap_end, symbol_style="stock"
             )

@@ -17,7 +17,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from app.data.loader import (
-    SOURCE_TIMEFRAME_COLUMN,
     TIMEFRAME_DELTAS,
     DataLoader,
     calendar_stretch,
@@ -32,7 +31,7 @@ class FakeProvider:
         self.history_start = history_start
         self.calls = 0
 
-    def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
+    def fetch_ohlcv(self, symbol, timeframe, start_time, end_time, **kwargs):
         self.calls += 1
         if self.history_start and start_time < self.history_start:
             start_time = self.history_start
@@ -59,15 +58,14 @@ class TieredProvider:
     """
     Zaman dilimine göre FARKLI geçmiş taşıyan sahte sağlayıcı.
 
-    Gerçek sağlayıcıların tavanını taklit eder (Yahoo: 1s ~730 gün, 1g sınırsız);
-    karma pencere yalnızca bu asimetri yüzünden gerekiyor.
+    Gerçek sağlayıcıların tavanını taklit eder (Yahoo: 1s ~730 gün, 1g sınırsız).
     """
 
     def __init__(self, history_starts: dict[str, datetime]):
         self.history_starts = history_starts
         self.calls: list[str] = []
 
-    def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
+    def fetch_ohlcv(self, symbol, timeframe, start_time, end_time, **kwargs):
         self.calls.append(timeframe)
         history_start = self.history_starts.get(timeframe)
         if history_start is None:
@@ -185,12 +183,14 @@ class TestGetWindow(unittest.TestCase):
         self.assertTrue(bool((df["timestamp"] > anchor).all()))
         self.assertEqual(df["timestamp"].min().date(), history_start.date())
 
-    def test_ince_dilimde_gecmis_yoksa_ust_dilimle_dikilir(self):
+    def test_ince_dilim_derin_gecmisle_dikilmez(self):
         """
-        Asıl senaryo: 1h/1g'de geriye kesip 4s'e geçmek. 4s geçmişi o kadar
-        geriye uzanmadığı için kullanıcı en eski 4s mumuna fırlatılıyor ve
-        konumunun GERİSİNİ hiç göremiyordu. Artık geçmiş bölüm 1g mumlarıyla
-        dolduruluyor, 4s mumlarının başladığı yerde dilim değişiyor.
+        Asıl davranış: eskiden 4s'in kendi geçmişi çapaya uzanmadığında (1g'de
+        çok daha derin geçmiş olsa dahi) geçmiş bölüm 1g mumlarıyla dikiliyordu.
+        Bu, TradingView'in Bar Replay'inde OLMAYAN bir davranıştı ve düşük zaman
+        dilimlerinde saniyeler süren ekstra istekler gerektiriyordu (ikincil
+        kaynak + üst dilim sorgusu). Artık pencere yalnızca 4s'in KENDİ
+        ulaşabildiği en eski muma çapalanıyor; üst dilim (1g) hiç sorgulanmıyor.
         """
         now = datetime.now()
         provider = TieredProvider(
@@ -201,62 +201,12 @@ class TestGetWindow(unittest.TestCase):
 
         df = loader.get_window("binance", "TEST", "4h", anchor, bars_before=100, bars_after=400)
 
-        # Konum korunuyor: pencere çapanın gerisine uzanıyor.
-        self.assertLessEqual(df["timestamp"].min(), anchor)
-        self.assertTrue(bool(df["timestamp"].is_monotonic_increasing))
-
-        tags = df[SOURCE_TIMEFRAME_COLUMN]
-        self.assertEqual(set(tags), {"1d", "4h"})
-        # Dikiş tek noktada: önce kaba mumlar, sonra ince mumlar.
-        first_fine = df.loc[tags == "4h", "timestamp"].min()
-        self.assertTrue(bool((df.loc[tags == "1d", "timestamp"] < first_fine).all()))
-        self.assertEqual(first_fine.date(), (now - timedelta(days=60)).date())
-        # Pencere boyu istenen ölçüyü aşmıyor.
-        self.assertLessEqual(int((df["timestamp"] > anchor).sum()), 400)
-
-    def test_dikis_4h_yeniden_orneklemesiyle_de_calisir(self):
-        """
-        BIST/NASDAQ 4s'i doğrudan vermez, 1s'ten yeniden örneklenir. Kaba
-        mumların o yeniden örneklemeye karışmaması gerekir (karışsaydı 1g
-        mumları 1s sanılıp saçma 4s mumları üretilirdi).
-        """
-        now = datetime.now()
-        provider = TieredProvider(
-            {"1d": now - timedelta(days=3000), "1h": now - timedelta(days=60)}
-        )
-        loader = make_loader(provider, "bist")
-        anchor = now - timedelta(days=250)
-
-        df = loader.get_window("bist", "TEST", "4h", anchor, bars_before=50, bars_after=400)
-
-        self.assertLessEqual(df["timestamp"].min(), anchor)
-        self.assertEqual(set(df[SOURCE_TIMEFRAME_COLUMN]), {"1d", "4h"})
-
-    def test_ust_dilim_istegi_patlarsa_500_donmez(self):
-        """
-        Yahoo çok eski tarihlerde 400 dönüyor; üst dilim denemesinin hatası
-        istenen dilimin sonucunu 500'e çevirmemeli — merdivenin bir sonraki
-        basamağı denenir, hiçbiri tutmazsa elde olanla yetinilir.
-        """
-        now = datetime.now()
-
-        class PatlayanUstDilim(TieredProvider):
-            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
-                if timeframe == "1h":
-                    raise RuntimeError("Yahoo Finance HTTP hatası (400)")
-                return super().fetch_ohlcv(symbol, timeframe, start_time, end_time)
-
-        provider = PatlayanUstDilim(
-            {"1d": now - timedelta(days=3000), "15m": now - timedelta(days=30)}
-        )
-        loader = make_loader(provider, "binance")
-        anchor = now - timedelta(days=250)
-
-        df = loader.get_window("binance", "TEST", "15m", anchor, bars_before=50, bars_after=400)
-
-        # 1h patladı, merdiven 1g'ye düştü: konum yine de korunuyor.
-        self.assertLessEqual(df["timestamp"].min(), anchor)
-        self.assertEqual(set(df[SOURCE_TIMEFRAME_COLUMN]), {"1d", "15m"})
+        self.assertFalse(df.empty)
+        # Pencerenin TAMAMI çapanın ilerisinde: 4s'in kendi geçmişi buraya uzanmıyor.
+        self.assertTrue(bool((df["timestamp"] > anchor).all()))
+        self.assertEqual(df["timestamp"].min().date(), (now - timedelta(days=60)).date())
+        # Üst dilim hiç sorgulanmadı: dikiş tamamen kaldırıldı.
+        self.assertNotIn("1d", provider.calls)
 
     def test_cok_eski_capada_saglayici_hatasi_en_eskiye_cekilir(self):
         """
@@ -267,10 +217,10 @@ class TestGetWindow(unittest.TestCase):
         now = datetime.now()
 
         class EskiyeKapali(TieredProvider):
-            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
+            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time, **kwargs):
                 if start_time < datetime(1996, 1, 1):
                     raise RuntimeError("Yahoo Finance HTTP hatası (400)")
-                return super().fetch_ohlcv(symbol, timeframe, start_time, end_time)
+                return super().fetch_ohlcv(symbol, timeframe, start_time, end_time, **kwargs)
 
         loader = make_loader(EskiyeKapali({"1d": now - timedelta(days=3000)}), "bist")
         df = loader.get_window("bist", "TEST", "1d", datetime(1995, 6, 1), 50, 100)
@@ -282,25 +232,18 @@ class TestGetWindow(unittest.TestCase):
         """Geri çekilme, gerçek bir sağlayıcı arızasını sessizce yutmamalı."""
 
         class CokmusProvider:
-            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
+            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time, **kwargs):
                 raise RuntimeError("Sağlayıcıya ulaşılamıyor")
 
         loader = make_loader(CokmusProvider(), "binance")
         with self.assertRaises(RuntimeError):
             loader.get_window("binance", "TEST", "1d", datetime(2024, 1, 1), 50, 10)
 
-    def test_tek_dilimli_pencerede_kaynak_etiketi_yok(self):
-        """Etiket sütunu yalnızca karma pencerede eklenir."""
-        loader = make_loader(FakeProvider(), "binance")
-        df = loader.get_window("binance", "TEST", "1d", datetime(2024, 1, 1), 50, 10)
-
-        self.assertNotIn(SOURCE_TIMEFRAME_COLUMN, df.columns)
-
     def test_veri_hic_yoksa_bos_doner(self):
         """Geri çekilme yolu, gerçek bir "veri yok" durumunu maskelememeli."""
 
         class BosProvider:
-            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
+            def fetch_ohlcv(self, symbol, timeframe, start_time, end_time, **kwargs):
                 return pd.DataFrame(
                     columns=["timestamp", "open", "high", "low", "close", "volume"]
                 )

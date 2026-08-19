@@ -31,7 +31,7 @@ class CountingProvider:
         self.history_start = history_start
         self.calls = 0
 
-    def fetch_ohlcv(self, symbol, timeframe, start_time, end_time):
+    def fetch_ohlcv(self, symbol, timeframe, start_time, end_time, **kwargs):
         self.calls += 1
         if self.history_start and start_time < self.history_start:
             start_time = self.history_start

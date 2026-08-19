@@ -34,12 +34,6 @@ interface CandleData {
   low: number;
   close: number;
   volume: number;
-  /**
-   * Mumun geldiği zaman dilimi — yalnızca KARMA pencerede dolu olur (bkz.
-   * backend `_stitched_window`): istenen dilimin geçmişi replay konumuna
-   * uzanmıyorsa geçmiş bölüm bir üst dilimin mumlarıyla doldurulur.
-   */
-  tf?: string;
 }
 
 // Grafik ilk açıldığında hemen gösterilecek "hızlı" pencere — kalan geçmiş veri
@@ -354,13 +348,6 @@ function MainApp() {
     symbol: string;
     timeframe: string;
     oldestTime: number;
-    /**
-     * Gelen mumlara basılacak kaynak dilim etiketi. Karma pencerede geçmiş
-     * bölüm bir üst dilimden geliyor; derinleştirme de o dilimden istenir ve
-     * tek dilimli yanıt etiketsiz döndüğü için etiket burada basılır — aksi
-     * halde dizinin geçmişi "hangi dilim" bilgisini kaybederdi.
-     */
-    tagTf?: string;
   }) => {
     const controller = new AbortController();
     bgControllerRef.current = controller;
@@ -389,9 +376,7 @@ function MainApp() {
       })
         .then((older) => {
           if (controller.signal.aborted) return;
-          mergeOlderData(
-            params.tagTf ? older.map((c) => ({ ...c, tf: c.tf ?? params.tagTf })) : older
-          );
+          mergeOlderData(older);
         })
         .catch((err: any) => {
           // İptal edilmiş istek: sembol/zaman dilimi değişti, sonucu birleştirme.
@@ -476,47 +461,18 @@ function MainApp() {
           anchor: target,
         });
         if (signal.aborted) return;
-        // Karma pencere: istenen dilimin geçmişi konuma uzanmadığı için
-        // backend geçmiş bölümü bir üst dilimin mumlarıyla doldurmuş
-        // (bkz. loader `_stitched_window`). Konum korunur; kullanıcı geçmişi
-        // görmeye ve oynatmaya devam eder, dikişte mumlar incelir.
-        const baseTf =
-          candles.length > 0 && candles[0].tf && candles[0].tf !== timeframe
-            ? candles[0].tf
-            : null;
 
         if (candles.length === 0) {
           setError('Bu zaman diliminde replay konumu için veri bulunamadı.');
           applyChartData([]);
-        } else if (baseTf) {
-          applyChartData(candles);
-          const firstFine = candles.find((c) => c.tf === timeframe);
-          setNotice(
-            firstFine
-              ? `${timeframe} verisi ${formatBarTime(firstFine.time, timeframe)} tarihinden ` +
-                `daha geriye uzanmıyor. Replay konumunuz (${formatBarTime(target, baseTf)}) daha eski ` +
-                `olduğu için o tarihe kadarki geçmiş ${baseTf} mumlarıyla gösteriliyor; ` +
-                `${formatBarTime(firstFine.time, timeframe)} sonrası ${timeframe} mumlarına geçiyor.`
-              : `${timeframe} verisi replay konumunuza (${formatBarTime(target, baseTf)}) kadar ` +
-                `geriye uzanmıyor. Bu bölüm ${baseTf} mumlarıyla gösteriliyor; replay ilerleyip ` +
-                `${timeframe} verisinin başladığı tarihe ulaştığında mumlar kendiliğinden ` +
-                `${timeframe}'e dönecek.`
-          );
-          // Geçmişi derinleştirirken de üst dilim istenir: istenen dilimin
-          // orada zaten verisi yok.
-          loadOlderWindowInBackground({
-            provider,
-            symbol,
-            timeframe: baseTf,
-            oldestTime: candles[0].time,
-            tagTf: baseTf,
-          });
         } else if (candles[0].time > target) {
-          // Pencerenin TAMAMI konumun ilerisinde: backend, çapa sağlayıcının
-          // geçmişinden eski olduğu için en eski muma çapalanmış pencere döndü
-          // (bkz. loader `_earliest_window`). Eskiden burada hata ekranı
-          // gösteriliyordu; onun yerine konumu bu zaman diliminin gidebildiği
-          // en eski muma taşı ve durumu şeritle bildir.
+          // Pencerenin TAMAMI konumun ilerisinde: backend, çapa bu dilimin
+          // kendi sağlayıcı geçmişinden eski olduğu için en eski muma
+          // çapalanmış pencere döndü (bkz. loader `_earliest_window`) —
+          // ikincil kaynağa düşülmez, başka bir dilimle dikilmez (bkz.
+          // TradingView'in Bar Replay'i de derinliği aynı şekilde sağlayıcının
+          // kendi geçmişiyle sınırlıyor). Konumu bu dilimin gidebildiği en
+          // eski muma taşı ve durumu şeritle bildir.
           applyChartData(candles);
           replayStore.setState({
             targetTimestamp: candles[0].time,
@@ -526,9 +482,9 @@ function MainApp() {
           });
           setNotice(
             `${timeframe} verisi replay konumunuza (${formatBarTime(target, timeframe)}) kadar geriye ` +
-              `uzanmıyor ve o geçmiş üst bir zaman dilimiyle de doldurulamadı. Konum, ${timeframe} ` +
-              `dilimindeki ulaşılabilen en eski muma (${formatBarTime(candles[0].time, timeframe)}) ` +
-              `taşındı. Daha eskiye gitmek için daha büyük bir zaman dilimi seçin.`
+              `uzanmıyor. Konum, ${timeframe} dilimindeki ulaşılabilen en eski muma ` +
+              `(${formatBarTime(candles[0].time, timeframe)}) taşındı. Daha eskiye gitmek için daha ` +
+              `büyük bir zaman dilimi seçin.`
           );
           // Daha eskisi yok: arkaplan derinleştirmesi boşuna istek olurdu.
         } else {

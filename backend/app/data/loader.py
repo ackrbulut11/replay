@@ -85,6 +85,38 @@ WINDOW_STORE_TOUCH_INTERVAL = 300.0
 # (Binance) da indirme bu sayıyla sınırlı kalır, tüm geçmiş inmez.
 EARLIEST_PROBE_BARS = 5000
 
+# En eski muma çapalanan pencerenin (bkz. `_earliest_window`) GERİSİNE görsel
+# süreklilik için eklenecek, bir üst zaman diliminden gelen dolgu.
+#
+# Bu, RULES.md ihlal eden bir "dikiş" DEĞİL — Twelve Data'ya hiç gidilmiyor
+# (`allow_gap_fill=False` burada da geçerli) ve yalnızca zaten SIK kullanılan,
+# genelde önbellekte SICAK bekleyen kaba dilimlere (1s/1g) bakılıyor. Eskiden
+# (bkz. git geçmişi `_stitched_window`) bu HER düşük dilim geçişinde tetiklenip
+# Twelve Data'yı da devreye sokuyordu; o yüzden kaldırılmıştı. Burada tetiklenme
+# koşulu çok daha dar: yalnızca çapa, istenen dilimin sağlayıcıdaki EN ESKİ
+# mumundan da eskiyse (replay konumu verinin başladığı tarihten önceye kesilmiş).
+# O anda tek bir mumla karşılaşmak ("öncesi yok" görünümü) kullanıcıya
+# sağlayıcı arızası gibi görünüyordu; bir üst dilimden birkaç yüz mumluk
+# bağlam eklemek bunu gidiyor.
+DISPLAY_FILL_TIMEFRAME = {
+    "1m": "1h",
+    "5m": "1h",
+    "15m": "1h",
+    "1h": "1d",
+    "4h": "1d",
+    "1d": "1w",
+    "1w": "1mo",
+    "1mo": None,
+}
+
+# Dolgu için istenen mum sayısı. Yalnızca görsel bağlam amaçlı — çizim/analiz
+# bu bölümde yapılmaz, o yüzden REPLAY_HISTORY_BARS gibi derin olmasına gerek yok.
+DISPLAY_FILL_BARS = 300
+
+# Karma pencerede (bkz. `_earliest_window`) her mumun hangi zaman diliminden
+# geldiğini taşıyan sütun. İstemci geçmiş dolgusunun sınırını buradan görür.
+SOURCE_TIMEFRAME_COLUMN = "source_timeframe"
+
 # Bir mumun süresi. Pencerenin sınırlarını mum SAYISINDAN tarihe çevirmek için
 # gerekli; tarih aralığıyla çalışmak zaman dilimi değiştikçe mum sayısını
 # öngörülemez kılıyordu (aynı 30 gün 1g'de 30, 5dk'da 8640 mum).
@@ -263,16 +295,22 @@ class DataLoader:
         `anchor` etrafındaki pencere.
 
         Yalnızca istenen zaman diliminin KENDİ ulaşabildiği geçmiş kullanılır —
-        ikincil bir kaynaktan (Twelve Data) dolgu yapılmaz, başka bir zaman
-        diliminden dikiş kurulmaz (bkz. TradingView'in Bar Replay'i de aynı
-        şekilde davranıyor: derin geçmiş yalnızca sağlayıcının kendi veri
-        derinliği kadar). Gerekçe performans: dolgu/dikiş saniyeler süren ekstra
-        istekler demekti — ölçümde 1g'den 15dk'ya geçiş 16 sn'ye çıkıyordu.
+        ikincil bir kaynaktan (Twelve Data) dolgu yapılmaz (bkz. TradingView'in
+        Bar Replay'i de aynı şekilde davranıyor: derin geçmiş yalnızca
+        sağlayıcının kendi veri derinliği kadar). Gerekçe performans: dolgu HER
+        düşük dilim geçişinde saniyeler süren ekstra istekler demekti — ölçümde
+        1g'den 15dk'ya geçiş 16 sn'ye çıkıyordu.
 
         Çapa, sağlayıcının bu zaman dilimindeki geçmişinden eskiyse pencerenin
         TAMAMI çapanın ilerisinde döner (istenen dilimin EN ESKİ ulaşılabilir
         muma çapalanmış hâli, bkz. `_earliest_window`); istemci bunu görüp
-        konumu oraya taşır ve uyarı gösterir (bkz. App.tsx replay dalı).
+        konumu oraya taşır ve uyarı gösterir (bkz. App.tsx replay dalı). O
+        durumda, salt "önceki hiçbir şey yok" görünümünü gidermek için pencerenin
+        GERİSİNE bir üst dilimden (zaten sık kullanılan, genelde önbellekte sıcak
+        1s/1g gibi) küçük bir görsel dolgu eklenir — bu, HER geçişte değil yalnızca
+        bu kenar durumda çalıştığı ve Twelve Data'ya gitmediği için ucuzdur
+        (bkz. `_prepend_display_fill`). Dolgu satırları `SOURCE_TIMEFRAME_COLUMN`
+        ile etiketlenir.
         """
         return self._plain_window(
             provider_name, symbol, timeframe, anchor, bars_before, bars_after
@@ -499,7 +537,47 @@ class DataLoader:
         if earliest <= anchor:
             return empty
 
-        return self._trim_window(df, earliest, bars_before, bars_after).reset_index(drop=True)
+        trimmed = self._trim_window(df, earliest, bars_before, bars_after).reset_index(drop=True)
+        return self._prepend_display_fill(provider_name, symbol, timeframe, earliest, trimmed)
+
+    def _prepend_display_fill(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        earliest: datetime,
+        trimmed: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """`_earliest_window`nun sonucuna, ondan bir üst dilimden görsel dolgu ekler.
+
+        Gerekçe ve tetiklenme koşulu için `DISPLAY_FILL_TIMEFRAME` yorumuna bak.
+        "Olsa iyi olur" niteliğinde: dolgu bulunamaz/patlarsa `trimmed` olduğu
+        gibi döner, asıl sonucu bir hataya çevirmez.
+        """
+        fill_tf = DISPLAY_FILL_TIMEFRAME.get(timeframe)
+        if not fill_tf:
+            return trimmed
+
+        try:
+            fill = self._window_at(
+                provider_name, symbol, fill_tf, earliest,
+                bars_before=DISPLAY_FILL_BARS, bars_after=0,
+            )
+        except Exception as exc:
+            print(f"Görsel dolgu alınamadı ({symbol} {fill_tf}): {exc}")
+            return trimmed
+
+        fill = fill[fill["timestamp"] < earliest]
+        if fill.empty:
+            return trimmed
+
+        return pd.concat(
+            [
+                fill.assign(**{SOURCE_TIMEFRAME_COLUMN: fill_tf}),
+                trimmed.assign(**{SOURCE_TIMEFRAME_COLUMN: timeframe}),
+            ],
+            ignore_index=True,
+        )
 
     # ─── Kalıcı pencere deposu ───────────────────────────────────────────────
     # Gerekçe ve tasarım için dosya başındaki WINDOW_STORE_DIRNAME bloğuna bak.

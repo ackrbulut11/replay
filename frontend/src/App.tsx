@@ -34,6 +34,12 @@ interface CandleData {
   low: number;
   close: number;
   volume: number;
+  /**
+   * Mumun geldiği zaman dilimi — yalnızca replay konumu ulaşılabilen
+   * geçmişten eskiyse dolu olur: geçmiş bölüm bir üst dilimin mumlarıyla
+   * doldurulmuş demektir (bkz. backend loader `_prepend_display_fill`).
+   */
+  tf?: string;
 }
 
 // Grafik ilk açıldığında hemen gösterilecek "hızlı" pencere — kalan geçmiş veri
@@ -462,29 +468,39 @@ function MainApp() {
         });
         if (signal.aborted) return;
 
+        // Çapa bu dilimin kendi sağlayıcı geçmişinden eskiyse backend pencereyi
+        // bu dilimin EN ESKİ mumuna çapalar ve gerisine (varsa) bir üst dilimden
+        // salt görsel bir dolgu ekler (bkz. loader `_prepend_display_fill`) —
+        // dolgu satırları `tf` alanıyla etiketlenir, ASIL konum hâlâ dolgu
+        // OLMAYAN ilk mumdur. `candles[0].time > target` yerine bu mumu aramak
+        // gerekiyor: dolgu geçmişe target'tan daha da eskiye uzanabiliyor.
+        const fineStartIdx = candles.findIndex((c) => !c.tf || c.tf === timeframe);
+        const fineFirst = fineStartIdx >= 0 ? candles[fineStartIdx] : null;
+        const hasDisplayFill = fineStartIdx > 0;
+
         if (candles.length === 0) {
           setError('Bu zaman diliminde replay konumu için veri bulunamadı.');
           applyChartData([]);
-        } else if (candles[0].time > target) {
-          // Pencerenin TAMAMI konumun ilerisinde: backend, çapa bu dilimin
-          // kendi sağlayıcı geçmişinden eski olduğu için en eski muma
-          // çapalanmış pencere döndü (bkz. loader `_earliest_window`) —
-          // ikincil kaynağa düşülmez, başka bir dilimle dikilmez (bkz.
-          // TradingView'in Bar Replay'i de derinliği aynı şekilde sağlayıcının
-          // kendi geçmişiyle sınırlıyor). Konumu bu dilimin gidebildiği en
-          // eski muma taşı ve durumu şeritle bildir.
+        } else if (fineFirst && fineFirst.time > target) {
+          // Konum bu dilimde yok: en eski ulaşılabilir muma taşı ve durumu
+          // şeritle bildir. İkincil kaynağa (Twelve Data) düşülmez, konum başka
+          // bir dilimle "korunmaz" (bkz. TradingView'in Bar Replay'i de derinliği
+          // aynı şekilde sağlayıcının kendi geçmişiyle sınırlıyor) — yalnızca
+          // gerideki dolgu salt görsel bağlam sağlar.
           applyChartData(candles);
           replayStore.setState({
-            targetTimestamp: candles[0].time,
-            currentIndex: 0,
-            cutoffIndex: 0,
+            targetTimestamp: fineFirst.time,
+            currentIndex: hasDisplayFill ? fineStartIdx : 0,
+            cutoffIndex: hasDisplayFill ? fineStartIdx : 0,
             isPlaying: false,
           });
           setNotice(
             `${timeframe} verisi replay konumunuza (${formatBarTime(target, timeframe)}) kadar geriye ` +
               `uzanmıyor. Konum, ${timeframe} dilimindeki ulaşılabilen en eski muma ` +
-              `(${formatBarTime(candles[0].time, timeframe)}) taşındı. Daha eskiye gitmek için daha ` +
-              `büyük bir zaman dilimi seçin.`
+              `(${formatBarTime(fineFirst.time, timeframe)}) taşındı.` +
+              (hasDisplayFill
+                ? ` Gerisi yalnızca görsel bağlam için ${candles[0].tf} mumlarıyla gösteriliyor.`
+                : ' Daha eskiye gitmek için daha büyük bir zaman dilimi seçin.')
           );
           // Daha eskisi yok: arkaplan derinleştirmesi boşuna istek olurdu.
         } else {

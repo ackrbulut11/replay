@@ -43,6 +43,14 @@ export interface MarketCandle {
   low: number;
   close: number;
   volume: number;
+  /**
+   * Mumun geldiği zaman dilimi. Yalnızca replay konumu istenen dilimin
+   * ulaşabildiği geçmişten eskiyse gelir: pencere o dilimin EN ESKİ mumuna
+   * çapalanır ve gerisine görsel süreklilik için bir üst dilimden dolgu
+   * eklenir (bkz. backend loader `_prepend_display_fill`). Diğer tüm
+   * pencerelerde alan hiç eklenmez.
+   */
+  tf?: string;
 }
 
 /**

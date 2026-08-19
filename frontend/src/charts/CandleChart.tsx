@@ -64,6 +64,8 @@ interface CandleData {
   low: number;
   close: number;
   volume: number;
+  /** Mumun geldiği zaman dilimi — yalnızca en eski muma çapalı görsel dolguda dolu (bkz. App.tsx). */
+  tf?: string;
 }
 
 interface CandleChartProps {
@@ -2765,6 +2767,21 @@ export default function CandleChart({
               <option value="1mo" className="bg-canvas text-content-strong">1mo</option>
             </select>
           </div>
+
+          {/* Görsel dolgu rozeti — geçmiş bölüm başka bir dilimden geliyor.
+              Uyarı şeridi kapatılabildiği için kalıcı işaret burada durur:
+              kullanıcı ekrandaki eski mumların gerçek konum verisi değil, salt
+              bağlam için eklenmiş bir üst dilim olduğunu görebilsin. Dolgu
+              dizinin başındadır, ilk muma bakmak yeter. */}
+          {data.length > 0 && data[0].tf && data[0].tf !== timeframe && (
+            <div
+              className="flex items-center gap-1 bg-warn-500/10 border border-warn-500/30 rounded-lg px-2.5 py-1 text-2xs font-medium text-warn-300 select-none"
+              title={`${timeframe} verisi replay konumunuza kadar geriye uzanmıyor: konumdan öncesi, salt görsel bağlam için ${data[0].tf} mumlarıyla gösteriliyor.`}
+            >
+              <AlertCircle className="w-3 h-3" />
+              Geçmiş: {data[0].tf}
+            </div>
+          )}
 
           {/* Grafik Tipi Seçimi (Mum / Çizgi) */}
           <div

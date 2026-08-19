@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from app.data.loader import (
+    SOURCE_TIMEFRAME_COLUMN,
     TIMEFRAME_DELTAS,
     DataLoader,
     calendar_stretch,
@@ -183,14 +184,16 @@ class TestGetWindow(unittest.TestCase):
         self.assertTrue(bool((df["timestamp"] > anchor).all()))
         self.assertEqual(df["timestamp"].min().date(), history_start.date())
 
-    def test_ince_dilim_derin_gecmisle_dikilmez(self):
+    def test_ince_dilim_konum_icin_dikilmez(self):
         """
         Asıl davranış: eskiden 4s'in kendi geçmişi çapaya uzanmadığında (1g'de
-        çok daha derin geçmiş olsa dahi) geçmiş bölüm 1g mumlarıyla dikiliyordu.
-        Bu, TradingView'in Bar Replay'inde OLMAYAN bir davranıştı ve düşük zaman
-        dilimlerinde saniyeler süren ekstra istekler gerektiriyordu (ikincil
-        kaynak + üst dilim sorgusu). Artık pencere yalnızca 4s'in KENDİ
-        ulaşabildiği en eski muma çapalanıyor; üst dilim (1g) hiç sorgulanmıyor.
+        çok daha derin geçmiş olsa dahi) geçmiş bölüm 1g mumlarıyla dikilip
+        replay KONUMU korunuyordu. Bu, TradingView'in Bar Replay'inde OLMAYAN
+        bir davranıştı ve düşük zaman dilimlerinde saniyeler süren ekstra
+        istekler gerektiriyordu (ikincil kaynak + üst dilim sorgusu HER
+        geçişte). Artık pencere KONUM için yalnızca 4s'in KENDİ ulaşabildiği
+        en eski muma çapalanıyor — üst dilim yalnızca görsel dolgu için,
+        ayrıca ve sınırlı sayıda sorgulanıyor (bkz. bir sonraki test).
         """
         now = datetime.now()
         provider = TieredProvider(
@@ -202,11 +205,55 @@ class TestGetWindow(unittest.TestCase):
         df = loader.get_window("binance", "TEST", "4h", anchor, bars_before=100, bars_after=400)
 
         self.assertFalse(df.empty)
-        # Pencerenin TAMAMI çapanın ilerisinde: 4s'in kendi geçmişi buraya uzanmıyor.
-        self.assertTrue(bool((df["timestamp"] > anchor).all()))
-        self.assertEqual(df["timestamp"].min().date(), (now - timedelta(days=60)).date())
-        # Üst dilim hiç sorgulanmadı: dikiş tamamen kaldırıldı.
-        self.assertNotIn("1d", provider.calls)
+        # Konum, 4s'in KENDİ ulaşabildiği en eski muma çapalı: bu bölüm
+        # tamamen çapanın ilerisinde (görsel dolgu geriye uzanabildiği için
+        # bütün pencere değil, yalnızca ince/konum bölümü kontrol edilir).
+        fine = df[df[SOURCE_TIMEFRAME_COLUMN] == "4h"]
+        self.assertTrue(bool((fine["timestamp"] > anchor).all()))
+        self.assertEqual(fine["timestamp"].min().date(), (now - timedelta(days=60)).date())
+
+    def test_en_eski_capa_gorsel_dolguyla_gelir(self):
+        """
+        `_earliest_window` yalnızca TEK bir mumla ("öncesi yok" görünümü)
+        döndüğünde kullanıcı bunu sağlayıcı arızası sanıyordu. Artık pencerenin
+        gerisine, zaten sık kullanılan bir üst dilimden (burada 1d) küçük bir
+        görsel dolgu ekleniyor — bu HER geçişte değil yalnızca bu kenar
+        durumda ve Twelve Data'ya gitmeden çalışıyor.
+        """
+        now = datetime.now()
+        provider = TieredProvider(
+            {"1d": now - timedelta(days=3000), "4h": now - timedelta(days=60)}
+        )
+        loader = make_loader(provider, "binance")
+        anchor = now - timedelta(days=250)
+
+        df = loader.get_window("binance", "TEST", "4h", anchor, bars_before=100, bars_after=400)
+
+        self.assertIn(SOURCE_TIMEFRAME_COLUMN, df.columns)
+        tags = set(df[SOURCE_TIMEFRAME_COLUMN])
+        self.assertEqual(tags, {"1d", "4h"})
+        self.assertIn("1d", provider.calls)
+
+        fill = df[df[SOURCE_TIMEFRAME_COLUMN] == "1d"]
+        fine = df[df[SOURCE_TIMEFRAME_COLUMN] == "4h"]
+        # Dolgu tamamen ince bölümün gerisinde durur, birbirine karışmaz.
+        self.assertTrue(bool((fill["timestamp"] < fine["timestamp"].min()).all()))
+
+    def test_gorsel_dolgu_de_yoksa_tek_mumla_yetinir(self):
+        """Üst dilimde de hiç geçmiş yoksa (ör. çok yeni bir sembol) dolgu
+        eklenmez — asıl sonuç bir hataya çevrilmez, sütun da eklenmez."""
+        now = datetime.now()
+        # "1d" de "4h" ile AYNI noktada başlıyor: dolgunun ekleyebileceği
+        # hiçbir şey yok.
+        history_start = now - timedelta(days=60)
+        provider = TieredProvider({"1d": history_start, "4h": history_start})
+        loader = make_loader(provider, "binance")
+        anchor = now - timedelta(days=250)
+
+        df = loader.get_window("binance", "TEST", "4h", anchor, bars_before=100, bars_after=400)
+
+        self.assertFalse(df.empty)
+        self.assertNotIn(SOURCE_TIMEFRAME_COLUMN, df.columns)
 
     def test_cok_eski_capada_saglayici_hatasi_en_eskiye_cekilir(self):
         """

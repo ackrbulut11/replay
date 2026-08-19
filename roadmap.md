@@ -161,6 +161,10 @@ Faz listesinde yer almayan ama tamamlanmış işler.
 - AI destekli analiz: seçilen noktada sinyal + gerekçe + güven skoru
 - Benzer senaryolar: geçmişte benzeşen işlemleri bulma, başarı oranı, ortalama getiri
 
+
+---
+strateji motorunda buy denen yerlerde alıp satmasaydı son durumda kar zarar oranı karşılaştırması ekle
+
 ---
 
 ## Açık kalan işler

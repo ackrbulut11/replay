@@ -225,9 +225,15 @@ TradingResearchPlatform/
 │   │
 │   ├── market_data/                  # Parquet Caches
 │   │   ├── binance/
+│   │   │   └── windows/              # Replay pencereleri (bkz. loader `_write_window_store`)
+│   │   │                             # Ana önbellekten AYRI: bitişik değil, aralık
+│   │   │                             # manifesti (.json) hangi aralığın indirildiğini tutar.
 │   │   ├── bist/
+│   │   │   └── windows/
 │   │   ├── nasdaq/
+│   │   │   └── windows/
 │   │   └── forex/
+│   │       └── windows/
 │   │
 │   ├── strategies/                   # ESKİ: stratejiler artık veritabanında (bkz. RULES.md §4)
 │   │                                 # Bu klasör yalnızca geçiş öncesi yedekleri barındırır.

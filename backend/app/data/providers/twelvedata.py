@@ -30,6 +30,10 @@ from ...core.config import settings
 
 BASE_URL = "https://api.twelvedata.com/time_series"
 MAX_OUTPUTSIZE = 5000
+# Sayfa boyutunun inebileceği taban. Bunun altına inmek sayfa SAYISINI artırır
+# ve her ek sayfa bir throttle slotu (aşağıda 8 sn) demek — küçük sayfa hızlı
+# görünüp toplamda daha pahalıya patlar.
+MIN_OUTPUTSIZE = 500
 # Güvenlik tavanı: tek bir fetch_ohlcv çağrısı en fazla bu kadar sayfa geriye gider.
 MAX_PAGES = 20
 
@@ -38,6 +42,31 @@ MAX_PAGES = 20
 # izlenmiyor çünkü aşılırsa API zaten 429 ile açıkça bildiriyor (sessiz veri
 # kaybı yok, çağıran taraf `_read_cache_window`/retry akışıyla zaten tolere ediyor).
 MIN_REQUEST_INTERVAL_SECONDS = 8.0
+
+# Tek bir `fetch_ohlcv` çağrısının throttle kuyruğunda toplam bekleyebileceği
+# süre. Bu tavan olmadan derin bir geçmiş isteği 20 sayfaya kadar çıkıp her
+# sayfada 8 sn bekleyebiliyordu; ölçümde replay'de 1g -> 15dk geçişinin
+# arkaplan derinleştirmesi 16 sn sürüyor ve o süre boyunca süreç genelindeki
+# throttle'ı işgal ettiği için kullanıcının BİR SONRAKİ zaman dilimi geçişi de
+# arkasında kuyruğa giriyordu ("10 saniyeden uzun bekletiyor" şikâyeti).
+#
+# Bütçe dolunca elde ne varsa onunla dönülür: eksik geçmiş hata değildir —
+# çağıran taraf (`get_window` -> `_stitched_window`) bunu zaten tolere ediyor ve
+# kalıcı pencere deposu (bkz. loader `_write_window_store`) her çağrıda biraz
+# daha derine indiği için geçmiş turlar içinde kendiliğinden tamamlanır.
+MAX_THROTTLE_WAIT_SECONDS = 10.0
+
+# Mum süreleri — istenen aralık için kaç mum gerektiğini kestirmekte kullanılır.
+_INTERVAL_MINUTES = {
+    "1min": 1,
+    "5min": 5,
+    "15min": 15,
+    "1h": 60,
+    "4h": 240,
+    "1day": 1440,
+    "1week": 10080,
+    "1month": 43200,
+}
 
 _TF_MAP = {
     "1m": "1min",
@@ -58,13 +87,72 @@ def is_configured() -> bool:
     return bool(settings.TWELVE_API_KEY)
 
 
-def _throttle() -> None:
+def _throttle(max_wait: float) -> float | None:
+    """Bir istek slotu ayırır; beklenen süreyi döndürür, vazgeçilirse `None`.
+
+    Beklemesi `max_wait`'i aşacaksa slot AYRILMAZ ve `None` döner — çağıran
+    taraf o sayfadan vazgeçip elindekiyle devam eder.
+
+    Uyku bilinçli olarak kilidin DIŞINDA yapılır. Eskiden `time.sleep` kilit
+    tutulurken çağrılıyordu: bekleyen her iş parçacığı bir öncekinin uykusu
+    bitene kadar kendi hesabını bile yapamıyordu, dolayısıyla ön plandaki bir
+    kullanıcı isteği arkaplandaki bir derinleştirmenin arkasına takılıyor ve
+    iptal edilse bile slotu boşaltamıyordu. Slot kilit altında ileri tarihe
+    rezerve edilip uyku dışarıda yapılınca sıra aynı kalır, kilit ise
+    mikrosaniyeler boyunca tutulur.
+    """
     global _last_request_at
     with _throttle_lock:
-        elapsed = time.monotonic() - _last_request_at
-        if elapsed < MIN_REQUEST_INTERVAL_SECONDS:
-            time.sleep(MIN_REQUEST_INTERVAL_SECONDS - elapsed)
-        _last_request_at = time.monotonic()
+        now = time.monotonic()
+        wait = max(0.0, MIN_REQUEST_INTERVAL_SECONDS - (now - _last_request_at))
+        if wait > max_wait:
+            return None
+        _last_request_at = now + wait
+
+    if wait > 0:
+        time.sleep(wait)
+    return wait
+
+
+# Takvim süresinden GERÇEK mum sayısına geçerken bölünecek katsayı — loader'daki
+# `calendar_stretch` ile aynı mantık, ters yönde. Ham takvim hesabı kapalı
+# piyasalarda mum sayısını fena hâlde abartıyor: NASDAQ'ta gün içi seans
+# 6,5/24 saat ve haftada 5/7 gün, yani 31 takvim günü 8928 değil ~2400 adet
+# 5dk mumu demek. Katsayı uygulanmazsa `outputsize` daima tavana (5000)
+# yapışıyor — ölçümde tek bir 5dk sayfası 10,6 sn.
+_DENSITY = {
+    ("stock", True): 6.0,
+    ("stock", False): 1.7,
+    ("forex", True): 1.6,
+    ("forex", False): 1.4,
+}
+
+_INTRADAY_INTERVALS = ("1min", "5min", "15min", "1h", "4h")
+
+
+def _page_size(
+    interval: str, start_time: datetime, end_time: datetime, symbol_style: str
+) -> int:
+    """İstenen aralık için makul sayfa boyutu.
+
+    `outputsize` eskiden koşulsuz 5000'di: pencere zaten `bars_before +
+    bars_after` (varsayılan 2500) mumla kırpıldığı için fazlası indirilip
+    atılıyordu. Ölçümde 5dk'da 5000 mumluk sayfa 10,6 sn, 2500 mumluk sayfa
+    2,7 sn — yani boşa inen veri doğrudan kullanıcının beklediği süreye
+    yazılıyordu.
+
+    Kestirim bilerek CÖMERTTİR (yoğunluk düzeltmesinin üstüne ayrıca pay
+    eklenir): fazla tahmin etmek biraz fazla veri indirmek, eksik tahmin etmek
+    ise fazladan bir SAYFA — yani bir throttle slotu (8 sn) — demektir.
+    """
+    minutes = _INTERVAL_MINUTES.get(interval)
+    if not minutes:
+        return MAX_OUTPUTSIZE
+
+    span_minutes = max((end_time - start_time).total_seconds() / 60.0, 0.0)
+    density = _DENSITY.get((symbol_style, interval in _INTRADAY_INTERVALS), 1.0)
+    needed = int(span_minutes / minutes / density * 1.5) + 1
+    return max(MIN_OUTPUTSIZE, min(needed, MAX_OUTPUTSIZE))
 
 
 def _normalize_symbol(symbol: str, symbol_style: str) -> str:
@@ -112,16 +200,29 @@ def fetch_ohlcv(
     sym = _normalize_symbol(symbol, symbol_style)
     rows: list[dict] = []
     cursor_end = end_time
+    wait_budget = MAX_THROTTLE_WAIT_SECONDS
 
     for _ in range(MAX_PAGES):
-        _throttle()
+        waited = _throttle(wait_budget)
+        if waited is None:
+            # Throttle bütçesi doldu: kalan sayfaları beklemek yerine elde
+            # olanla dön (bkz. MAX_THROTTLE_WAIT_SECONDS).
+            print(
+                f"Twelve Data throttle bütçesi doldu ({sym} {interval}); "
+                f"{len(rows)} mumla yetinildi"
+            )
+            break
+        wait_budget -= waited
+
         try:
             resp = requests.get(
                 BASE_URL,
                 params={
                     "symbol": sym,
                     "interval": interval,
-                    "outputsize": MAX_OUTPUTSIZE,
+                    "outputsize": _page_size(
+                        interval, start_time, cursor_end, symbol_style
+                    ),
                     "order": "DESC",
                     "apikey": settings.TWELVE_API_KEY,
                     "end_date": cursor_end.strftime("%Y-%m-%d %H:%M:%S"),

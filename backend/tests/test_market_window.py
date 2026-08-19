@@ -97,6 +97,12 @@ def make_loader(provider, provider_name: str) -> DataLoader:
     loader.providers = {provider_name: provider}
     # Parquet önbelleğini devre dışı bırak: test yalnızca sağlayıcı yolunu ölçsün.
     loader._get_cache_path = lambda *args, **kwargs: "__yok__.parquet"
+    # Kalıcı pencere deposunu da devre dışı bırak. Yalnızca okuma yolunu kapatmak
+    # yetmez: yazma yolu açık kalırsa testler gerçek `storage/` ağacına dosya
+    # bırakır ve aynı sembolü kullanan bir sonraki test, sağlayıcı hiç
+    # çağrılmadan o dosyadan servis edilerek yanlış geçer.
+    loader._read_window_store = lambda *args, **kwargs: None
+    loader._write_window_store = lambda *args, **kwargs: None
     return loader
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 import pandas as pd
@@ -36,6 +37,43 @@ WINDOW_MIN_START = datetime(1971, 1, 1)
 # Bellekte tutulacak azami pencere sayısı (RULES.md #24: sınırsız ham veri
 # biriktirmek yasak). Bir pencere ~1500 satır, yani birkaç yüz KB.
 WINDOW_CACHE_MAX = 40
+
+# ─── Kalıcı pencere deposu ───────────────────────────────────────────────────
+#
+# Replay pencereleri ana parquet'e YAZILAMAZ (gerekçe `_window_at` docstring'inde:
+# ana önbellek bitişik bir aralık olmak zorunda, pencereler ise geçmişin dağınık
+# noktalarında duruyor ve retention budaması onları anında silerdi). Ama hiç
+# saklamamak da pahalıya patlıyordu: düşük zaman dilimlerinde (Yahoo'nun intraday
+# tavanının gerisi) veri Twelve Data'dan geliyor, o kaynak istek başına saniyeler
+# sürüyor ve dakikalık kota throttle'ı var. Süreç yeniden başladığında ya da
+# RAM'deki LRU taştığında aynı pencere baştan indiriliyordu — ölçümde replay'de
+# 1g -> 15dk geçişi 16 sn, 15dk -> 5dk geçişi 24 sn.
+#
+# Bu yüzden ana önbellekten AYRI, ARALIK FARKINDALIĞI olan bir yan depo var:
+# parquet'in yanındaki manifest hangi aralıkların gerçekten indirildiğini tutar.
+# Bitişiklik varsayımı yoktur — çapayı KAPSAYAN aralık aranır, bulunamazsa
+# sağlayıcıya gidilir. Böylece 2019 ve 2024 pencereleri aynı dosyada yaşayabilir
+# ve aradaki boşluk yanlışlıkla "veri var" sanılmaz.
+WINDOW_STORE_DIRNAME = "windows"
+
+# Depo, kullanılmayan aralıkları atarak bu tavanın altında tutulur (RULES.md #24).
+# Budama en eskiyi değil EN AZ KULLANILANI atar: replay'de 2019'da çalışan bir
+# kullanıcı için "en eski" tam da elde tutulması gereken aralıktır.
+WINDOW_STORE_ROW_LIMIT = {
+    "1m": 60000,
+    "5m": 60000,
+    "15m": 60000,
+    "1h": 30000,
+    "4h": 30000,
+    "1d": 10000,
+    "1w": 5000,
+    "1mo": 5000,
+}
+
+# Aralığın "son kullanım" damgası bu kadar eskiyse manifest yeniden yazılır.
+# Her okumada diske yazmamak için: damganın saniye hassasiyetinde olması gerekmiyor,
+# amacı yalnızca budamada hangi aralığın gözden çıkarılabileceğini bilmek.
+WINDOW_STORE_TOUCH_INTERVAL = 300.0
 
 # Çapa, sağlayıcının o zaman dilimindeki geçmişinden de eskiyse pencere boş
 # dönüyordu (kullanıcı tarafında "Veri Yüklenemedi" ekranı): 1g'de 2019'a kesip
@@ -458,6 +496,16 @@ class DataLoader:
                 self._window_cache.move_to_end(cache_key)
                 return hit.copy()
 
+        # 3. Kalıcı yan depo. RAM'deki LRU yalnızca TAM ölçü eşleşmesinde
+        #    (aynı çapa + aynı mum sayısı) tutuyor ve süreç yeniden başlayınca
+        #    boşalıyor; bu depo aralık farkındalıklı olduğu için replay ilerleyip
+        #    çapa kaydığında da isabet eder ve yeniden başlatmaya dayanır.
+        stored = self._read_window_store(
+            provider_name, symbol, timeframe, anchor, bars_before, bars_after, start_time
+        )
+        if stored is not None:
+            return stored
+
         provider = self.get_provider(provider_name)
         df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
 
@@ -485,6 +533,11 @@ class DataLoader:
                 retry = provider.fetch_ohlcv(symbol, timeframe, wider_start, end_time)
                 if retry is not None and len(retry) > len(df):
                     df = retry.sort_values("timestamp").reset_index(drop=True)
+
+        # Depoya KIRPILMADAN önceki hali yazılır: indirme bedeli zaten ödendi,
+        # kırpılmış hali saklamak bir sonraki (biraz kaymış çapalı) isteği
+        # yeniden sağlayıcıya göndermek olurdu.
+        self._write_window_store(provider_name, symbol, timeframe, df)
 
         df = self._trim_window(df, anchor, bars_before, bars_after)
 
@@ -550,6 +603,227 @@ class DataLoader:
             return empty
 
         return self._trim_window(df, earliest, bars_before, bars_after).reset_index(drop=True)
+
+    # ─── Kalıcı pencere deposu ───────────────────────────────────────────────
+    # Gerekçe ve tasarım için dosya başındaki WINDOW_STORE_DIRNAME bloğuna bak.
+
+    def _window_store_path(self, provider_name: str, symbol: str, timeframe: str) -> str:
+        """Yan depo, ana önbellek dosyasının yanındaki `windows/` alt dizinindedir.
+
+        Yol bilerek `_get_cache_path` ÜZERİNDEN türetilir: iki önbellek tek bir
+        kök kavramına bağlı kalsın ve o kökü değiştiren (ya da testlerde devre
+        dışı bırakan) taraf ikisini birden ele alsın.
+        """
+        base = self._get_cache_path(provider_name, symbol, timeframe)
+        head, tail = os.path.split(base)
+        return os.path.join(head, WINDOW_STORE_DIRNAME, tail)
+
+    @staticmethod
+    def _window_store_meta_path(store_path: str) -> str:
+        return store_path[: -len(".parquet")] + ".json"
+
+    def _read_window_store_meta(self, store_path: str) -> list[dict]:
+        """Manifestteki aralıkları döndürür. Bozuk/eksik manifest = aralık yok."""
+        try:
+            with open(self._window_store_meta_path(store_path), "r", encoding="utf-8") as fh:
+                ranges = json.load(fh).get("ranges", [])
+        except Exception:
+            return []
+
+        parsed = []
+        for item in ranges:
+            try:
+                parsed.append(
+                    {
+                        "start": pd.Timestamp(item["start"]).to_pydatetime(),
+                        "end": pd.Timestamp(item["end"]).to_pydatetime(),
+                        "used": float(item.get("used", 0.0)),
+                    }
+                )
+            except Exception:
+                continue
+        return parsed
+
+    def _write_window_store_meta(self, store_path: str, ranges: list[dict]) -> None:
+        payload = {
+            "ranges": [
+                {
+                    "start": r["start"].isoformat(),
+                    "end": r["end"].isoformat(),
+                    "used": r["used"],
+                }
+                for r in ranges
+            ]
+        }
+        try:
+            os.makedirs(os.path.dirname(store_path), exist_ok=True)
+            with open(self._window_store_meta_path(store_path), "w", encoding="utf-8") as fh:
+                json.dump(payload, fh)
+        except Exception as exc:
+            print(f"Pencere deposu manifesti yazılamadı ({store_path}): {exc}")
+
+    @staticmethod
+    def _merge_ranges(ranges: list[dict], timeframe: str) -> list[dict]:
+        """Örtüşen/bitişik aralıkları birleştirir.
+
+        "Bitişik" ölçüsü bir mum süresidir: art arda indirilmiş iki pencerenin
+        arasında tam olarak sıfır boşluk olması beklenemez (mum ızgarası,
+        kapalı piyasa). Bir mumluk pay bırakılmazsa aynı sürekli geçmiş
+        onlarca parçaya bölünür ve hiçbiri tek başına çapayı kapsamaz.
+        """
+        if not ranges:
+            return []
+        try:
+            tolerance = timeframe_delta(timeframe)
+        except ValueError:
+            tolerance = timedelta(days=1)
+
+        ordered = sorted(ranges, key=lambda r: r["start"])
+        merged = [dict(ordered[0])]
+        for current in ordered[1:]:
+            last = merged[-1]
+            if current["start"] <= last["end"] + tolerance:
+                last["end"] = max(last["end"], current["end"])
+                last["used"] = max(last["used"], current["used"])
+            else:
+                merged.append(dict(current))
+        return merged
+
+    def _read_window_store(
+        self,
+        provider_name: str,
+        symbol: str,
+        timeframe: str,
+        anchor: datetime,
+        bars_before: int,
+        bars_after: int,
+        start_time: datetime,
+    ) -> pd.DataFrame | None:
+        """Yan depo çapayı kapsayan bir aralık taşıyorsa pencereyi oradan keser.
+
+        Yeterlilik ölçütü `_read_cache_window` ile aynıdır: çapanın gerisinde
+        `bars_before` mum varsa, ya da aralık zaten istenen başlangıcın
+        gerisine uzanıyorsa (yani sağlayıcıda da daha fazlası yok) bu depo
+        işimizi görür. Karşılanamıyorsa `None` — "veri yok" değil, "buradan
+        karşılanamaz" demektir.
+        """
+        store_path = self._window_store_path(provider_name, symbol, timeframe)
+        if not os.path.exists(store_path):
+            return None
+
+        ranges = self._read_window_store_meta(store_path)
+        covering = next(
+            (r for r in ranges if r["start"] <= anchor <= r["end"]),
+            None,
+        )
+        if covering is None:
+            return None
+
+        try:
+            df = pd.read_parquet(store_path)
+        except Exception:
+            return None
+        if df.empty:
+            return None
+
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        # YALNIZCA çapayı kapsayan aralığın satırları: manifestteki diğer
+        # aralıklar geçmişin başka noktalarında ve aradaki boşluk gerçek bir
+        # veri boşluğu — hepsini birlikte kesmek olmayan mumları varmış gibi
+        # gösterirdi.
+        block = df[(df["timestamp"] >= covering["start"]) & (df["timestamp"] <= covering["end"])]
+        if block.empty:
+            return None
+
+        enough_history = int((block["timestamp"] <= anchor).sum()) >= bars_before
+        if not enough_history and covering["start"] > start_time:
+            return None
+
+        sliced = self._trim_window(block, anchor, bars_before, bars_after)
+        if sliced.empty:
+            return None
+
+        # Budama sırasında hangi aralığın gözden çıkarılabileceğini bilmek için
+        # son kullanım damgasını tazele (çok sık yazmamak için aralıklı).
+        now = time.time()
+        if now - covering["used"] > WINDOW_STORE_TOUCH_INTERVAL:
+            covering["used"] = now
+            self._write_window_store_meta(store_path, ranges)
+
+        return sliced.reset_index(drop=True)
+
+    def _write_window_store(
+        self, provider_name: str, symbol: str, timeframe: str, df: pd.DataFrame
+    ) -> None:
+        """Sağlayıcıdan yeni gelen pencereyi yan depoya ekler.
+
+        Depodaki satır sayısı tavanı aşarsa (RULES.md #24) EN AZ KULLANILAN
+        aralıklar bütün olarak atılır. Yarım aralık bırakmak, manifestin
+        "bu aralık elimde" sözünü yalan çıkarırdı.
+        """
+        if df.empty:
+            return
+
+        store_path = self._window_store_path(provider_name, symbol, timeframe)
+        lock = self._get_file_lock(store_path)
+
+        with lock:
+            existing = None
+            if os.path.exists(store_path):
+                try:
+                    existing = pd.read_parquet(store_path)
+                    existing["timestamp"] = pd.to_datetime(existing["timestamp"])
+                except Exception:
+                    existing = None
+
+            fresh = df.copy()
+            fresh["timestamp"] = pd.to_datetime(fresh["timestamp"])
+            # Yeni aralık, GERÇEKTEN elde edilen mumların sınırlarıdır; istenen
+            # pencere değil. İstek sağlayıcı tavanı ya da throttle bütçesi
+            # yüzünden kırpılmış olabilir ve manifest indirilmemiş bir aralığı
+            # "elimde" diye işaretlememeli.
+            new_range = {
+                "start": fresh["timestamp"].min().to_pydatetime(),
+                "end": fresh["timestamp"].max().to_pydatetime(),
+                "used": time.time(),
+            }
+
+            merged_df = (
+                fresh
+                if existing is None or existing.empty
+                else pd.concat([existing, fresh], ignore_index=True)
+            )
+            merged_df = (
+                merged_df.drop_duplicates(subset=["timestamp"], keep="last")
+                .sort_values("timestamp")
+                .reset_index(drop=True)
+            )
+
+            ranges = self._merge_ranges(
+                self._read_window_store_meta(store_path) + [new_range], timeframe
+            )
+
+            limit = WINDOW_STORE_ROW_LIMIT.get(timeframe)
+            if limit is not None and len(merged_df) > limit:
+                # En az kullanılandan başlayarak aralık at; yeni yazılan aralık
+                # en taze `used` damgasına sahip olduğu için son atılan olur.
+                for victim in sorted(ranges, key=lambda r: r["used"]):
+                    if len(merged_df) <= limit or len(ranges) <= 1:
+                        break
+                    ranges = [r for r in ranges if r is not victim]
+                    merged_df = merged_df[
+                        (merged_df["timestamp"] < victim["start"])
+                        | (merged_df["timestamp"] > victim["end"])
+                    ].reset_index(drop=True)
+
+            try:
+                os.makedirs(os.path.dirname(store_path), exist_ok=True)
+                merged_df.to_parquet(store_path, index=False)
+            except Exception as exc:
+                print(f"Pencere deposu yazılamadı ({store_path}): {exc}")
+                return
+
+            self._write_window_store_meta(store_path, ranges)
 
     def _window_cache_key(
         self,

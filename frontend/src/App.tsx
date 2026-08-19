@@ -64,6 +64,23 @@ const QUICK_WINDOW_DAYS: Record<string, number> = {
 // eski muma çapalanarak geriye doğru eklenir (backend'de bars_before tavanı 5000).
 const REPLAY_HISTORY_BARS = 5000;
 
+// Gün içi dilimlerde derinleştirme bilerek daha dar tutulur. Sebep tarayıcı
+// değil veri kaynağı: 1dk/5dk/15dk geçmişi Yahoo'nun intraday tavanının
+// (1dk 6 gün, 5dk/15dk 58 gün, 1s 700 gün) gerisinde Twelve Data'dan geliyor ve
+// 5000 mumluk bir istek orada çok sayfalı bir indirmeye dönüşüyor — ölçümde
+// 1g -> 15dk geçişinin arkaplan derinleştirmesi 16 sn. 2500 mum manuel backtest
+// için hâlâ fazlasıyla yeterli ve tek sayfada karşılanıyor.
+const REPLAY_HISTORY_BARS_INTRADAY = 2500;
+
+// Derinleştirme isteği, ön plan penceresi ekrana geldikten sonra bu kadar
+// beklemeden gönderilmez. Zaman dilimleri arasında hızlıca gezinen bir kullanıcı
+// eskiden her adımda bir derinleştirme başlatıyordu; istek istemci tarafında
+// iptal edilse bile backend onu sonuna kadar çalıştırıyor ve süreç genelindeki
+// Twelve Data throttle'ını işgal ediyordu — yani BİR SONRAKİ geçiş, artık kimsenin
+// beklemediği bir isteğin arkasında kuyruğa giriyordu. Gecikme, ancak kullanıcı
+// bir dilimde durakladığında derinleştirme yapılmasını sağlar.
+const REPLAY_HISTORY_DELAY_MS = 1200;
+
 // İleri yön. Pencere ilerisi 1000 mumla bitiyor ve oynatma tam orada duruyordu
 // (CandleChart'ın playback timer'ı `nextIdx >= data.length` olunca isPlaying'i
 // kapatıyor) — replay'de zaman dilimi değiştiren biri 1000 mum sonra duvara
@@ -166,6 +183,27 @@ function MainApp() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
   const bgControllerRef = useRef<AbortController | null>(null);
+  // Gecikmeli derinleştirme zamanlayıcısı (bkz. REPLAY_HISTORY_DELAY_MS).
+  const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Arkaplan derinleştirmesini iptal eder: henüz gönderilmemişse zamanlayıcıyı,
+   * gönderilmişse isteği. İkisini ayrı ayrı temizlemek kolayca unutuluyordu —
+   * zamanlayıcı kalırsa iptal edilmiş bir geçişin isteği 1,2 sn sonra yine
+   * gidiyordu.
+   */
+  const cancelBackgroundLoad = useCallback(() => {
+    if (bgTimerRef.current !== null) {
+      clearTimeout(bgTimerRef.current);
+      bgTimerRef.current = null;
+    }
+    bgControllerRef.current?.abort();
+    bgControllerRef.current = null;
+    // Göstergeyi burada söndürmek şart: istek henüz DOĞMAMIŞSA (zamanlayıcı
+    // iptal edildi) isteğin `finally` bloğu hiç çalışmaz ve gösterge sonsuza
+    // kadar "yükleniyor" kalırdı.
+    setIsBackgroundLoading(false);
+  }, []);
 
   const [replayState] = useReplayStore();
   const [alertState] = useAlertStore();
@@ -326,34 +364,47 @@ function MainApp() {
   }) => {
     const controller = new AbortController();
     bgControllerRef.current = controller;
-    setIsBackgroundLoading(true);
 
-    getWindow({
-      provider: params.provider,
-      symbol: params.symbol,
-      timeframe: params.timeframe,
-      anchor: params.oldestTime,
-      barsBefore: REPLAY_HISTORY_BARS,
-      barsAfter: 1,
-      signal: controller.signal,
-    })
-      .then((older) => {
-        if (controller.signal.aborted) return;
-        mergeOlderData(
-          params.tagTf ? older.map((c) => ({ ...c, tf: c.tf ?? params.tagTf })) : older
-        );
+    // Gecikmeli gönderim (bkz. REPLAY_HISTORY_DELAY_MS): kullanıcı bu süre
+    // içinde başka bir dilime geçerse istek hiç doğmaz. Zamanlayıcı ref'te
+    // tutulur; iptal yolları (cancelBackgroundLoad) onu da temizler.
+    clearTimeout(bgTimerRef.current ?? undefined);
+    bgTimerRef.current = setTimeout(() => {
+      bgTimerRef.current = null;
+      if (controller.signal.aborted) return;
+      // Gösterge, istek GERÇEKTEN başladığında yanar: gecikme süresi boyunca
+      // "yükleniyor" göstermek yanıltıcı olurdu, henüz bir şey yüklenmiyor.
+      setIsBackgroundLoading(true);
+
+      getWindow({
+        provider: params.provider,
+        symbol: params.symbol,
+        timeframe: params.timeframe,
+        anchor: params.oldestTime,
+        barsBefore: INTRADAY_TIMEFRAMES.includes(params.timeframe)
+          ? REPLAY_HISTORY_BARS_INTRADAY
+          : REPLAY_HISTORY_BARS,
+        barsAfter: 1,
+        signal: controller.signal,
       })
-      .catch((err: any) => {
-        // İptal edilmiş istek: sembol/zaman dilimi değişti, sonucu birleştirme.
-        if (controller.signal.aborted || err?.name === 'AbortError') return;
-        console.error('Replay geçmiş penceresi yüklenemedi:', err);
-      })
-      .finally(() => {
-        if (bgControllerRef.current === controller) {
-          setIsBackgroundLoading(false);
-          bgControllerRef.current = null;
-        }
-      });
+        .then((older) => {
+          if (controller.signal.aborted) return;
+          mergeOlderData(
+            params.tagTf ? older.map((c) => ({ ...c, tf: c.tf ?? params.tagTf })) : older
+          );
+        })
+        .catch((err: any) => {
+          // İptal edilmiş istek: sembol/zaman dilimi değişti, sonucu birleştirme.
+          if (controller.signal.aborted || err?.name === 'AbortError') return;
+          console.error('Replay geçmiş penceresi yüklenemedi:', err);
+        })
+        .finally(() => {
+          if (bgControllerRef.current === controller) {
+            setIsBackgroundLoading(false);
+            bgControllerRef.current = null;
+          }
+        });
+    }, REPLAY_HISTORY_DELAY_MS);
   }, [mergeOlderData]);
 
   // İleri yön uzatması. Ayrı bir controller kullanır: geçmiş yüklemesiyle
@@ -399,9 +450,7 @@ function MainApp() {
 
     // Bir önceki arkaplan (geçmiş/ileri veri) isteği hâlâ sürüyorsa iptal et —
     // artık geçerli olmayan sembol/interval için sonuç birleştirilmesin.
-    bgControllerRef.current?.abort();
-    bgControllerRef.current = null;
-    setIsBackgroundLoading(false);
+    cancelBackgroundLoad();
     forwardControllerRef.current?.abort();
     forwardControllerRef.current = null;
     forwardExhaustedRef.current = null;
@@ -551,7 +600,7 @@ function MainApp() {
     } finally {
       if (!signal.aborted) setLoading(false);
     }
-  }, [provider, symbol, timeframe, start, end, isAuthenticated, applyChartData, loadOlderDataInBackground, loadOlderWindowInBackground]);
+  }, [provider, symbol, timeframe, start, end, isAuthenticated, applyChartData, cancelBackgroundLoad, loadOlderDataInBackground, loadOlderWindowInBackground]);
 
   // Girdiler değiştiğinde grafiği otomatik olarak yükle (sembol yazımı için debounce uygulandı).
   // AbortController: bir önceki (henüz tamamlanmamış) istek burada iptal edilir; aksi halde
@@ -590,10 +639,10 @@ function MainApp() {
       console.log("App inputs changed again, clearing previous timeout.");
       clearTimeout(timer);
       controller.abort();
-      bgControllerRef.current?.abort();
+      cancelBackgroundLoad();
       forwardControllerRef.current?.abort();
     };
-  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, replayExitCount.current]);
+  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, cancelBackgroundLoad, replayExitCount.current]);
 
   // İmleç yüklü verinin sonuna yaklaştıysa ileri yönü uzat.
   //

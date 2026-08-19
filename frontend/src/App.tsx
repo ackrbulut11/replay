@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
+import PublicOnlyRoute from './components/PublicOnlyRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import CandleChart from './charts/CandleChart';
 import { IndicatorsState } from './charts/IndicatorToolbar';
@@ -951,8 +952,22 @@ function MainApp() {
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/"
+        element={
+          <PublicOnlyRoute>
+            <LandingPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <PublicOnlyRoute>
+            <LoginPage />
+          </PublicOnlyRoute>
+        }
+      />
       <Route
         path="/app/*"
         element={

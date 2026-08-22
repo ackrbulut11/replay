@@ -892,9 +892,28 @@ export default function BatchScannerTab({
                         </div>
                       </td>
 
-                      {/* Tamamlanan İşlem */}
+                      {/* Tamamlanan İşlem. Açık pozisyon buraya SAYILMAZ
+                          (kâr/zararı gerçekleşmemiştir) ama rozetle belirtilir:
+                          aksi halde hâlâ pozisyonda olan bir sembol "0 işlem"
+                          görünüp strateji hiç çalışmamış sanılıyordu. */}
                       <td className="py-3 px-4 text-center font-mono font-medium text-content">
-                        {item.total_trades}
+                        <span>{item.total_trades}</span>
+                        {item.open_side && (
+                          <span
+                            className={`ml-1.5 rounded border px-1 py-0.5 text-2xs align-middle ${
+                              (item.open_pnl_percent ?? 0) >= 0
+                                ? 'text-profit-400 border-profit-500/30 bg-profit-500/10'
+                                : 'text-loss-400 border-loss-500/30 bg-loss-500/10'
+                            }`}
+                            title={`Test sonunda ${
+                              item.open_side === 'LONG' ? 'alış' : 'satış'
+                            } pozisyonu açık — gerçekleşmemiş ${(item.open_pnl_percent ?? 0).toFixed(
+                              2
+                            )}%, yandaki metriklere dahil değil`}
+                          >
+                            {item.open_side === 'LONG' ? 'A' : 'S'} açık
+                          </span>
+                        )}
                       </td>
 
                       {/* Başarı Oranı (Win Rate) */}

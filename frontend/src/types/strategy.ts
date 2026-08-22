@@ -271,6 +271,25 @@ export interface EvaluateResponse {
   buy_and_hold?: BuyAndHoldResult | null;
   /** Stratejinin al-tut'a göre farkı. Pozitifse strateji öndedir. */
   outperformance_pct?: number | null;
+  /**
+   * Test aralığının sonunda hâlâ açık olan pozisyon.
+   *
+   * METRİKLERİN DIŞINDADIR: kâr/zararı gerçekleşmemiştir, bu yüzden
+   * `total_pnl_percent`/`win_rate`/Sharpe onu saymaz. Gösterilmesinin sebebi,
+   * al-tut benzeri bir stratejinin aksi halde "0 işlem, %0 getiri" görünmesi.
+   */
+  open_position?: OpenPositionInfo | null;
+}
+
+export interface OpenPositionInfo {
+  side: 'LONG' | 'SHORT';
+  entry_price: number;
+  entry_timestamp: number | null;
+  entry_bar_index: number | null;
+  last_price: number;
+  /** Maliyetler düşülmüş; şimdi kapatılsa elde kalacak yüzde. */
+  unrealized_pnl_percent: number;
+  bars_held: number;
 }
 
 export interface SingleEvaluationLogItem {
@@ -407,6 +426,19 @@ export interface BatchEvaluateResultItem {
   total_pnl_percent: number;
   last_signal?: string | null;
   last_signal_time?: number | null;
+  /**
+   * Risk metrikleri — backend bunları zaten döndürüyordu ama tip tanımında
+   * olmadıkları için tabloya hiç çıkmıyorlardı. Getiriyi tek başına göstermek
+   * yanıltıcı: aynı getiriyi %60 düşüşle alan strateji aynı strateji değildir.
+   */
+  max_drawdown_pct?: number | null;
+  profit_factor?: number | null;
+  sharpe_ratio?: number | null;
+  buy_and_hold_pct?: number | null;
+  outperformance_pct?: number | null;
+  /** Tarama sonunda hâlâ açık pozisyon (metriklere girmez, bkz. OpenPositionInfo). */
+  open_side?: 'LONG' | 'SHORT' | null;
+  open_pnl_percent?: number | null;
   error?: string | null;
 }
 

@@ -353,6 +353,10 @@ class EvaluateResponse(BaseModel):
     # Ayni donemde al-tut getirisi ve stratejinin ona gore farki.
     buy_and_hold: Optional[Dict[str, Any]] = None
     outperformance_pct: Optional[float] = None
+    # Aralik sonunda hala acik olan pozisyon. METRIKLERIN DISINDADIR
+    # (gerceklesmemis kar/zarar); yalnizca "strateji su an piyasada mi ve
+    # ne durumda" sorusunu cevaplar. Bkz. StrategyEngine._open_position.
+    open_position: Optional[Dict[str, Any]] = None
 
 
 class IndicatorInfo(BaseModel):
@@ -418,6 +422,11 @@ class BatchEvaluateResultItem(BaseModel):
     sharpe_ratio: Optional[float] = None
     buy_and_hold_pct: Optional[float] = None
     outperformance_pct: Optional[float] = None
+    # Tarama bittiginde sembolde hala acik pozisyon var mi ("LONG"/"SHORT")
+    # ve gerceklesmemis kar/zarari ne. Metriklere GIRMEZ; tablodaki getiri
+    # sutununun neden bos gorundugunu aciklar.
+    open_side: Optional[str] = None
+    open_pnl_percent: Optional[float] = None
     error: Optional[str] = None
 
 

@@ -481,6 +481,9 @@ class StrategyEngine:
             "buy_and_hold": benchmark,
             # Pozitifse strateji al-tut'u yendi.
             "outperformance_pct": outperformance,
+            # Aralık sonunda açık kalan pozisyon — metriklerin DIŞINDA, yalnızca
+            # bilgi amaçlı (bkz. `_open_position`). None ise pozisyon nakitte.
+            "open_position": self._open_position(signals, df, costs),
         }
 
     @staticmethod
@@ -518,6 +521,55 @@ class StrategyEngine:
             "return_pct": round(net_pnl_percent("long", entry, exit_price, costs), 2),
             "entry_price": round(entry, 4),
             "exit_price": round(exit_price, 4),
+        }
+
+    @staticmethod
+    def _open_position(
+        signals: list[dict],
+        df: pd.DataFrame,
+        costs: ExecutionCosts,
+    ) -> dict | None:
+        """Aralık sonunda hâlâ açık olan pozisyonu (varsa) tarif eder.
+
+        Bu kayıt METRİKLERE GİRMEZ — kâr/zararı gerçekleşmemiştir ve kapanmamış
+        bir işlemi kapanmış gibi saymak win rate'i de drawdown'ı da bozardı.
+        Ama gösterilmemesi daha kötüydü: al-tut benzeri bir strateji "0 işlem,
+        %0 getiri" olarak raporlanıyor, üstelik `outperformance_pct` onu
+        al-tut'un yüzlerce puan gerisinde gösteriyordu.
+
+        Gerçekleşmemiş kâr/zarar son barın KAPANIŞINA göre hesaplanır ve
+        kapanmış işlemlerle aynı maliyet konvansiyonundan geçer (RULES.md #8),
+        böylece "kapatsam ne olurdu" sorusunun cevabı olur.
+        """
+        marker = next((s for s in signals if s.get("position_open")), None)
+        if marker is None or df is None or df.empty:
+            return None
+
+        close_col = next((c for c in df.columns if str(c).lower() == "close"), None)
+        if close_col is None:
+            return None
+
+        side = str(marker["position_open"]).lower()
+        entry_price = float(marker.get("price") or 0.0)
+        if entry_price <= 0:
+            return None
+
+        # Kapanış fiyatına da çıkış slipajı uygulanır: gerçekten kapatılsaydı
+        # ödenecek fiyat budur.
+        last_close = float(df.iloc[-1][close_col])
+        exit_price = fill_price(last_close, is_buy=(side == "short"), costs=costs)
+
+        return {
+            "side": side.upper(),
+            "entry_price": round(entry_price, 4),
+            "entry_timestamp": marker.get("timestamp"),
+            "entry_bar_index": marker.get("bar_index"),
+            "last_price": round(last_close, 4),
+            # Maliyetler düşülmüş; kapatılsa elde kalacak yüzde.
+            "unrealized_pnl_percent": round(
+                net_pnl_percent(side, entry_price, exit_price, costs), 2
+            ),
+            "bars_held": max(len(df) - 1 - int(marker.get("bar_index") or 0), 0),
         }
 
     @staticmethod
@@ -693,6 +745,12 @@ class StrategyEngine:
                 "sharpe_ratio": res["performance"].get("sharpe_ratio"),
                 "buy_and_hold_pct": res["buy_and_hold"].get("return_pct"),
                 "outperformance_pct": res.get("outperformance_pct"),
+                # Acik pozisyon metriklere girmez ama gizlenmez de: tarama
+                # tablosunda "0 islem" satirinin sebebi bu olabilir.
+                "open_side": (res.get("open_position") or {}).get("side"),
+                "open_pnl_percent": (res.get("open_position") or {}).get(
+                    "unrealized_pnl_percent"
+                ),
                 # Portfoy simulasyonu icin ham kapanmis pozisyonlar. Tarama
                 # tablosuna gitmez (route ayikliyor), yalnizca sermaye
                 # paylastirmali hesabin girdisidir.

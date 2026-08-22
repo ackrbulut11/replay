@@ -495,6 +495,16 @@ class RuleEngine:
                     "execute_at": i + bar_delay,
                 }
 
+        # ─── Aralık sonunda hâlâ açık olan pozisyon ───────────────────────
+        # Kapatılmaz ve METRİKLERE GİRMEZ (kapanmamış bir işlemin kâr/zararı
+        # gerçekleşmemiştir). Ama sessizce yok da sayılmaz: eskiden bar 1'de
+        # alıp %196 kârda oturan bir strateji "0 işlem, %0 getiri, al-tut'un
+        # 196 puan gerisinde" diye görünüyordu. Pozisyonu AÇAN kayıt
+        # işaretlenir; `StrategyEngine.evaluate` bunu `open_position` alanına
+        # çevirip arayüze taşır.
+        if position_state != "none" and signals:
+            signals[-1]["position_open"] = position_state.upper()
+
         return signals
 
     @staticmethod

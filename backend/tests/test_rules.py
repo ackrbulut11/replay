@@ -1056,3 +1056,109 @@ class TestStopLossGapFill(unittest.TestCase):
         self.assertEqual(len(closing), 1)
         self.assertAlmostEqual(closing[0]["price"], 140.0, places=4)
         self.assertAlmostEqual(closing[0]["pnl_percent"], -40.0, places=2)
+
+
+class TestOpenPositionReporting(unittest.TestCase):
+    """Aralik sonunda acik kalan pozisyon METRIKLERE girmez ama gizlenmez.
+
+    Eskiden bar 1'de alip %196 karda oturan bir strateji "0 islem, %0 getiri,
+    al-tut'un 196 puan gerisinde" diye raporlaniyordu; trend takip eden her
+    strateji bu sekilde yanlis degerlendiriliyordu.
+    """
+
+    @staticmethod
+    def _buy_and_hold_strategy():
+        return {
+            "id": "t",
+            "name": "AlTut",
+            "parameters": [],
+            # Giris her barda dogru, cikis hicbir barda dogru degil.
+            "entry_rules": {
+                "logic": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "operator": ">",
+                        "right": {"type": "value", "value": 0},
+                    }
+                ],
+            },
+            "exit_rules": {
+                "logic": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "operator": "<",
+                        "right": {"type": "value", "value": 0},
+                    }
+                ],
+            },
+            "bar_delay": 1,
+            "allow_short": False,
+            "commission_bps": 0.0,
+            "slippage_bps": 0.0,
+            "take_profit_pct": None,
+            "stop_loss_pct": None,
+        }
+
+    @staticmethod
+    def _rising_frame(n=50):
+        close = [100.0 + i * 4 for i in range(n)]
+        return pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2024-01-01", periods=n, freq="D"),
+                "open": close,
+                "high": [c * 1.01 for c in close],
+                "low": [c * 0.99 for c in close],
+                "close": close,
+                "volume": [1] * n,
+            }
+        )
+
+    def test_acik_pozisyon_isaretlenir(self):
+        signals = RuleEngine.evaluate_range(
+            self._buy_and_hold_strategy(), self._rising_frame(), start_index=0
+        )
+        self.assertEqual(signals[-1].get("position_open"), "LONG")
+
+    def test_acik_pozisyon_metriklere_girmez(self):
+        result = StrategyEngine().evaluate(
+            self._buy_and_hold_strategy(), self._rising_frame()
+        )
+        # Kapanmis islem yok: metrikler sifir kalir (secilen davranis).
+        self.assertEqual(result["total_trades"], 0)
+        self.assertEqual(result["total_pnl_percent"], 0.0)
+        self.assertEqual(result["performance"]["net_profit"], 0.0)
+
+    def test_acik_pozisyon_ayri_alanda_raporlanir(self):
+        result = StrategyEngine().evaluate(
+            self._buy_and_hold_strategy(), self._rising_frame()
+        )
+        open_pos = result["open_position"]
+        self.assertIsNotNone(open_pos)
+        self.assertEqual(open_pos["side"], "LONG")
+        # Isinma 1 bar: sinyal bar 1'de uretilir, bar 2'nin acilisindan
+        # (108) girilir; son kapanis 296 -> ~%174.
+        self.assertAlmostEqual(open_pos["entry_price"], 108.0, places=2)
+        self.assertAlmostEqual(open_pos["last_price"], 296.0, places=2)
+        self.assertGreater(open_pos["unrealized_pnl_percent"], 170.0)
+        self.assertEqual(open_pos["bars_held"], 47)
+
+    def test_pozisyon_kapaliysa_alan_bostur(self):
+        strategy = self._buy_and_hold_strategy()
+        # Cikis kurali da her barda dogru olsun: pozisyon acilir acilmaz kapanir.
+        strategy["exit_rules"] = strategy["entry_rules"]
+        result = StrategyEngine().evaluate(strategy, self._rising_frame())
+        self.assertIsNone(result["open_position"])
+
+    def test_acik_pozisyon_maliyetleri_dusulmus_gosterir(self):
+        strategy = self._buy_and_hold_strategy()
+        strategy["commission_bps"] = 10.0
+        strategy["slippage_bps"] = 5.0
+        result = StrategyEngine().evaluate(strategy, self._rising_frame())
+        with_costs = result["open_position"]["unrealized_pnl_percent"]
+
+        strategy["commission_bps"] = 0.0
+        strategy["slippage_bps"] = 0.0
+        without_costs = StrategyEngine().evaluate(strategy, self._rising_frame())
+        self.assertLess(with_costs, without_costs["open_position"]["unrealized_pnl_percent"])

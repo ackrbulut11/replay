@@ -794,6 +794,46 @@ export default function StrategyPage({
                               </span>
                             </div>
                           )}
+
+                          {/* Test sonunda hâlâ açık pozisyon. Yukarıdaki
+                              metriklere GİRMEZ (kâr/zarar gerçekleşmemiştir);
+                              gösterilmesinin sebebi, al-tut benzeri bir
+                              stratejinin aksi halde "0 işlem, %0 getiri"
+                              görünüp al-tut'un yüzlerce puan gerisinde
+                              sanılması. */}
+                          {evaluateResult.open_position && (
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line bg-surface-raised px-3 py-2 text-xs">
+                              <span className="text-content-muted">
+                                Test sonunda{' '}
+                                <span
+                                  className={`font-medium ${
+                                    evaluateResult.open_position.side === 'LONG'
+                                      ? 'text-profit-400'
+                                      : 'text-loss-400'
+                                  }`}
+                                >
+                                  {evaluateResult.open_position.side === 'LONG' ? 'ALIŞ' : 'SATIŞ'}
+                                </span>{' '}
+                                pozisyonu açık —{' '}
+                                <span className="font-mono text-content">
+                                  {evaluateResult.open_position.entry_price}
+                                </span>{' '}
+                                girişli, {evaluateResult.open_position.bars_held} mumdur taşınıyor
+                              </span>
+                              <span
+                                className={`font-mono ${
+                                  evaluateResult.open_position.unrealized_pnl_percent >= 0
+                                    ? 'text-profit-400'
+                                    : 'text-loss-400'
+                                }`}
+                                title="Gerçekleşmemiş kâr/zarar — yukarıdaki metriklere dahil DEĞİLDİR"
+                              >
+                                {evaluateResult.open_position.unrealized_pnl_percent >= 0 ? '+' : ''}
+                                {evaluateResult.open_position.unrealized_pnl_percent.toFixed(2)}%
+                                <span className="ml-1 text-content-faint">(gerçekleşmemiş)</span>
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Sinyal listesini dışa aktar */}

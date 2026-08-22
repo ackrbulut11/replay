@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
+from app.core import perf
 from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
 from app.database.migrate import run_migrations
 from app.auth.router import router as auth_router
@@ -168,6 +169,19 @@ if settings.FRONTEND_URL and settings.FRONTEND_URL not in origins:
 #
 # `minimum_size`: küçük JSON yanıtlarını sıkıştırmak kazandırmaz, CPU harcar.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# Performans ölçümü (geliştirme aracı, üretimde kendiliğinden kapalı).
+#
+# En DIŞTA olması gerekiyor — yani en son eklenen middleware. Starlette
+# middleware'leri ters sırayla sarıyor; içeride kalsaydı gzip'in harcadığı
+# süre ölçümün dışında kalırdı ve "yanıt neden geç geldi" sorusunun bir
+# parçası görünmez olurdu.
+_perf_log_path = perf.install(app)
+if _perf_log_path:
+    logger.info(
+        "Performans olcumu acik -> %s  (canli izleme: python ../scripts/perf_log.py)",
+        _perf_log_path,
+    )
 
 app.add_middleware(
     CORSMiddleware,

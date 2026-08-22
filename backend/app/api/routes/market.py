@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth.dependencies import get_current_user
 from app.core.config import settings
+from app.core.perf import note_rows
 from app.core.security import RateLimiter
 from app.data.loader import (
     loader as shared_loader,
@@ -172,7 +173,12 @@ def _to_chart_candles(df) -> list[dict]:
     milisaniyeler içinde yapar.
     """
     if df is None or df.empty:
+        note_rows(0)
         return []
+
+    # Kaç mum döndüğü performans logunda görünsün: süreyi tek başına okumak
+    # yanıltıcı, 2 sn'de 5.000 mum ile 2 sn'de 50 mum aynı şey değil.
+    note_rows(len(df))
 
     # `.timestamp()` satır başına çağrılmak yerine tüm sütun için tek seferde:
     # int64 nanosaniye gösterimini saniyeye bölmek aynı sonucu verir.

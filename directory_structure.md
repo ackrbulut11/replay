@@ -137,7 +137,8 @@ TradingResearchPlatform/
 │   │   │
 │   │   ├── core/
 │   │   │   ├── config.py
-│   │   │   └── security.py
+│   │   │   ├── security.py
+│   │   │   └── perf.py               # İstek başına süre ölçümü (dev aracı, üretimde kapalı)
 │   │   │
 │   │   ├── data/
 │   │   │   ├── providers/
@@ -237,8 +238,11 @@ TradingResearchPlatform/
 │   ├── strategies/                   # ESKİ: stratejiler artık veritabanında (bkz. RULES.md §4)
 │   │                                 # Bu klasör yalnızca geçiş öncesi yedekleri barındırır.
 │   │
-│   └── database/
-│       └── app.db                    # Local SQLite Database
+│   ├── database/
+│   │   └── app.db                    # Local SQLite Database
+│   │
+│   └── logs/
+│       └── perf.jsonl                # İstek süreleri (git'e girmez; scripts/perf_log.py okur)
 │
 │
 ├── scripts/
@@ -247,7 +251,8 @@ TradingResearchPlatform/
 │   ├── build_sidecar.py
 │   ├── import_strategies_to_db.py    # Eski JSON stratejileri veritabanına aktarır (tek seferlik)
 │   ├── import_alerts_to_db.py        # Eski JSON alarmları veritabanına aktarır (tek seferlik)
-│   └── generate_indicator_parity.py  # backend/tests/indicator_parity.json altın örneğini üretir
+│   ├── generate_indicator_parity.py  # backend/tests/indicator_parity.json altın örneğini üretir
+│   └── perf_log.py                   # Canlı performans izleyici (ayrı terminalde çalışır)
 │
 └── .github/
     └── workflows/

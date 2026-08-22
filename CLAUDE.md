@@ -31,6 +31,22 @@ pip install -r requirements.txt
 python main.py                   # uvicorn on 127.0.0.1:8000 with reload
 ```
 
+### Performans logu (`scripts/`)
+Backend her isteği süre ölçüp `backend/storage/logs/perf.jsonl`'a yazar ve uvicorn
+terminaline basar (`app/core/perf.py`). Üretimde kendiliğinden kapalı; `PERF_LOG`
+ile zorlanabilir. Ayrı bir terminalde canlı izlemek için:
+```bash
+python scripts/perf_log.py            # canlı akış
+python scripts/perf_log.py --ozet     # uç bazında medyan/en kötü/sağlayıcı payı
+python scripts/perf_log.py --min-ms 500   # yalnızca yavaş olanlar
+```
+Değerli olan kısım etiketleme ve kırılım: grafiğin **ilk penceresi** ile arkaplandaki
+**geçmiş derinleştirmesi** aynı uca (`/market/window`) gidiyor ve yalnızca
+`bars_before`/`bars_after` oranıyla ayrılıyorlar — "bir kısmı hemen geldi, kalanı
+saniyeler sonra" denen şey bu iki faz. Her satır ayrıca süreyi neyin harcadığını
+söyler (sağlayıcı çağrısı mı, RAM mi, parquet mi); cevap genelde tek bir sağlayıcı
+isteğidir.
+
 ### Tests (`backend/`)
 Tests are `unittest`-based (not pytest, despite the stale `.pytest_cache/`). Run from the `backend/` directory:
 ```bash

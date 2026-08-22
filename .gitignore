@@ -86,3 +86,6 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
 frontend/.playwright/
+
+# Performans logu (geliştirme aracı — bkz. scripts/perf_log.py)
+**/storage/logs/

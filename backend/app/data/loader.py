@@ -9,6 +9,7 @@ import threading
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
 from ..core.config import settings
+from ..core.perf import note_cache_hit, timed_provider_call
 from app.utils.time import utc_now
 from .providers.binance import BinanceProvider
 from .providers.nasdaq import NasdaqProvider
@@ -461,6 +462,7 @@ class DataLoader:
             provider_name, symbol, timeframe, anchor, bars_before, bars_after, start_time
         )
         if cached is not None:
+            note_cache_hit("disk")
             return cached
 
         # Önbellek anahtarı İSTENEN ölçülerden üretilir (tarihlerden değil):
@@ -473,6 +475,7 @@ class DataLoader:
             hit = self._window_cache.get(cache_key)
             if hit is not None:
                 self._window_cache.move_to_end(cache_key)
+                note_cache_hit("ram")
                 return hit.copy()
 
         # 3. Kalıcı yan depo. RAM'deki LRU yalnızca TAM ölçü eşleşmesinde
@@ -483,13 +486,17 @@ class DataLoader:
             provider_name, symbol, timeframe, anchor, bars_before, bars_after, start_time
         )
         if stored is not None:
+            note_cache_hit("disk")
             return stored
 
         provider = self.get_provider(provider_name)
         # `allow_gap_fill=False`: replay penceresi yalnızca bu dilimin KENDİ
         # ulaşabildiği geçmişi göstermeli (bkz. `get_window` docstring'i).
         # İkincil kaynağa (Twelve Data) düşmek burada saniyeler sürüyordu.
-        df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time, allow_gap_fill=False)
+        with timed_provider_call():
+            df = provider.fetch_ohlcv(
+                symbol, timeframe, start_time, end_time, allow_gap_fill=False
+            )
 
         if df is None or df.empty:
             return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
@@ -512,9 +519,10 @@ class DataLoader:
             # geçersiz bir tarihle çağırıyordu.
             wider_start = max(anchor - (anchor - start_time) * factor, WINDOW_MIN_START)
             if wider_start < start_time:
-                retry = provider.fetch_ohlcv(
-                    symbol, timeframe, wider_start, end_time, allow_gap_fill=False
-                )
+                with timed_provider_call():
+                    retry = provider.fetch_ohlcv(
+                        symbol, timeframe, wider_start, end_time, allow_gap_fill=False
+                    )
                 if retry is not None and len(retry) > len(df):
                     df = retry.sort_values("timestamp").reset_index(drop=True)
 
@@ -573,7 +581,10 @@ class DataLoader:
             provider = self.get_provider(provider_name)
             # Bu yoklama da ikincil kaynağa düşmemeli: amaç sağlayıcının
             # KENDİ tavanını bulmak, dolgulanmış bir tavanı değil.
-            df = provider.fetch_ohlcv(symbol, timeframe, probe_start, now, allow_gap_fill=False)
+            with timed_provider_call():
+                df = provider.fetch_ohlcv(
+                    symbol, timeframe, probe_start, now, allow_gap_fill=False
+                )
         except Exception as exc:
             # Geri çekilme yolu "olsa iyi olur" niteliğinde: burada patlamak,
             # asıl istekteki boş sonucu bir 500'e çevirmek olurdu.
@@ -1083,6 +1094,8 @@ class DataLoader:
             if os.path.exists(cache_path):
                 file_mtime = os.path.getmtime(cache_path)
                 df = self._mem_cache_get(cache_key, file_mtime)
+                if df is not None:
+                    note_cache_hit("ram")
 
                 # RAM'de yoksa parquet dosyasından oku
                 if df is None:
@@ -1091,6 +1104,7 @@ class DataLoader:
                             pd.read_parquet(cache_path), provider_name, timeframe
                         )
                         self._mem_cache_put(cache_key, file_mtime, df)
+                        note_cache_hit("disk")
                     except Exception as e:
                         logger.warning("Parquet onbellegi okunamadi (%s): %s", cache_path, e)
                         df = None
@@ -1102,7 +1116,8 @@ class DataLoader:
                     provider_name, symbol, timeframe,
                 )
                 provider = self.get_provider(provider_name)
-                df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
+                with timed_provider_call():
+                    df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
 
                 if not df.empty:
                     # Taze veri de önbellekten okunan veriyle AYNI normalizasyondan
@@ -1163,13 +1178,19 @@ class DataLoader:
             # birleştirmeden hemen sonra tekrar kırpılırdı.
             if needed_start < cached_start and not at_retention_cap:
                 try:
-                    df_before = provider.fetch_ohlcv(symbol, timeframe, needed_start, cached_start)
+                    with timed_provider_call():
+                        df_before = provider.fetch_ohlcv(
+                            symbol, timeframe, needed_start, cached_start
+                        )
                 except Exception as e:
                     logger.warning("Onek verisi cekilemedi (%s %s): %s", symbol, timeframe, e)
                     
             if needed_end > cached_end and (needed_end - cached_end) > timedelta(minutes=15):
                 try:
-                    df_after = provider.fetch_ohlcv(symbol, timeframe, cached_end, needed_end)
+                    with timed_provider_call():
+                        df_after = provider.fetch_ohlcv(
+                            symbol, timeframe, cached_end, needed_end
+                        )
                 except Exception as e:
                     logger.warning("Sonek verisi cekilemedi (%s %s): %s", symbol, timeframe, e)
                     

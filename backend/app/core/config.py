@@ -1,3 +1,6 @@
+import os
+from typing import Optional
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
@@ -77,6 +80,20 @@ class Settings(BaseSettings):
     # birinde açık bırakmak için kullanılabilir.
     ENABLE_SCHEDULER: bool = True
 
+    # ─── Performans ölçümü (geliştirme aracı) ────────────────────────────────
+    #
+    # Her isteğin süresini, hangi faz olduğunu ve süreyi neyin harcadığını
+    # (önbellek mi, sağlayıcı mı) terminale ve bir JSONL dosyasına yazar.
+    # Grafik tek istekle yüklenmiyor — önce hızlı pencere, sonra arkaplanda
+    # geçmiş derinleştirme — ve hangi fazın ne kadar sürdüğü hiçbir yerde
+    # görünmüyordu.
+    #
+    # `None` = otomatik: üretim DIŞINDA açık, üretimde kapalı. Her istekte
+    # diske satır yazmak üretimde istenmez. Açıkça true/false verilebilir.
+    PERF_LOG: Optional[bool] = None
+    # Boş bırakılırsa `storage/logs/perf.jsonl` (bkz. perf_log_path).
+    PERF_LOG_PATH: str = ""
+
     # Arka plan alarm taramasının sıklığı (dakika).
     #
     # Alarmlar eskiden yalnızca istemci sorduğunda ve yalnızca o an bakılan
@@ -137,6 +154,23 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT.strip().lower() == "production"
+
+    @property
+    def perf_log_enabled(self) -> bool:
+        """Ölçüm açık mı? Belirtilmemişse üretim dışında açıktır."""
+        if self.PERF_LOG is None:
+            return not self.is_production
+        return self.PERF_LOG
+
+    @property
+    def perf_log_path(self) -> str:
+        """JSONL log dosyasının yolu.
+
+        `DATABASE_URL` gibi süreç ÇALIŞMA DİZİNİNE görelidir: `python main.py`
+        `backend/` içinden çalıştırıldığı için dosya `backend/storage/logs/`
+        altına düşer — izleyicinin varsayılanı da orayı arar.
+        """
+        return self.PERF_LOG_PATH or os.path.join("storage", "logs", "perf.jsonl")
 
     def production_config_errors(self) -> list[str]:
         """Üretimde kabul edilemez yapılandırmaları listeler (yoksa boş liste).

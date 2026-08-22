@@ -11,6 +11,7 @@ from __future__ import annotations
 import unittest
 
 from app.rules.validation import (
+    VALID_TIMEFRAMES,
     StrategyValidationError,
     raise_if_invalid,
     validate_strategy,
@@ -174,6 +175,181 @@ class TestInvalidStrategies(unittest.TestCase):
                 "right": {"type": "value", "value": 1},
             }]}))
         self.assertTrue(ctx.exception.errors)
+
+
+
+class TestSessizceCalismayanStratejiler(unittest.TestCase):
+    """Kural agaci tek tek gecerli oldugu halde strateji HIC calismayabilir.
+
+    Bu durumlar kaydetmede hic yakalanmiyordu; kullanici ancak '0 islem'
+    sonucunu gorunce fark ediyordu -- o da genelde stratejinin kotu oldugu
+    sanilarak.
+    """
+
+    @staticmethod
+    def _condition():
+        return {
+            "left": {"type": "price", "field": "close"},
+            "operator": ">",
+            "right": {"type": "value", "value": 0},
+        }
+
+    def _strategy(self, **overrides):
+        base = {
+            "parameters": [],
+            "entry_rules": {"logic": "AND", "conditions": [self._condition()]},
+            "exit_rules": {"logic": "AND", "conditions": [self._condition()]},
+            "timeframe_filters": [],
+            "allow_short": False,
+        }
+        base.update(overrides)
+        return base
+
+    # ─── Bos zaman dilimi filtresi ──────────────────────────────────────────
+
+    def test_bos_zaman_dilimi_filtresi_reddedilir(self):
+        # Bos grup evaluate_group'ta False doner; filtre bir KAPI oldugu icin
+        # strateji omur boyu tek sinyal uretemez.
+        errors = validate_strategy(
+            self._strategy(
+                timeframe_filters=[{"timeframe": "4h", "logic": "AND", "conditions": []}]
+            )
+        )
+        self.assertTrue(any("en az bir koşul" in e for e in errors), errors)
+
+    def test_dolu_zaman_dilimi_filtresi_gecer(self):
+        errors = validate_strategy(
+            self._strategy(
+                timeframe_filters=[
+                    {"timeframe": "4h", "logic": "AND", "conditions": [self._condition()]}
+                ]
+            )
+        )
+        self.assertEqual(errors, [])
+
+    # ─── Hic kural yok / pozisyon acilamiyor ────────────────────────────────
+
+    def test_hic_kural_yoksa_reddedilir(self):
+        errors = validate_strategy(
+            self._strategy(
+                entry_rules={"logic": "AND", "conditions": []},
+                exit_rules={"logic": "AND", "conditions": []},
+            )
+        )
+        self.assertTrue(any("hiç kural içermiyor" in e for e in errors), errors)
+
+    def test_giris_kurali_yoksa_ve_short_kapaliysa_reddedilir(self):
+        errors = validate_strategy(
+            self._strategy(entry_rules={"logic": "AND", "conditions": []})
+        )
+        self.assertTrue(any("hiç pozisyon açamaz" in e for e in errors), errors)
+
+    def test_giris_kurali_yoksa_ama_short_aciksa_gecerli(self):
+        # allow_short acikken cikis kurali nakitteyken SHORT acar
+        # (bkz. RuleEngine.evaluate_bar_with_state).
+        errors = validate_strategy(
+            self._strategy(
+                entry_rules={"logic": "AND", "conditions": []}, allow_short=True
+            )
+        )
+        self.assertEqual(errors, [])
+
+    def test_cikis_kurali_olmamasi_hata_degildir(self):
+        # Bilincli: bu durum artik gorunur (sonuctaki open_position alani).
+        errors = validate_strategy(
+            self._strategy(exit_rules={"logic": "AND", "conditions": []})
+        )
+        self.assertEqual(errors, [])
+
+    # ─── Zaman dilimi adi ───────────────────────────────────────────────────
+
+    def test_bilinmeyen_operand_zaman_dilimi_reddedilir(self):
+        condition = self._condition()
+        condition["left"] = {
+            "type": "indicator", "name": "EMA", "period": 20, "timeframe": "3h",
+        }
+        errors = validate_strategy(
+            self._strategy(entry_rules={"logic": "AND", "conditions": [condition]})
+        )
+        self.assertTrue(any("bilinmeyen zaman dilimi" in e for e in errors), errors)
+
+    def test_gecerli_operand_zaman_dilimi_kabul_edilir(self):
+        condition = self._condition()
+        condition["left"] = {
+            "type": "indicator", "name": "EMA", "period": 20, "timeframe": "4h",
+        }
+        errors = validate_strategy(
+            self._strategy(entry_rules={"logic": "AND", "conditions": [condition]})
+        )
+        self.assertEqual(errors, [])
+
+    def test_bilinmeyen_filtre_zaman_dilimi_reddedilir(self):
+        errors = validate_strategy(
+            self._strategy(
+                timeframe_filters=[
+                    {"timeframe": "2h", "logic": "AND", "conditions": [self._condition()]}
+                ]
+            )
+        )
+        self.assertTrue(any("bilinmeyen zaman dilimi" in e for e in errors), errors)
+
+    def test_zaman_dilimi_listesi_loader_ile_ayni(self):
+        """Liste iki yerde: rules/ katmani data/ katmanina bagimli olamaz."""
+        from app.data.loader import TIMEFRAME_DELTAS
+
+        self.assertEqual(VALID_TIMEFRAMES, frozenset(TIMEFRAME_DELTAS))
+
+    # ─── rising / falling sag operandi ──────────────────────────────────────
+
+    def test_rising_sag_operandi_gosterge_olamaz(self):
+        # Sag operand ESIK degil, KAC BAR GERIYE bakilacagi. Oraya gosterge
+        # konursa int(right_val) binlerce barlik geri bakis uretir ve kosul
+        # sessizce hep NaN doner.
+        condition = {
+            "left": {"type": "indicator", "name": "EMA", "period": 20},
+            "operator": "rising",
+            "right": {"type": "indicator", "name": "EMA", "period": 50},
+        }
+        errors = validate_strategy(
+            self._strategy(entry_rules={"logic": "AND", "conditions": [condition]})
+        )
+        self.assertTrue(any("bir SAYI olmalı" in e for e in errors), errors)
+
+    def test_rising_sag_operandi_sayi_olmali(self):
+        condition = {
+            "left": {"type": "indicator", "name": "EMA", "period": 20},
+            "operator": "rising",
+            "right": {"type": "value", "value": 3},
+        }
+        errors = validate_strategy(
+            self._strategy(entry_rules={"logic": "AND", "conditions": [condition]})
+        )
+        self.assertEqual(errors, [])
+
+    def test_rising_bar_sayisi_en_az_bir_olmali(self):
+        condition = {
+            "left": {"type": "indicator", "name": "EMA", "period": 20},
+            "operator": "falling",
+            "right": {"type": "value", "value": 0},
+        }
+        errors = validate_strategy(
+            self._strategy(entry_rules={"logic": "AND", "conditions": [condition]})
+        )
+        self.assertTrue(any("en az 1 olmalı" in e for e in errors), errors)
+
+    def test_rising_parametre_referansi_kabul_edilir(self):
+        condition = {
+            "left": {"type": "indicator", "name": "EMA", "period": 20},
+            "operator": "rising",
+            "right": {"type": "value", "value": "$lookback"},
+        }
+        errors = validate_strategy(
+            self._strategy(
+                parameters=[{"name": "lookback", "default": 3, "min": 1, "max": 10}],
+                entry_rules={"logic": "AND", "conditions": [condition]},
+            )
+        )
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

@@ -29,6 +29,21 @@ VALID_OPERAND_TYPES = frozenset({"indicator", "price", "value", "pnl", "pnl_perc
 # Aritmetik işlemler (bkz. rules/evaluator.ARITHMETIC_OPS).
 VALID_ARITHMETIC_OPS = frozenset({"+", "-", "*", "/"})
 
+# Bir operandın referans verebileceği zaman dilimleri.
+#
+# Liste burada TEKRARLANIYOR çünkü `rules/` katmanı `data/` katmanına bağımlı
+# olamaz (RULES.md #1, #6). Sürüklenmeyi test engelliyor:
+# `test_strategy_validation` bu kümenin `DataLoader.TIMEFRAME_DELTAS` ile
+# birebir aynı olduğunu doğruluyor.
+#
+# Doğrulanmadığında `timeframe: "3h"` gibi bir yazım hatası kaydetmede
+# geçiyor, ancak test çalıştırılınca ve 502 olarak ortaya çıkıyordu.
+VALID_TIMEFRAMES = frozenset({"1m", "5m", "15m", "1h", "4h", "1d", "1w", "1mo"})
+
+# Sağ operandı eşik değil GERİYE KAÇ BAR olan operatörler
+# (bkz. rules/conditions.LOOKBACK_OPERATORS).
+LOOKBACK_OPERATOR_NAMES = frozenset({"rising", "falling"})
+
 
 class StrategyValidationError(ValueError):
     """Kural ağacı geçersiz. `errors` insan tarafından okunabilir maddeler taşır."""
@@ -52,9 +67,24 @@ def validate_strategy(strategy: dict) -> list[str]:
         ("Çıkış kuralları", strategy.get("exit_rules")),
     ]
     for i, tf_filter in enumerate(strategy.get("timeframe_filters") or []):
+        label = f"Zaman dilimi filtresi #{i + 1}"
         if not isinstance(tf_filter, dict) or not tf_filter.get("timeframe"):
-            errors.append(f"Zaman dilimi filtresi #{i + 1}: 'timeframe' alanı zorunlu")
-        groups.append((f"Zaman dilimi filtresi #{i + 1}", tf_filter))
+            errors.append(f"{label}: 'timeframe' alanı zorunlu")
+        elif tf_filter.get("timeframe") not in VALID_TIMEFRAMES:
+            errors.append(
+                f"{label}: bilinmeyen zaman dilimi '{tf_filter.get('timeframe')}'. "
+                f"Desteklenen: {sorted(VALID_TIMEFRAMES)}"
+            )
+        # Boş bir filtre grubunun sonucu SESSİZCE FELAKETTİR: filtre bir kapıdır
+        # ve boş grup `False` döndüğü için strateji ömür boyu tek sinyal
+        # üretemez. Kaydetmede yakalanmazsa kullanıcı "strateji çalışmıyor"
+        # diye günlerce arar.
+        if isinstance(tf_filter, dict) and not (tf_filter.get("conditions") or []):
+            errors.append(
+                f"{label}: en az bir koşul içermeli — boş bir filtre her barda "
+                "sağlanmamış sayılır ve strateji hiç sinyal üretemez"
+            )
+        groups.append((label, tf_filter))
 
     for label, group in groups:
         if group is None:
@@ -64,6 +94,52 @@ def validate_strategy(strategy: dict) -> list[str]:
             continue
         _validate_group(group, param_names, label, errors, depth=0)
 
+    errors.extend(_validate_tradeability(strategy))
+    return errors
+
+
+def _validate_tradeability(strategy: dict) -> list[str]:
+    """Strateji gerçekten pozisyon açıp kapatabiliyor mu?
+
+    Kural ağacı tek tek geçerli olduğu hâlde strateji BÜTÜN olarak hiçbir şey
+    yapamayabilir; bu durum kaydetmede hiç yakalanmıyordu ve kullanıcı ancak
+    "0 işlem" sonucunu görünce fark ediyordu — o da genelde stratejinin
+    kötü olduğu sanılarak.
+    """
+    errors: list[str] = []
+
+    entry = strategy.get("entry_rules") or {}
+    exit_rules = strategy.get("exit_rules") or {}
+    has_entry = bool(isinstance(entry, dict) and (entry.get("conditions") or []))
+    has_exit = bool(isinstance(exit_rules, dict) and (exit_rules.get("conditions") or []))
+    allow_short = bool(strategy.get("allow_short"))
+    has_tp = bool(strategy.get("take_profit_pct"))
+    has_sl = bool(strategy.get("stop_loss_pct"))
+
+    if not has_entry and not has_exit:
+        errors.append(
+            "Strateji hiç kural içermiyor: giriş ya da çıkış kurallarından en az "
+            "biri dolu olmalı."
+        )
+        return errors
+
+    # Pozisyon açabilme: giriş kuralı BUY üretir; `allow_short` açıkken çıkış
+    # kuralı da nakitteyken SHORT açar (bkz. RuleEngine.evaluate_bar_with_state).
+    if not has_entry and not allow_short:
+        errors.append(
+            "Giriş kuralları boş ve short'a izin verilmemiş: strateji hiç "
+            "pozisyon açamaz. Bir giriş koşulu ekleyin ya da short'u açın."
+        )
+
+    # NOT — "çıkış kuralı yok" bilerek HATA SAYILMIYOR. Böyle bir strateji
+    # pozisyonu açar ve taşır; bu artık sessiz değil: sonuçta `open_position`
+    # alanı ve arayüzde "test sonunda pozisyon açık" satırı görünüyor. Hata
+    # yapmak, kullanıcının hâlâ düzenlemekte olduğu ya da alanlar eklenmeden
+    # önce kaydedilmiş stratejileri kaydedilemez hâle getirirdi.
+    #
+    # Buradaki ölçüt şu: HİÇBİR çıktı üretmeyen durum hatadır, eksik ama
+    # görünür çıktı üreten durum değildir.
+    _ = (has_tp, has_sl)
     return errors
 
 
@@ -131,6 +207,33 @@ def _validate_condition(
     if operator == "between" and not condition.get("right2"):
         errors.append(f"{label}: 'between' operatörü ikinci sınır (right2) ister")
 
+    if operator in LOOKBACK_OPERATOR_NAMES:
+        # Bu operatörlerde sağ operand bir EŞİK DEĞİL, "kaç bar geriye
+        # bakılacağı"dır. Oraya bir gösterge konursa `int(right_val)` binlerce
+        # barlık bir geri bakış üretir (EMA50 = 42.000 -> 42.000 bar) ve koşul
+        # sessizce hep NaN döner; hiçbir hata görünmez, strateji yalnızca
+        # hiç tetiklenmez.
+        right = condition.get("right")
+        if not isinstance(right, dict) or right.get("type", "value") != "value":
+            errors.append(
+                f"{label}: '{operator}' operatöründe sağ taraf bir SAYI olmalı "
+                "(kaç bar geriye bakılacağı), gösterge/fiyat değil"
+            )
+        else:
+            raw = right.get("value")
+            if isinstance(raw, str) and raw.startswith("$"):
+                pass  # Parametre referansı ayrıca doğrulanıyor.
+            else:
+                try:
+                    bars = int(raw)
+                except (TypeError, ValueError):
+                    bars = 0
+                if bars < 1:
+                    errors.append(
+                        f"{label}: '{operator}' operatöründe bar sayısı en az 1 olmalı "
+                        f"(verilen: {raw})"
+                    )
+
     for side in ("left", "right", "right2"):
         operand = condition.get(side)
         if operand is None:
@@ -163,6 +266,15 @@ def _validate_operand(
         _validate_param_ref(offset, params, f"{label} offset", errors)
     elif offset < 0:
         errors.append(f"{label}: negatif offset yasak (lookahead bias, RULES.md #20)")
+
+    # Zaman dilimi referansı: yazım hatası kaydetmede geçip test sırasında
+    # 502'ye dönüşüyordu (yüklenemeyen dilim -> MultiTimeframeDataError).
+    timeframe = operand.get("timeframe")
+    if timeframe is not None and timeframe not in VALID_TIMEFRAMES:
+        errors.append(
+            f"{label}: bilinmeyen zaman dilimi '{timeframe}'. "
+            f"Desteklenen: {sorted(VALID_TIMEFRAMES)}"
+        )
 
     if op_type == "expr":
         if operand.get("op") not in VALID_ARITHMETIC_OPS:

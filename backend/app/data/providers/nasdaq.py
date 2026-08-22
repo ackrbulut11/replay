@@ -1,9 +1,13 @@
+import logging
+
 import requests
 import pandas as pd
 from datetime import datetime
 from .base import IDataProvider
 from . import twelvedata
 from app.utils.time import utc_now
+
+logger = logging.getLogger(__name__)
 
 SYMBOL_ALIASES = {
     "NVIDIA": "NVDA",
@@ -50,6 +54,49 @@ SYMBOL_ALIASES = {
 }
 
 class NasdaqProvider(IDataProvider):
+    @staticmethod
+    def _twelvedata_failover(
+        ticker: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        allow_gap_fill: bool,
+        failure: Exception,
+    ):
+        """Yahoo tamamen erişilemezken istenen aralığı ikincil kaynaktan dener.
+
+        **Neden gerekli:** hisse ve BIST verisinin TEK kaynağı Yahoo Finance'in
+        dokümante edilmemiş `query1` ucu ve ona taklit User-Agent'la gidiliyor.
+        Yahoo bulut IP'lerini düzenli olarak engelliyor (429/403); o an
+        `/market/*` uçlarının tamamı çalışmaz hâle geliyordu — grafik, tarama,
+        alarm, hepsi.
+
+        Twelve Data zaten entegre ve şu ana kadar YALNIZCA Yahoo'nun intraday
+        derinlik sınırının gerisini dolduruyordu. Yahoo tümden düştüğünde de
+        devreye girmesi, mevcut ve onaylı bir bağımlılıkla kazanılan bir
+        dayanıklılık — yeni bir servis eklemek değil (RULES.md "Yasaklar").
+
+        `None` dönerse yedek de veremedi demektir; çağıran taraf ÖZGÜN Yahoo
+        hatasını yükseltir — asıl arızayı ikincil bir hatayla maskelemek
+        teşhisi zorlaştırırdı.
+        """
+        if not allow_gap_fill or not twelvedata.is_configured():
+            return None
+        try:
+            df = twelvedata.fetch_ohlcv(
+                ticker, timeframe, start_time, end_time, symbol_style="stock"
+            )
+        except Exception as exc:
+            logger.warning("Twelve Data yedegi de basarisiz (%s): %s", ticker, exc)
+            return None
+        if df is None or df.empty:
+            return None
+
+        logger.warning(
+            "Yahoo erisilemedi (%s), Twelve Data yedegine dusuldu: %s", ticker, failure
+        )
+        return df
+
     def fetch_ohlcv(
         self,
         symbol: str,
@@ -117,13 +164,29 @@ class NasdaqProvider(IDataProvider):
                 res_data = response.json()
             except requests.exceptions.HTTPError as e:
                 if response.status_code == 404:
+                    # Sembol yok: bu bir kullanıcı hatasıdır, ikincil kaynak da
+                    # bulamaz. Yedeğe düşmenin anlamı yok.
                     raise RuntimeError(
                         f"Yahoo Finance sembolü bulamadı ({symbol}). "
                         f"NASDAQ hisseleri için şirket adı yerine borsa kodunu kullandığınızdan emin olun (Örn: NVIDIA yerine NVDA, APPLE yerine AAPL, TESLA yerine TSLA)."
                     )
-                raise RuntimeError(f"Yahoo Finance HTTP hatası ({response.status_code}): {e}")
+                failure = RuntimeError(
+                    f"Yahoo Finance HTTP hatası ({response.status_code}): {e}"
+                )
+                fallback = self._twelvedata_failover(
+                    ticker, timeframe, requested_start, end_time, allow_gap_fill, failure
+                )
+                if fallback is not None:
+                    return fallback
+                raise failure
             except Exception as e:
-                raise RuntimeError(f"Yahoo Finance veri çekme hatası: {str(e)}")
+                failure = RuntimeError(f"Yahoo Finance veri çekme hatası: {str(e)}")
+                fallback = self._twelvedata_failover(
+                    ticker, timeframe, requested_start, end_time, allow_gap_fill, failure
+                )
+                if fallback is not None:
+                    return fallback
+                raise failure
 
             chart = res_data.get("chart", {})
             result_list = chart.get("result", [])

@@ -8,6 +8,8 @@ import type {
   PrimitiveHoveredItem,
   SeriesType,
   Time,
+  Logical,
+  UTCTimestamp,
 } from 'lightweight-charts';
 import type { CanvasRenderingTarget2D } from 'fancy-canvas';
 import type { Drawing, DrawingLineStyle, DrawingPoint, FibLevel } from './types';
@@ -693,7 +695,7 @@ class DrawingsPaneRenderer implements IPrimitivePaneRenderer {
           const boxW = maxTextWidth + boxPaddingX * 2;
           const boxH = lineHeight * 3 + boxPaddingY * 2;
 
-          let boxX = midX - boxW / 2;
+          const boxX = midX - boxW / 2;
           let boxY = minY - boxH - 12;
 
           if (boxY < 10) {
@@ -998,7 +1000,7 @@ function getDrawingSegments(d: PixelDrawing): [PixelPoint, PixelPoint][] {
 
 export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedParameter<Time, SeriesType>> {
   private _chart: IChartApiBase | null = null;
-  private _series: ISeriesApi<any> | null = null;
+  private _series: ISeriesApi<SeriesType> | null = null;
   private _requestUpdate: (() => void) | null = null;
   private _renderer: DrawingsPaneRenderer = new DrawingsPaneRenderer();
   private _paneView: DrawingsPaneView = new DrawingsPaneView(this._renderer);
@@ -1169,12 +1171,14 @@ export class DrawingsPrimitive implements ISeriesPrimitiveBase<SeriesAttachedPar
     const y = this._series.priceToCoordinate(price);
     if (y === null) return null;
 
-    let x = this._chart.timeScale().timeToCoordinate(time as any);
+    // Çizimler zamanı unix saniye olarak tutuyor; lightweight-charts'ın
+    // `Time` birleşiminde bu `UTCTimestamp` dalıdır.
+    let x = this._chart.timeScale().timeToCoordinate(time as UTCTimestamp);
     if (x === null) {
       const candles = this._candles;
       if (candles && candles.length > 0) {
         const targetLogical = this._logicalIndexForTime(time, candles);
-        x = this._chart.timeScale().logicalToCoordinate(targetLogical as any);
+        x = this._chart.timeScale().logicalToCoordinate(targetLogical as Logical);
       }
     }
 

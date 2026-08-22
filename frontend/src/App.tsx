@@ -25,6 +25,7 @@ import type { NavigationTab } from './components/Sidebar';
 import { useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { LandingPage } from './pages/LandingPage';
+import { errorMessage, isAbortError } from './utils/errors';
 
 
 interface CandleData {
@@ -332,8 +333,8 @@ function MainApp() {
         if (controller.signal.aborted) return;
         mergeOlderData(olderData);
       })
-      .catch((err: any) => {
-        if (err?.name === 'AbortError') return;
+      .catch((err: unknown) => {
+        if (isAbortError(err)) return;
         console.error("Background historical fetch failed:", err);
       })
       .finally(() => {
@@ -384,9 +385,9 @@ function MainApp() {
           if (controller.signal.aborted) return;
           mergeOlderData(older);
         })
-        .catch((err: any) => {
+        .catch((err: unknown) => {
           // İptal edilmiş istek: sembol/zaman dilimi değişti, sonucu birleştirme.
-          if (controller.signal.aborted || err?.name === 'AbortError') return;
+          if (controller.signal.aborted || isAbortError(err)) return;
           console.error('Replay geçmiş penceresi yüklenemedi:', err);
         })
         .finally(() => {
@@ -424,8 +425,8 @@ function MainApp() {
         // atmamak için işaretle.
         if (mergeNewerData(newer) === 0) forwardExhaustedRef.current = key;
       })
-      .catch((err: any) => {
-        if (controller.signal.aborted || err?.name === 'AbortError') return;
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || isAbortError(err)) return;
         console.error('Replay ileri penceresi yüklenemedi:', err);
       })
       .finally(() => {
@@ -514,10 +515,10 @@ function MainApp() {
             oldestTime: candles[0].time,
           });
         }
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return;
+      } catch (err: unknown) {
+        if (isAbortError(err)) return;
         console.error('Replay penceresi yüklenemedi:', err);
-        setError(err?.message || 'Sunucu bağlantı hatası.');
+        setError(errorMessage(err, 'Sunucu bağlantı hatası.'));
         applyChartData([]);
       } finally {
         if (!signal.aborted) setLoading(false);
@@ -561,13 +562,13 @@ function MainApp() {
           loadOlderDataInBackground({ provider, symbol, timeframe, olderEnd: quickStartStr, userStart });
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Daha yeni bir istek başladığı için iptal edildi — bu istek artık
       // önemsiz; eski verinin ekrana yazılmasını (parite/interval etiketiyle
       // uyuşmayan grafik) burada engelliyoruz, hata da göstermiyoruz.
-      if (err?.name === 'AbortError') return;
+      if (isAbortError(err)) return;
       console.error("Fetch data failed:", err);
-      setError(err.message || 'Sunucu bağlantı hatası.');
+      setError(errorMessage(err, 'Sunucu bağlantı hatası.'));
       applyChartData([]);
     } finally {
       if (!signal.aborted) setLoading(false);

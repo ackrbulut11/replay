@@ -172,9 +172,12 @@ export interface ChartSettingsState {
 
 const LOCAL_STORAGE_KEY = 'replay_chart_settings_v1';
 
-function mergeIndicatorDefaults(saved?: any): IndicatorSettingsMap {
+function mergeIndicatorDefaults(raw?: unknown): IndicatorSettingsMap {
   const defaults = JSON.parse(JSON.stringify(DEFAULT_INDICATOR_SETTINGS)) as IndicatorSettingsMap;
-  if (!saved) return defaults;
+  if (!raw || typeof raw !== 'object') return defaults;
+  // Sunucudaki kayıt eski bir sürümden kalmış olabilir: her alan ayrı ayrı,
+  // varsayılanın üstüne yazılarak birleştirilir.
+  const saved = raw as Partial<Record<keyof IndicatorSettingsMap, object>>;
   return {
     ema20: { ...defaults.ema20, ...(saved.ema20 || {}) },
     ema50: { ...defaults.ema50, ...(saved.ema50 || {}) },
@@ -186,7 +189,7 @@ function mergeIndicatorDefaults(saved?: any): IndicatorSettingsMap {
   };
 }
 
-function mergeActiveIndicators(saved?: any): ActiveIndicatorsState {
+function mergeActiveIndicators(saved?: unknown): ActiveIndicatorsState {
   return {
     ...DEFAULT_ACTIVE_INDICATORS,
     ...(saved || {}),
@@ -381,7 +384,9 @@ export const chartSettingsStore = {
 
     try {
       const data = await apiRequest<{
-        rsi: Partial<RsiSettings> & { indicators?: any; active_indicators?: any };
+        // Sunucudan gelen ham JSON; şekli merge yardımcıları içinde
+        // doğrulanıyor (eski kayıtlar eksik/fazla alan taşıyabilir).
+        rsi: Partial<RsiSettings> & { indicators?: unknown; active_indicators?: unknown };
         drawing_defaults: Partial<Record<DrawingTool, DrawingEditOptions>>;
         log_scale?: boolean;
         drawings?: DrawingsBySymbol;

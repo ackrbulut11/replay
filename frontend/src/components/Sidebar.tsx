@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import logoImg from '../assets/logo.jpg';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -44,7 +45,7 @@ export default function Sidebar({ activeTab, onSelectTab }: SidebarProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isExpanded]);
 
-  const navItems: { id: NavigationTab; label: string; icon: any }[] = [
+  const navItems: { id: NavigationTab; label: string; icon: LucideIcon }[] = [
     { id: 'chart', label: 'Grafik & Analiz', icon: LineChart },
     { id: 'strategy', label: 'Strateji Motoru', icon: SlidersHorizontal },
     { id: 'replay', label: 'Replay Modu', icon: PlayCircle },

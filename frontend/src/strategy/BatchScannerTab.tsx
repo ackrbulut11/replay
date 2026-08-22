@@ -24,6 +24,7 @@ import {
 import type { Strategy, BatchEvaluateResultItem, ScanHistoryItem } from '../types/strategy';
 import { strategyApi } from '../services/strategyApi';
 import { useWatchlistStore } from '../store/watchlistStore';
+import { errorMessage } from '../utils/errors';
 
 interface BatchScannerTabProps {
   strategy: Strategy;
@@ -355,10 +356,10 @@ export default function BatchScannerTab({
         if (historyData.scans) {
           setHistoryList(historyData.scans);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Geçici ağ hatası olabilir; birkaç kez daha dene, sonra pes et
         if (failureCount + 1 >= MAX_POLL_FAILURES) {
-          setScanError(err.message || 'Tarama durumu sorgulanırken bağlantı hatası oluştu');
+          setScanError(errorMessage(err, 'Tarama durumu sorgulanırken bağlantı hatası oluştu'));
           setScanProgress(null);
           setIsScanning(false);
           return;
@@ -412,7 +413,7 @@ export default function BatchScannerTab({
                 return;
               }
               resolve(s);
-            } catch (err: any) {
+            } catch (err: unknown) {
               if (failureCount + 1 >= MAX_POLL_FAILURES) {
                 resolve({
                   scan_id: '',
@@ -423,7 +424,7 @@ export default function BatchScannerTab({
                   created_at: new Date().toISOString(),
                   scanned_count: 0,
                   status: 'error',
-                  error: err.message || `${prov} taraması sorgulanırken bağlantı hatası oluştu`,
+                  error: errorMessage(err, `${prov} taraması sorgulanırken bağlantı hatası oluştu`),
                   results: [],
                 });
                 return;
@@ -439,8 +440,8 @@ export default function BatchScannerTab({
         }
         collected.push(...withProvider(finalScan.results, prov));
         setResults([...collected]);
-      } catch (err: any) {
-        firstError = firstError || err.message || `${prov} taraması başlatılırken bir hata oluştu`;
+      } catch (err: unknown) {
+        firstError = firstError || errorMessage(err, `${prov} taraması başlatılırken bir hata oluştu`);
       }
     }
 
@@ -484,8 +485,8 @@ export default function BatchScannerTab({
       activeScanIdRef.current = scan.scan_id;
       setSelectedScanId(scan.scan_id);
       pollScanStatus(scan.scan_id);
-    } catch (err: any) {
-      setScanError(err.message || 'Tarama başlatılırken bir hata oluştu');
+    } catch (err: unknown) {
+      setScanError(errorMessage(err, 'Tarama başlatılırken bir hata oluştu'));
       setScanProgress(null);
       setIsScanning(false);
     }
@@ -805,7 +806,7 @@ export default function BatchScannerTab({
             </div>
             <select
               value={filterMode}
-              onChange={(e: any) => setFilterMode(e.target.value)}
+              onChange={(e) => setFilterMode(e.target.value as typeof filterMode)}
               className="bg-canvas border border-line text-content text-xs rounded-lg px-2.5 py-1.5 outline-none"
             >
               <option value="all">Tüm Semboller ({results.length})</option>
@@ -818,8 +819,8 @@ export default function BatchScannerTab({
             <span>Sırala:</span>
             <select
               value={sortBy}
-              onChange={(e: any) => {
-                setSortBy(e.target.value);
+              onChange={(e) => {
+                setSortBy(e.target.value as typeof sortBy);
                 setSortDir('desc');
               }}
               className="bg-canvas border border-line text-content text-xs rounded-lg px-2.5 py-1.5 outline-none font-medium"

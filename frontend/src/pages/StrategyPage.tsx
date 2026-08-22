@@ -28,9 +28,11 @@ import type {
   EvaluateResponse,
   PatternRegion,
   SingleEvaluationLogItem,
+  Operand,
+  ConditionGroup,
 } from '../types/strategy';
 import { csvNumber, csvTimestamp, downloadCsv } from '../utils/csv';
-import { TIMEFRAMES } from '../types/strategy';
+import { TIMEFRAMES, isConditionGroup } from '../types/strategy';
 import type { IndicatorsState } from '../charts/IndicatorToolbar';
 
 interface StrategyPageProps {
@@ -258,7 +260,7 @@ export default function StrategyPage({
       // 2. Stratejide kullanılan indikatörleri otomatik olarak grafik üzerinde aktif et
       if (onEnableIndicators) {
         const keysToEnable: (keyof IndicatorsState)[] = [];
-        const checkOperand = (op: any) => {
+        const checkOperand = (op?: Operand) => {
           if (!op || op.type !== 'indicator') return;
           const name = String(op.name || '').toUpperCase();
           const period = Number(op.period) || 20;
@@ -275,12 +277,18 @@ export default function StrategyPage({
           }
         };
 
-        const checkGroup = (group: any) => {
+        // Alt gruplara da iner: iç içe bir grupta geçen gösterge aksi halde
+        // grafikte otomatik açılmazdı (backend'deki iter_operands'ın karşılığı).
+        const checkGroup = (group?: ConditionGroup) => {
           if (!group || !Array.isArray(group.conditions)) return;
-          group.conditions.forEach((c: any) => {
-            checkOperand(c.left);
-            checkOperand(c.right);
-            checkOperand(c.right2);
+          group.conditions.forEach((item) => {
+            if (isConditionGroup(item)) {
+              checkGroup(item);
+              return;
+            }
+            checkOperand(item.left);
+            checkOperand(item.right);
+            checkOperand(item.right2);
           });
         };
 

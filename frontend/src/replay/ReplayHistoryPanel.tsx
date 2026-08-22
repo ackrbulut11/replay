@@ -31,6 +31,7 @@ import { useReplayStore } from '../store/replayStore';
 import { useDraggablePanel } from '../hooks/useDraggablePanel';
 import { logError, logEvent } from '../services/eventLog';
 import type { JournalTrade, PerformanceReport } from '../types/journal';
+import { errorMessage } from '../utils/errors';
 
 interface ReplayHistoryPanelProps {
   symbol: string;
@@ -151,8 +152,8 @@ export default function ReplayHistoryPanel({ symbol }: ReplayHistoryPanelProps) 
       const result = await saveSession(sessionId);
       await journalStore.reload(symbol, sessionId);
       logEvent('replay_history_saved', { context: { symbol, saved: result.saved } });
-    } catch (err: any) {
-      setError(err?.message || 'Geçmiş kaydedilemedi.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'Geçmiş kaydedilemedi.'));
       logError('replay_history_save_failed', err, { symbol });
     } finally {
       setBusy(false);

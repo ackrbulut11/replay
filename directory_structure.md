@@ -34,36 +34,34 @@ TradingResearchPlatform/
 │   │   │   │   ├── WatchlistContextMenu.tsx   # Sembol sağ tık menüsü
 │   │   │   │   └── RightActionBar.tsx
 │   │   │   ├── Sidebar.tsx
-│   │   │   ├── Header.tsx
-│   │   │   └── Toolbar.tsx
+│   │   │   ├── SymbolSearchModal.tsx
+│   │   │   ├── ReplayPreview.tsx
+│   │   │   ├── ErrorBoundary.tsx
+│   │   │   ├── ProtectedRoute.tsx
+│   │   │   └── PublicOnlyRoute.tsx
 │   │   │
 │   │   ├── layouts/
 │   │   │   └── DashboardLayout.tsx
 │   │   │
-│   │   ├── pages/
-│   │   │   ├── LoginPage.tsx         # Google OAuth & Demo Test Login page
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── ChartPage.tsx
-│   │   │   ├── ReplayPage.tsx
-│   │   │   ├── ScannerPage.tsx
+│   │   ├── pages/                    # NOT: grafik/replay/scanner ayrı sayfa DEĞİL;
+│   │   │   │                         # App.tsx içinde sekme olarak render ediliyor.
+│   │   │   ├── LandingPage.tsx
+│   │   │   ├── LoginPage.tsx         # Google OAuth
 │   │   │   ├── StrategyPage.tsx
-│   │   │   ├── BacktestPage.tsx
 │   │   │   ├── JournalPage.tsx
 │   │   │   └── AdminPage.tsx
 │   │   │
 │   │   ├── charts/
 │   │   │   ├── CandleChart.tsx       # Lightweight Charts integration
 │   │   │   ├── IndicatorToolbar.tsx
-│   │   │   ├── ChartManager.ts       # STUB
-│   │   │   ├── Indicators.ts         # STUB
-│   │   │   ├── Drawings.ts           # STUB
+│   │   │   ├── IndicatorSettingsModal.tsx
+│   │   │   ├── CompareSettingsModal.tsx
 │   │   │   └── drawings/
 │   │   │
 │   │   ├── replay/
 │   │   │   ├── ReplayControls.tsx
 │   │   │   ├── ReplayTradePanel.tsx   # replay sırasında pozisyon aç/kapat
-│   │   │   ├── ReplayHistoryPanel.tsx # işlem geçmişi + kalıcı kaydetme
-│   │   │   └── ReplayPanel.tsx
+│   │   │   └── ReplayHistoryPanel.tsx # işlem geçmişi + kalıcı kaydetme
 │   │   │
 │   │   ├── strategy/
 │   │   │   ├── StrategyBuilder.tsx
@@ -71,19 +69,8 @@ TradingResearchPlatform/
 │   │   │   ├── PatternSearchPanel.tsx # Koşulun geçmişteki eşleşmeleri (Faz 3.5)
 │   │   │   └── StrategyList.tsx
 │   │   │
-│   │   ├── scanner/                  # STUB
-│   │   │   ├── ScannerTable.tsx
-│   │   │   ├── FilterPanel.tsx
-│   │   │   └── WatchlistPanel.tsx
-│   │   │
 │   │   ├── journal/
-│   │   │   ├── SessionComparison.tsx  # Manuel oturum ↔ strateji karşılaştırma paneli
-│   │   │   ├── TradeJournalTable.tsx  # STUB
-│   │   │   └── PerformanceReport.tsx  # STUB
-│   │   │
-│   │   ├── workspace/                # STUB
-│   │   │   ├── WorkspaceManager.ts
-│   │   │   └── LayoutStore.ts
+│   │   │   └── SessionComparison.tsx  # Manuel oturum ↔ strateji karşılaştırma paneli
 │   │   │
 │   │   ├── services/
 │   │   │   ├── api.ts
@@ -91,8 +78,10 @@ TradingResearchPlatform/
 │   │   │   ├── patternApi.ts
 │   │   │   ├── adminApi.ts
 │   │   │   ├── chartAnalytics.ts
-│   │   │   ├── websocket.ts          # STUB
-│   │   │   └── backend.ts            # STUB
+│   │   │   ├── journalApi.ts
+│   │   │   ├── marketApi.ts
+│   │   │   ├── waitlistApi.ts
+│   │   │   └── eventLog.ts
 │   │   │
 │   │   ├── store/
 │   │   │   ├── replayStore.ts
@@ -100,8 +89,8 @@ TradingResearchPlatform/
 │   │   │   ├── watchlistStore.ts
 │   │   │   ├── compareStore.ts       # Grafiğe eklenen kıyaslama sembolleri
 │   │   │   ├── alertStore.ts
-│   │   │   ├── chartStore.ts         # STUB
-│   │   │   └── userStore.ts          # STUB
+│   │   │   ├── journalStore.ts
+│   │   │   └── chartSettingsStore.ts
 │   │   │
 │   │   ├── hooks/
 │   │   │   ├── useDraggablePanel.ts   # yüzen panelleri sürüklenebilir yapar

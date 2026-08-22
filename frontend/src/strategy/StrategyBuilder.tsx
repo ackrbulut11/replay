@@ -37,6 +37,7 @@ import type {
 } from '../types/strategy';
 import { createEmptyConditionGroup, TIMEFRAMES } from '../types/strategy';
 import { strategyStore, useStrategyStore } from '../store/strategyStore';
+import { errorMessage } from '../utils/errors';
 
 interface StrategyBuilderProps {
   strategy: Strategy | null; // null = yeni strateji oluşturma
@@ -245,8 +246,8 @@ export default function StrategyBuilder({
         onSaved(result);
       }
 
-    } catch (err: any) {
-      setSaveError(err.message || 'Kaydetme hatası');
+    } catch (err: unknown) {
+      setSaveError(errorMessage(err, 'Kaydetme hatası'));
       logError('strategy_save_failed', err, { is_editing: isEditing, name });
     } finally {
       setIsSaving(false);

@@ -4,7 +4,18 @@ import {
   CandlestickSeries, LineSeries, HistogramSeries,
 } from 'lightweight-charts';
 import { createSeriesMarkers, createTextWatermark } from 'lightweight-charts';
-import type { Time, ISeriesApi, ISeriesMarkersPluginApi } from 'lightweight-charts';
+import type {
+  Time,
+  ISeriesApi,
+  ISeriesMarkersPluginApi,
+  IPriceLine,
+  LineWidth,
+  Logical,
+  SeriesMarker,
+  SeriesType,
+  CandlestickData,
+  HistogramData,
+} from 'lightweight-charts';
 import DrawingToolbar from './drawings/DrawingToolbar';
 import DrawingEditPanel from './drawings/DrawingEditPanel';
 import { DrawingsPrimitive, RECT_HANDLE_LABELS, POSITION_HANDLE_LABELS, CHANNEL_HANDLE_LABELS } from './drawings/DrawingPrimitive';
@@ -17,6 +28,52 @@ import type { Drawing, DrawingPoint, DrawingTool, DrawingEditOptions } from './d
 import { logDrawingUsage } from '../services/chartAnalytics';
 import { calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '../utils/indicators';
 import type { IndicatorsState } from './IndicatorToolbar';
+import type { NavigationTab } from '../components/Sidebar';
+
+/**
+ * lightweight-charts `Time` değerini unix saniyeye çevirir.
+ *
+ * `Time` üç biçimden biri olabilir (`UTCTimestamp | BusinessDay | string`);
+ * bu grafik seriyi her zaman unix saniyeyle besliyor, ama tip bunu bilmiyor.
+ * Beklenmeyen bir biçim gelirse `null` döner ve çağıran taraf eşleşme
+ * bulamaz — sessizce yanlış bir mumu seçmektense hiçbirini seçmemek doğru.
+ */
+function toUnixTime(time: Time): number | null {
+  if (typeof time === 'number') return time;
+  if (typeof time === 'string') {
+    const parsed = Date.parse(time);
+    return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
+  }
+  if (time && typeof time === 'object' && 'year' in time) {
+    return Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000);
+  }
+  return null;
+}
+
+/**
+ * Efsanede (legend) gösterilen anlık gösterge değerleri.
+ *
+ * Alan bazlı tanımlanır (tek bir birleşim tipi değil): tek çizgili
+ * göstergeler sayı, çok çıktılı olanlar kendi alan grubunu döndürüyor ve
+ * arayüz her birini AYRI dalda okuyor.
+ */
+interface LegendValues {
+  ema20?: number | null;
+  ema50?: number | null;
+  ema100?: number | null;
+  ema200?: number | null;
+  rsi?: number | null;
+  bb?: { upper: number; middle: number; lower: number };
+  macd?: { macd: number; signal: number; hist: number };
+}
+
+/** Efsanede okunan gösterge ayarları (EMA ve BB alanlarının birleşimi). */
+type LegendIndicatorConfig = {
+  period: number;
+  color?: string;
+  stdDev?: number;
+  upperColor?: string;
+};
 import { Loader2, Calendar, SlidersHorizontal, AlertCircle, BarChart3, RotateCcw, Scissors, Search, Bookmark, Plus, Bell, Trash2, X, Zap, Settings2, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { useVisibleInterval } from '../hooks/useVisibleInterval';
 import { useReplayStore, replayStore } from '../store/replayStore';
@@ -91,7 +148,7 @@ interface CandleChartProps {
   notice?: string | null;
   onDismissNotice?: () => void;
   onOpenSearchModal?: () => void;
-  onSelectTab?: (tab: any) => void;
+  onSelectTab?: (tab: NavigationTab) => void;
 }
 
 
@@ -178,7 +235,11 @@ export default function CandleChart({
   const ema200Ref = useRef<ISeriesApi<'Line'> | null>(null);
 
   const rsiRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const rsiPriceLinesRef = useRef<{ overbought?: any; middle?: any; oversold?: any }>({});
+  const rsiPriceLinesRef = useRef<{
+    overbought?: IPriceLine;
+    middle?: IPriceLine;
+    oversold?: IPriceLine;
+  }>({});
 
   const macdLineRef = useRef<ISeriesApi<'Line'> | null>(null);
   const macdSignalRef = useRef<ISeriesApi<'Line'> | null>(null);
@@ -188,7 +249,9 @@ export default function CandleChart({
   const bbMiddleRef = useRef<ISeriesApi<'Line'> | null>(null);
   const bbLowerRef = useRef<ISeriesApi<'Line'> | null>(null);
 
-  const alertPriceLinesRef = useRef<Array<{ line: any; series: any }>>([]);
+  const alertPriceLinesRef = useRef<
+    Array<{ line: IPriceLine; series: ISeriesApi<SeriesType> }>
+  >([]);
   const [alertState] = useAlertStore();
 
 
@@ -324,7 +387,7 @@ export default function CandleChart({
    * Bilinçli olarak sade: küçük bir ok ve fiyat. Stop/hedef seviyeleri veya
    * kâr/zarar burada gösterilmez — grafik kalabalıklaşmasın.
    */
-  const buildTradeMarkers = useCallback((): any[] => {
+  const buildTradeMarkers = useCallback((): SeriesMarker<Time>[] => {
     if (!data || data.length === 0 || journalTrades.length === 0) return [];
 
     // Mum aralığı: işaretin yüklü veriye gerçekten denk gelip gelmediğini
@@ -356,7 +419,7 @@ export default function CandleChart({
       return closest && minDiff <= maxSnapDistance ? (closest.time as Time) : null;
     };
 
-    const markers: any[] = [];
+    const markers: SeriesMarker<Time>[] = [];
 
     journalTrades.forEach((trade) => {
       if (trade.symbol?.toUpperCase() !== symbol?.toUpperCase()) return;
@@ -408,7 +471,7 @@ export default function CandleChart({
     // diğerinin işaretlerini silerdi.
     const tradeMarkers = buildTradeMarkers();
 
-    const setMarkers = (strategyMarkers: any[]) => {
+    const setMarkers = (strategyMarkers: SeriesMarker<Time>[]) => {
       const merged = [...tradeMarkers, ...strategyMarkers].sort(
         (a, b) => Number(a.time) - Number(b.time)
       );
@@ -443,7 +506,7 @@ export default function CandleChart({
     // ezerdi — bu yüzden zaman + yön + orijinal timestamp birlikte anahtar olur,
     // yalnızca gerçekten birebir aynı sinyaller (savunma amaçlı) elenir.
     const seenKeys = new Set<string>();
-    const markers: any[] = [];
+    const markers: SeriesMarker<Time>[] = [];
     let unmatchedCount = 0;
 
     evaluateResult.signals.forEach((sig) => {
@@ -943,7 +1006,7 @@ export default function CandleChart({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   const cancelDrawing = useCallback(() => {
@@ -1021,8 +1084,8 @@ export default function CandleChart({
     if (snap) {
       const time = chart.timeScale().coordinateToTime(x);
       if (time !== null) {
-        const timeVal = typeof time === 'number' ? time : (time as any);
-        const candle = candles.find(c => c.time === timeVal || (typeof c.time === 'object' && (c.time as any).timestamp === timeVal));
+        const timeVal = toUnixTime(time);
+        const candle = candles.find(c => c.time === timeVal || (typeof c.time === 'object' && (c.time as { timestamp?: number }).timestamp === timeVal));
 
         if (candle) {
           const points = [candle.open, candle.close, candle.high, candle.low];
@@ -1065,8 +1128,9 @@ export default function CandleChart({
       // sırasında timeToCoordinate'ın null dönüp cetvelin ekranın en soluna
       // kaymasına yol açıyordu.
       const nativeTime = chart.timeScale().coordinateToTime(x);
-      if (nativeTime !== null) {
-        time = typeof nativeTime === 'number' ? nativeTime : (nativeTime as any);
+      const nativeUnix = nativeTime === null ? null : toUnixTime(nativeTime);
+      if (nativeUnix !== null) {
+        time = nativeUnix;
       } else {
         // In-range bar interpolation (fallback)
         const barIdx = Math.floor(logical);
@@ -1722,7 +1786,7 @@ export default function CandleChart({
     });
 
     const resizeObserver = new ResizeObserver((entries) => {
-      for (let entry of entries) {
+      for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
           chart.resize(width, height);
@@ -1973,7 +2037,7 @@ export default function CandleChart({
       prevVisibleLengthRef.current = currentLen;
       prevDataBoundsRef.current = { firstTime: newFirstTime, lastTime: newLastTime };
 
-      const candles: any[] = uniqueData.map((d) => ({
+      const candles: CandlestickData<Time>[] = uniqueData.map((d) => ({
         time: d.time as Time,
         open: d.open,
         high: d.high,
@@ -1981,7 +2045,7 @@ export default function CandleChart({
         close: d.close,
       }));
 
-      const volumeData: any[] = uniqueData.map((d) => ({
+      const volumeData: HistogramData<Time>[] = uniqueData.map((d) => ({
         time: d.time as Time,
         value: d.volume,
         color: d.close >= d.open ? 'rgba(16, 185, 129, 0.65)' : 'rgba(239, 68, 68, 0.65)',
@@ -2015,16 +2079,16 @@ export default function CandleChart({
           // Replay sırasında yeni mum eklendiğinde ve ekran sağ kenarda ise pürüzsüz 1 birim sağa kaydır
           if (currentRange.to >= prevLen - 3) {
             chart.timeScale().setVisibleLogicalRange({
-              from: (currentRange.from + 1) as any,
-              to: (currentRange.to + 1) as any,
+              from: (currentRange.from + 1) as Logical,
+              to: (currentRange.to + 1) as Logical,
             });
           }
         } else if (!currentRange || Math.abs(currentLen - prevLen) > 3) {
           // Sembol değişimi, ilk yükleme veya kesim seçimi yapıldığında görünüm eksenini hizala
           chart.priceScale('right').applyOptions({ autoScale: true });
           chart.timeScale().setVisibleLogicalRange({
-            from: Math.max(0, currentLen - 150) as any,
-            to: (currentLen + 5) as any,
+            from: Math.max(0, currentLen - 150) as Logical,
+            to: (currentLen + 5) as Logical,
           });
         }
       }
@@ -2136,7 +2200,7 @@ export default function CandleChart({
         if (!series) {
           series = chart.addSeries(LineSeries, {
             color: item.color,
-            lineWidth: item.lineWidth as any,
+            lineWidth: item.lineWidth as LineWidth,
             // Değerler oranlanmış olduğu için eksende fiyat etiketi gösterilmez;
             // gerçek değişim lejantta yüzde olarak yazar.
             lastValueVisible: false,
@@ -2145,7 +2209,7 @@ export default function CandleChart({
           });
           compareSeriesRef.current.set(item.id, series);
         }
-        series.applyOptions({ color: item.color, lineWidth: item.lineWidth as any, visible: item.visible });
+        series.applyOptions({ color: item.color, lineWidth: item.lineWidth as LineWidth, visible: item.visible });
 
         const raw = compareCandlesRef.current.get(`${item.id}|${compareRangeKey}`);
         if (!raw || raw.length === 0) {
@@ -2197,7 +2261,7 @@ export default function CandleChart({
       if (!ema20Ref.current) {
         ema20Ref.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.ema20.color,
-          lineWidth: indicatorSettings.ema20.lineWidth as any,
+          lineWidth: indicatorSettings.ema20.lineWidth as LineWidth,
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
@@ -2206,7 +2270,7 @@ export default function CandleChart({
       } else {
         ema20Ref.current.applyOptions({
           color: indicatorSettings.ema20.color,
-          lineWidth: indicatorSettings.ema20.lineWidth as any,
+          lineWidth: indicatorSettings.ema20.lineWidth as LineWidth,
         });
       }
       const ema20 = calculateEMA(visibleData, indicatorSettings.ema20.period);
@@ -2221,7 +2285,7 @@ export default function CandleChart({
       if (!ema50Ref.current) {
         ema50Ref.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.ema50.color,
-          lineWidth: indicatorSettings.ema50.lineWidth as any,
+          lineWidth: indicatorSettings.ema50.lineWidth as LineWidth,
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
@@ -2230,7 +2294,7 @@ export default function CandleChart({
       } else {
         ema50Ref.current.applyOptions({
           color: indicatorSettings.ema50.color,
-          lineWidth: indicatorSettings.ema50.lineWidth as any,
+          lineWidth: indicatorSettings.ema50.lineWidth as LineWidth,
         });
       }
       const ema50 = calculateEMA(visibleData, indicatorSettings.ema50.period);
@@ -2245,7 +2309,7 @@ export default function CandleChart({
       if (!ema100Ref.current) {
         ema100Ref.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.ema100.color,
-          lineWidth: indicatorSettings.ema100.lineWidth as any,
+          lineWidth: indicatorSettings.ema100.lineWidth as LineWidth,
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
@@ -2254,7 +2318,7 @@ export default function CandleChart({
       } else {
         ema100Ref.current.applyOptions({
           color: indicatorSettings.ema100.color,
-          lineWidth: indicatorSettings.ema100.lineWidth as any,
+          lineWidth: indicatorSettings.ema100.lineWidth as LineWidth,
         });
       }
       const ema100 = calculateEMA(visibleData, indicatorSettings.ema100.period);
@@ -2269,7 +2333,7 @@ export default function CandleChart({
       if (!ema200Ref.current) {
         ema200Ref.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.ema200.color,
-          lineWidth: indicatorSettings.ema200.lineWidth as any,
+          lineWidth: indicatorSettings.ema200.lineWidth as LineWidth,
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
@@ -2278,7 +2342,7 @@ export default function CandleChart({
       } else {
         ema200Ref.current.applyOptions({
           color: indicatorSettings.ema200.color,
-          lineWidth: indicatorSettings.ema200.lineWidth as any,
+          lineWidth: indicatorSettings.ema200.lineWidth as LineWidth,
         });
       }
       const ema200 = calculateEMA(visibleData, indicatorSettings.ema200.period);
@@ -2296,7 +2360,7 @@ export default function CandleChart({
       if (!rsiRef.current) {
         rsiRef.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.rsi.color,
-          lineWidth: indicatorSettings.rsi.lineWidth as any,
+          lineWidth: indicatorSettings.rsi.lineWidth as LineWidth,
           title: '',
           lastValueVisible: false,
           priceLineVisible: false,
@@ -2344,7 +2408,7 @@ export default function CandleChart({
       } else {
         rsiRef.current.applyOptions({
           color: indicatorSettings.rsi.color,
-          lineWidth: indicatorSettings.rsi.lineWidth as any,
+          lineWidth: indicatorSettings.rsi.lineWidth as LineWidth,
         });
         rsiPriceLinesRef.current.overbought?.applyOptions({
           price: indicatorSettings.rsi.overbought,
@@ -2372,8 +2436,8 @@ export default function CandleChart({
         // ekseniyle (rightPriceScale) aynı ölçeği paylaşırsa "Logaritmik" görünüm
         // bu ekseni de anlamsızca bozar — kendi ayrı ölçeğinde kalmalı.
         macdHistRef.current = chart.addSeries(HistogramSeries, { title: '', lastValueVisible: false, priceLineVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
-        macdLineRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.macdColor, lineWidth: indicatorSettings.macd.macdWidth as any, title: '', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
-        macdSignalRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.signalColor, lineWidth: indicatorSettings.macd.signalWidth as any, title: '', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
+        macdLineRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.macdColor, lineWidth: indicatorSettings.macd.macdWidth as LineWidth, title: '', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
+        macdSignalRef.current = chart.addSeries(LineSeries, { color: indicatorSettings.macd.signalColor, lineWidth: indicatorSettings.macd.signalWidth as LineWidth, title: '', lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, priceScaleId: 'macd_scale' }, macdPaneIndex);
         // Aynı "incorrect ID" hatası macd_scale için de geçerliydi; paneIndex
         // belirtilmeden chart.priceScale() varsayılan olarak pane 0'ı arar.
         chart.priceScale('macd_scale', macdPaneIndex).applyOptions({ mode: PriceScaleMode.Normal });
@@ -2383,11 +2447,11 @@ export default function CandleChart({
         }
         macdLineRef.current.applyOptions({
           color: indicatorSettings.macd.macdColor,
-          lineWidth: indicatorSettings.macd.macdWidth as any,
+          lineWidth: indicatorSettings.macd.macdWidth as LineWidth,
         });
         macdSignalRef.current.applyOptions({
           color: indicatorSettings.macd.signalColor,
-          lineWidth: indicatorSettings.macd.signalWidth as any,
+          lineWidth: indicatorSettings.macd.signalWidth as LineWidth,
         });
       }
       const macd = calculateMACD(
@@ -2414,7 +2478,7 @@ export default function CandleChart({
       if (!bbUpperRef.current || !bbMiddleRef.current || !bbLowerRef.current) {
         bbUpperRef.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.bb.upperColor,
-          lineWidth: indicatorSettings.bb.upperWidth as any,
+          lineWidth: indicatorSettings.bb.upperWidth as LineWidth,
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
@@ -2422,7 +2486,7 @@ export default function CandleChart({
         });
         bbMiddleRef.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.bb.middleColor,
-          lineWidth: indicatorSettings.bb.middleWidth as any,
+          lineWidth: indicatorSettings.bb.middleWidth as LineWidth,
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
@@ -2430,7 +2494,7 @@ export default function CandleChart({
         });
         bbLowerRef.current = chart.addSeries(LineSeries, {
           color: indicatorSettings.bb.lowerColor,
-          lineWidth: indicatorSettings.bb.lowerWidth as any,
+          lineWidth: indicatorSettings.bb.lowerWidth as LineWidth,
           lastValueVisible: false,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
@@ -2439,15 +2503,15 @@ export default function CandleChart({
       } else {
         bbUpperRef.current.applyOptions({
           color: indicatorSettings.bb.upperColor,
-          lineWidth: indicatorSettings.bb.upperWidth as any,
+          lineWidth: indicatorSettings.bb.upperWidth as LineWidth,
         });
         bbMiddleRef.current.applyOptions({
           color: indicatorSettings.bb.middleColor,
-          lineWidth: indicatorSettings.bb.middleWidth as any,
+          lineWidth: indicatorSettings.bb.middleWidth as LineWidth,
         });
         bbLowerRef.current.applyOptions({
           color: indicatorSettings.bb.lowerColor,
-          lineWidth: indicatorSettings.bb.lowerWidth as any,
+          lineWidth: indicatorSettings.bb.lowerWidth as LineWidth,
         });
       }
       const bb = calculateBollingerBands(visibleData, indicatorSettings.bb.period, indicatorSettings.bb.stdDev);
@@ -2462,7 +2526,7 @@ export default function CandleChart({
 
     // Göz simgesiyle gizlenen göstergeler: seri kaldırılmaz, yalnızca
     // görünürlüğü kapatılır — ayarları ve lejanttaki yeri korunur.
-    const visibilityMap: [keyof IndicatorsState, (ISeriesApi<any> | null)[]][] = [
+    const visibilityMap: [keyof IndicatorsState, (ISeriesApi<SeriesType> | null)[]][] = [
       ['ema20', [ema20Ref.current]],
       ['ema50', [ema50Ref.current]],
       ['ema100', [ema100Ref.current]],
@@ -2479,7 +2543,7 @@ export default function CandleChart({
 
   const latestIndicatorValues = useMemo(() => {
     if (!visibleData || visibleData.length === 0) return {};
-    const res: Record<string, any> = {};
+    const res: LegendValues = {};
 
     if (indicators.ema20) {
       const ema = calculateEMA(visibleData, indicatorSettings.ema20.period);
@@ -2560,7 +2624,7 @@ export default function CandleChart({
     const overlays: Array<{ id: string; y: number; symbol: string; condSym: string; val: string }> = [];
 
     matchingAlerts.forEach((alert) => {
-      let targetSeries: any = mainSeries;
+      let targetSeries: ISeriesApi<SeriesType> | null = mainSeries;
       if (alert.target_type === 'RSI' && rsiRef.current) {
         targetSeries = rsiRef.current;
       }
@@ -2583,8 +2647,9 @@ export default function CandleChart({
             val: String(formattedVal),
           });
         }
-      } catch (e) {
-        // ignore
+      } catch {
+        // Seri/çizgi zaten kaldırılmış olabilir; kaldırma işlemi
+        // idempotent kabul edilir.
       }
     });
 
@@ -2599,8 +2664,9 @@ export default function CandleChart({
     alertPriceLinesRef.current.forEach(({ line, series }) => {
       try {
         series.removePriceLine(line);
-      } catch (e) {
-        // ignore
+      } catch {
+        // Seri/çizgi zaten kaldırılmış olabilir; kaldırma işlemi
+        // idempotent kabul edilir.
       }
     });
     alertPriceLinesRef.current = [];
@@ -2613,7 +2679,7 @@ export default function CandleChart({
     );
 
     matchingAlerts.forEach((alert) => {
-      let targetSeries: any = mainSeries;
+      let targetSeries: ISeriesApi<SeriesType> | null = mainSeries;
       if (alert.target_type === 'RSI' && rsiRef.current) {
         targetSeries = rsiRef.current;
       }
@@ -3105,8 +3171,14 @@ export default function CandleChart({
               )}
               {showItems &&
                 legendIndicatorKeys.map((key) => {
-                  const conf = indicatorSettings[key] as any;
-                  const val = latestIndicatorValues[key];
+                  const conf = indicatorSettings[key] as LegendIndicatorConfig;
+                  // `legendIndicatorKeys` yalnızca ema*/bb içeriyor: bb bir
+                  // bant grubu, diğerleri tek sayı.
+                  const val = latestIndicatorValues[key] as
+                    | number
+                    | null
+                    | { upper: number; middle: number; lower: number }
+                    | undefined;
                   const label = key === 'bb' ? `BB (${conf.period}, ${conf.stdDev})` : `EMA ${conf.period}`;
                   const color = key === 'bb' ? conf.upperColor : conf.color;
                   const isHidden = !!hiddenIndicators[key];

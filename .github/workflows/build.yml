@@ -21,9 +21,14 @@ jobs:
         run: |
           cd frontend
           npm install
-      # `npm run lint` bilinçli olarak çağrılmıyor: eslint kurulu değil ve
-      # eslint.config.js yok, script olduğu gibi başarısız oluyor. Tip kontrolü
-      # zaten `npm run build` içindeki `tsc` adımında yapılıyor.
+      # Artık gerçekten çalışıyor: eslint kuruldu ve eslint.config.js eklendi.
+      # Eskiden script vardı ama bağımlılık ve yapılandırma yoktu, yani komut
+      # anında patlıyordu — frontend'de hiçbir statik denetim koşmuyordu.
+      # Uyarılar (deneysel react-hooks kuralları) CI'ı durdurmaz, hatalar durdurur.
+      - name: Lint (eslint)
+        run: |
+          cd frontend
+          npm run lint
       - name: Build
         run: |
           cd frontend

@@ -1,9 +1,11 @@
 import React from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
+import type { CredentialResponse } from '@react-oauth/google';
 import { BarChart2, Zap, ShieldCheck, TrendingUp, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logoImg from '../assets/logo.jpg';
+import { errorMessage } from '../utils/errors';
 
 /**
  * Landing page ile aynı tasarım dili: siyah zemin (#0a0b0e), tek emerald
@@ -52,7 +54,7 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
    * kullanıcı Google'a değil dev butonuna basmıştı ve gerçek sebep hemen
    * her zaman token uyuşmazlığı ya da kapalı backend oluyordu.
    */
-  const handleSuccess = async (credentialResponse: any, viaDev = false) => {
+  const handleSuccess = async (credentialResponse: CredentialResponse, viaDev = false) => {
     if (!credentialResponse.credential) {
       setError(
         viaDev
@@ -65,8 +67,8 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
       setError(null);
       await loginWithGoogle(credentialResponse.credential);
       navigate('/app', { replace: true });
-    } catch (err: any) {
-      const raw = err?.message || '';
+    } catch (err: unknown) {
+      const raw = errorMessage(err, '');
       if (viaDev && raw.includes('Google')) {
         setError(
           'Dev girişi reddedildi: frontend/.env.local içindeki VITE_DEV_LOGIN_TOKEN ile ' +

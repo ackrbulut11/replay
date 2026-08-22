@@ -19,6 +19,7 @@ import { replayStore, useReplayStore } from '../store/replayStore';
 import { useDraggablePanel } from '../hooks/useDraggablePanel';
 import { logError, logEvent } from '../services/eventLog';
 import type { TradeSide } from '../types/journal';
+import { errorMessage } from '../utils/errors';
 
 /** Stop/hedef kontrolü için gereken mum alanları. */
 export interface ReplayBarInput {
@@ -236,8 +237,8 @@ export default function ReplayTradePanel({
         setTakeProfit('');
         await journalStore.reload(symbol, activeSessionId);
         logEvent('replay_trade_opened', { context: { symbol, side } });
-      } catch (err: any) {
-        setError(err?.message || 'Pozisyon açılamadı.');
+      } catch (err: unknown) {
+        setError(errorMessage(err, 'Pozisyon açılamadı.'));
         logError('replay_trade_open_failed', err, { symbol, side });
       } finally {
         setBusy(false);
@@ -260,8 +261,8 @@ export default function ReplayTradePanel({
       });
       await journalStore.reload(symbol, sessionId);
       logEvent('replay_trade_closed', { context: { symbol, pnl: closed.pnl } });
-    } catch (err: any) {
-      setError(err?.message || 'Pozisyon kapatılamadı.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'Pozisyon kapatılamadı.'));
       logError('replay_trade_close_failed', err, { symbol });
     } finally {
       setBusy(false);

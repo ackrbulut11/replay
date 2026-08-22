@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
+import { errorMessage } from '../utils/errors';
 
 export interface AlertItem {
   id: string;
@@ -63,7 +64,10 @@ let alarmAudioTimeout: ReturnType<typeof setTimeout> | null = null;
 export function playBellSound(durationSec: number = 5) {
   try {
     stopBellSound();
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    // Safari hâlâ önekli adı kullanıyor; `window` tipinde tanımlı değil.
+  const AudioContextClass =
+    window.AudioContext ||
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
     alarmAudioCtx = ctx;
@@ -112,8 +116,8 @@ export function stopBellSound() {
   if (alarmAudioCtx) {
     try {
       alarmAudioCtx.close();
-    } catch (e) {
-      // ignore
+    } catch {
+      // AudioContext zaten kapalı olabilir.
     }
     alarmAudioCtx = null;
   }
@@ -163,9 +167,9 @@ export const alertStore = {
         alerts: data.alerts || [],
         loading: false,
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       alertStore.setState(() => ({
-        error: err.message || 'Alert fetch error',
+        error: errorMessage(err, 'Alert fetch error'),
         loading: false,
       }));
     }
@@ -196,7 +200,7 @@ export const alertStore = {
       }));
 
       return newAlert;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Create alert error:', err);
       throw err;
     }
@@ -214,7 +218,7 @@ export const alertStore = {
       alertStore.setState(prev => ({
         alerts: prev.alerts.map(a => (a.id === alertId ? updated : a)),
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Toggle alert error:', err);
     }
   },
@@ -228,7 +232,7 @@ export const alertStore = {
       alertStore.setState(prev => ({
         alerts: prev.alerts.filter(a => a.id !== alertId),
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Delete alert error:', err);
     }
   },
@@ -269,7 +273,7 @@ export const alertStore = {
         });
         playBellSound(5);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Check alerts error:', err);
     } finally {
       alertCheckInFlight = false;

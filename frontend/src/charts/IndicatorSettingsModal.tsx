@@ -4,7 +4,13 @@ import {
   chartSettingsStore,
   useChartSettingsStore,
 } from '../store/chartSettingsStore';
-import type { IndicatorSettingsMap } from '../store/chartSettingsStore';
+import type {
+  BbSettings,
+  DetailedRsiSettings,
+  EmaSettings,
+  IndicatorSettingsMap,
+  MacdSettings,
+} from '../store/chartSettingsStore';
 
 interface IndicatorSettingsModalProps {
   isOpen: boolean;
@@ -37,6 +43,16 @@ const INDICATOR_NAMES: Record<keyof IndicatorSettingsMap, string> = {
   macd: 'MACD (Hareketli Ortalama Yakınlaşma Iraksama)',
 };
 
+/**
+ * Tüm gösterge ayarlarının alanlarının birleşimi.
+ *
+ * Her alan opsiyoneldir çünkü hangi göstergenin hangi alanları taşıdığı
+ * `indicatorKey`e bağlı; modal bunları ayrı dallarda render ediyor.
+ */
+type AllIndicatorFields = Partial<
+  EmaSettings & BbSettings & DetailedRsiSettings & MacdSettings
+>;
+
 export default function IndicatorSettingsModal({
   isOpen,
   indicatorKey,
@@ -47,17 +63,28 @@ export default function IndicatorSettingsModal({
 
   if (!isOpen || !indicatorKey) return null;
 
+  // `indicatorKey` bir birleşim olduğu için `indicators[indicatorKey]` de
+  // birleşim tipinde: TypeScript `.period` erişimini daraltamıyor. Modal
+  // zaten her göstergeyi KENDİ dalında render ediyor (aşağıdaki
+  // `indicatorKey === 'bb'` gibi koşullar), yani alan varlığı çalışma
+  // zamanında garanti. Daraltma tek yerde, açık bir görünüm tipiyle yapılır —
+  // her satırda `as any` yazmak yerine.
   const currentSettings = settingsState.indicators[indicatorKey];
+  const view = currentSettings as AllIndicatorFields;
 
   const handleReset = () => {
     chartSettingsStore.resetIndicatorSettings(indicatorKey);
   };
 
-  const updateSetting = (field: string, value: any) => {
+  const updateSetting = (field: string, value: string | number) => {
     chartSettingsStore.setIndicatorSettings(indicatorKey, { [field]: value });
   };
 
-  const renderColorPicker = (label: string, field: string, value: string) => {
+  // Değer opsiyoneldir: `AllIndicatorFields` tüm alanları isteğe bağlı
+  // yapıyor. Eksik bir alan artık `undefined` olarak sessizce geçmek yerine
+  // görünür bir varsayılana düşer.
+  const renderColorPicker = (label: string, field: string, rawValue?: string) => {
+    const value = rawValue ?? '#94a3b8';
     return (
       <div className="flex flex-col gap-1.5 py-1">
         <div className="flex items-center justify-between">
@@ -94,7 +121,8 @@ export default function IndicatorSettingsModal({
     );
   };
 
-  const renderWidthSelector = (label: string, field: string, value: number) => {
+  const renderWidthSelector = (label: string, field: string, rawValue?: number) => {
+    const value = rawValue ?? 2;
     return (
       <div className="flex items-center justify-between py-1 text-xs text-content">
         <span>{label}</span>
@@ -182,7 +210,7 @@ export default function IndicatorSettingsModal({
                     type="number"
                     min={1}
                     max={500}
-                    value={(currentSettings as any).period}
+                    value={view.period}
                     onChange={(e) => updateSetting('period', parseInt(e.target.value) || 20)}
                     className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                   />
@@ -197,7 +225,7 @@ export default function IndicatorSettingsModal({
                       type="number"
                       min={1}
                       max={200}
-                      value={(currentSettings as any).period}
+                      value={view.period}
                       onChange={(e) => updateSetting('period', parseInt(e.target.value) || 20)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -209,7 +237,7 @@ export default function IndicatorSettingsModal({
                       step={0.1}
                       min={0.1}
                       max={10}
-                      value={(currentSettings as any).stdDev}
+                      value={view.stdDev}
                       onChange={(e) => updateSetting('stdDev', parseFloat(e.target.value) || 2)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -225,7 +253,7 @@ export default function IndicatorSettingsModal({
                       type="number"
                       min={1}
                       max={100}
-                      value={(currentSettings as any).period}
+                      value={view.period}
                       onChange={(e) => updateSetting('period', parseInt(e.target.value) || 14)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -236,7 +264,7 @@ export default function IndicatorSettingsModal({
                       type="number"
                       min={50}
                       max={95}
-                      value={(currentSettings as any).overbought}
+                      value={view.overbought}
                       onChange={(e) => updateSetting('overbought', parseInt(e.target.value) || 75)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -247,7 +275,7 @@ export default function IndicatorSettingsModal({
                       type="number"
                       min={5}
                       max={50}
-                      value={(currentSettings as any).oversold}
+                      value={view.oversold}
                       onChange={(e) => updateSetting('oversold', parseInt(e.target.value) || 25)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -263,7 +291,7 @@ export default function IndicatorSettingsModal({
                       type="number"
                       min={1}
                       max={100}
-                      value={(currentSettings as any).fastPeriod}
+                      value={view.fastPeriod}
                       onChange={(e) => updateSetting('fastPeriod', parseInt(e.target.value) || 12)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -274,7 +302,7 @@ export default function IndicatorSettingsModal({
                       type="number"
                       min={1}
                       max={200}
-                      value={(currentSettings as any).slowPeriod}
+                      value={view.slowPeriod}
                       onChange={(e) => updateSetting('slowPeriod', parseInt(e.target.value) || 26)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -285,7 +313,7 @@ export default function IndicatorSettingsModal({
                       type="number"
                       min={1}
                       max={50}
-                      value={(currentSettings as any).signalPeriod}
+                      value={view.signalPeriod}
                       onChange={(e) => updateSetting('signalPeriod', parseInt(e.target.value) || 9)}
                       className="w-24 bg-white/[0.03] border border-line rounded-lg px-2.5 py-1 text-right text-content-strong focus:outline-none focus:border-accent-500/50"
                     />
@@ -297,23 +325,23 @@ export default function IndicatorSettingsModal({
             <div className="space-y-4">
               {(indicatorKey === 'ema20' || indicatorKey === 'ema50' || indicatorKey === 'ema100' || indicatorKey === 'ema200') && (
                 <div className="space-y-3">
-                  {renderColorPicker('Çizgi Rengi', 'color', (currentSettings as any).color)}
-                  {renderWidthSelector('Çizgi Kalınlığı', 'lineWidth', (currentSettings as any).lineWidth)}
+                  {renderColorPicker('Çizgi Rengi', 'color', view.color)}
+                  {renderWidthSelector('Çizgi Kalınlığı', 'lineWidth', view.lineWidth)}
                 </div>
               )}
 
               {indicatorKey === 'bb' && (
                 <div className="space-y-3">
-                  {renderColorPicker('Üst Bant Rengi', 'upperColor', (currentSettings as any).upperColor)}
-                  {renderColorPicker('Orta Bant Rengi', 'middleColor', (currentSettings as any).middleColor)}
-                  {renderColorPicker('Alt Bant Rengi', 'lowerColor', (currentSettings as any).lowerColor)}
+                  {renderColorPicker('Üst Bant Rengi', 'upperColor', view.upperColor)}
+                  {renderColorPicker('Orta Bant Rengi', 'middleColor', view.middleColor)}
+                  {renderColorPicker('Alt Bant Rengi', 'lowerColor', view.lowerColor)}
                 </div>
               )}
 
               {indicatorKey === 'rsi' && (
                 <div className="space-y-3">
-                  {renderColorPicker('RSI Çizgi Rengi', 'color', (currentSettings as any).color)}
-                  {renderWidthSelector('RSI Çizgi Kalınlığı', 'lineWidth', (currentSettings as any).lineWidth)}
+                  {renderColorPicker('RSI Çizgi Rengi', 'color', view.color)}
+                  {renderWidthSelector('RSI Çizgi Kalınlığı', 'lineWidth', view.lineWidth)}
                 </div>
               )}
 
@@ -321,18 +349,18 @@ export default function IndicatorSettingsModal({
                 <div className="space-y-3">
                   <div className="bg-white/[0.02] p-3 rounded-xl border border-line space-y-2">
                     <h4 className="text-xs font-medium text-accent-400">MACD Çizgisi</h4>
-                    {renderColorPicker('MACD Rengi', 'macdColor', (currentSettings as any).macdColor)}
-                    {renderWidthSelector('MACD Kalınlığı', 'macdWidth', (currentSettings as any).macdWidth)}
+                    {renderColorPicker('MACD Rengi', 'macdColor', view.macdColor)}
+                    {renderWidthSelector('MACD Kalınlığı', 'macdWidth', view.macdWidth)}
                   </div>
                   <div className="bg-white/[0.02] p-3 rounded-xl border border-line space-y-2">
                     <h4 className="text-xs font-medium text-warn-400">Sinyal Çizgisi</h4>
-                    {renderColorPicker('Sinyal Rengi', 'signalColor', (currentSettings as any).signalColor)}
-                    {renderWidthSelector('Sinyal Kalınlığı', 'signalWidth', (currentSettings as any).signalWidth)}
+                    {renderColorPicker('Sinyal Rengi', 'signalColor', view.signalColor)}
+                    {renderWidthSelector('Sinyal Kalınlığı', 'signalWidth', view.signalWidth)}
                   </div>
                   <div className="bg-white/[0.02] p-3 rounded-xl border border-line space-y-2">
                     <h4 className="text-xs font-medium text-accent-400">Histogram Çubukları</h4>
-                    {renderColorPicker('Yükseliş Rengi', 'histUpColor', (currentSettings as any).histUpColor)}
-                    {renderColorPicker('Düşüş Rengi', 'histDownColor', (currentSettings as any).histDownColor)}
+                    {renderColorPicker('Yükseliş Rengi', 'histUpColor', view.histUpColor)}
+                    {renderColorPicker('Düşüş Rengi', 'histDownColor', view.histDownColor)}
                   </div>
                 </div>
               )}

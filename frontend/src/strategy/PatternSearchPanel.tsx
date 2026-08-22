@@ -98,7 +98,7 @@ export default function PatternSearchPanel({
         limit_bars: limitBars,
       });
       setResult(response);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(readableError(err));
       setResult(null);
     } finally {

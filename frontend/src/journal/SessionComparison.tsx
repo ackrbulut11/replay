@@ -16,6 +16,7 @@ import { compareSessionWithStrategy } from '../services/journalApi';
 import { strategyStore, useStrategyStore } from '../store/strategyStore';
 import type { JournalTrade, SessionComparison } from '../types/journal';
 import type { Strategy } from '../types/strategy';
+import { errorMessage } from '../utils/errors';
 
 interface SessionComparisonPanelProps {
   /** Oturum listesi bunlardan türetilir; günlükte zaten yüklü. */
@@ -77,9 +78,9 @@ export default function SessionComparisonPanel({ trades }: SessionComparisonPane
     setError(null);
     try {
       setResult(await compareSessionWithStrategy(sessionId, strategyId));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setResult(null);
-      setError(err?.message || 'Karşılaştırma yapılamadı.');
+      setError(errorMessage(err, 'Karşılaştırma yapılamadı.'));
     } finally {
       setLoading(false);
     }

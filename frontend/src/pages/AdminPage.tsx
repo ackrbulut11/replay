@@ -16,7 +16,9 @@ import {
   getAdminStats, getAdminUsers, getAdminUserDetail, cloneStrategyToMe, getAdminWaitlist, getAdminEvents,
   type AdminStats, type AdminUserItem, type AdminUserDetail, type AdminWaitlistEntry, type AdminEventEntry,
 } from '../services/adminApi';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { errorMessage } from '../utils/errors';
 
 function formatDate(value?: string | null): string {
   if (!value) return '—';
@@ -74,7 +76,7 @@ const DRAWING_TOOL_LABELS: Record<string, string> = {
 
 /** Genel istatistik kartlarında kullanılan yatay sıralı liste (en çok kullanılan en üstte). */
 const RankedList: React.FC<{
-  icon: any;
+  icon: LucideIcon;
   title: string;
   items: { label: string; count: number }[];
   labelFormatter?: (label: string) => string;
@@ -133,8 +135,8 @@ export default function AdminPage() {
       setStats(s);
       setUsers(u);
       setWaitlist(w);
-    } catch (err: any) {
-      setError(err?.message || 'Admin verileri yüklenemedi.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'Admin verileri yüklenemedi.'));
     } finally {
       setLoading(false);
     }
@@ -152,8 +154,8 @@ export default function AdminPage() {
     try {
       const detail = await getAdminUserDetail(userId);
       setDetails((prev) => ({ ...prev, [userId]: detail }));
-    } catch (err: any) {
-      setDetailErrors((prev) => ({ ...prev, [userId]: err?.message || 'Detaylar yüklenemedi.' }));
+    } catch (err: unknown) {
+      setDetailErrors((prev) => ({ ...prev, [userId]: errorMessage(err, 'Detaylar yüklenemedi.') }));
     } finally {
       setDetailLoadingId(null);
     }
@@ -416,8 +418,8 @@ function EventsPanel() {
       const data = await getAdminEvents({ level: level || undefined });
       setEvents(data);
       setLoadedOnce(true);
-    } catch (err: any) {
-      setError(err?.message || 'Olaylar yüklenemedi.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'Olaylar yüklenemedi.'));
     } finally {
       setLoading(false);
     }
@@ -530,7 +532,7 @@ function EventsPanel() {
                         </span>
                       </td>
                       <td className="px-4 py-2 text-content-muted truncate max-w-[360px]" title={e.message || undefined}>
-                        {e.message || '—'}
+                        {errorMessage(e, '—')}
                       </td>
                     </tr>
                   ))}

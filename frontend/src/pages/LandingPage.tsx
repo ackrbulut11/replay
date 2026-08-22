@@ -5,6 +5,7 @@ import logoImg from '../assets/logo.jpg';
 import { ReplayPreview } from '../components/ReplayPreview';
 import { joinWaitlist, WaitlistSource } from '../services/waitlistApi';
 import { useAuth } from '../context/AuthContext';
+import { errorMessage } from '../utils/errors';
 
 /**
  * Herkese açık tanıtım sayfası.
@@ -65,9 +66,9 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
       setMessage(result.message);
       setAlreadyRegistered(result.already_registered);
       onSubmitted?.();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus('error');
-      setMessage(err.message || 'Failed to submit. Please try again.');
+      setMessage(errorMessage(err, 'Failed to submit. Please try again.'));
     }
   };
 

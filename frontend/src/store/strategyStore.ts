@@ -16,6 +16,7 @@ import type {
   SingleEvaluationLogItem,
 } from '../types/strategy';
 import { strategyApi } from '../services/strategyApi';
+import { errorMessage } from '../utils/errors';
 
 export interface StrategyState {
   strategies: Strategy[];
@@ -123,8 +124,8 @@ export const strategyStore = {
       // Yeni eklenenler alta gelecek şekilde eskiden yeniye doğru sırala (asc)
       const sorted = [...strategies].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       setState({ strategies: sorted, isLoading: false });
-    } catch (err: any) {
-      setState({ isLoading: false, error: err.message || 'Stratejiler yüklenemedi' });
+    } catch (err: unknown) {
+      setState({ isLoading: false, error: errorMessage(err, 'Stratejiler yüklenemedi') });
     }
   },
 
@@ -152,8 +153,8 @@ export const strategyStore = {
         isLoading: false,
       });
       return strategy;
-    } catch (err: any) {
-      setState({ isLoading: false, error: err.message || 'Strateji oluşturulamadı' });
+    } catch (err: unknown) {
+      setState({ isLoading: false, error: errorMessage(err, 'Strateji oluşturulamadı') });
       return null;
     }
   },
@@ -169,8 +170,8 @@ export const strategyStore = {
         isLoading: false,
       });
       return updated;
-    } catch (err: any) {
-      setState({ isLoading: false, error: err.message || 'Strateji güncellenemedi' });
+    } catch (err: unknown) {
+      setState({ isLoading: false, error: errorMessage(err, 'Strateji güncellenemedi') });
       return null;
     }
   },
@@ -185,8 +186,8 @@ export const strategyStore = {
         isLoading: false,
       });
       return true;
-    } catch (err: any) {
-      setState({ isLoading: false, error: err.message || 'Strateji silinemedi' });
+    } catch (err: unknown) {
+      setState({ isLoading: false, error: errorMessage(err, 'Strateji silinemedi') });
       return false;
     }
   },
@@ -214,8 +215,8 @@ export const strategyStore = {
       strategyStore.fetchEvalHistory();
 
       return result;
-    } catch (err: any) {
-      setState({ isLoading: false, error: err.message || 'Değerlendirme başarısız' });
+    } catch (err: unknown) {
+      setState({ isLoading: false, error: errorMessage(err, 'Değerlendirme başarısız') });
       return null;
     }
   },
@@ -290,7 +291,7 @@ export const strategyStore = {
     try {
       const indicators = await strategyApi.getAvailableIndicators();
       setState({ indicators });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('İndikatör listesi yüklenemedi:', err);
     }
   },

@@ -27,6 +27,7 @@ import { logError } from '../services/eventLog';
 import type { JournalTrade, PerformanceReport, TradeStatus } from '../types/journal';
 import { csvNumber, csvTimestamp, downloadCsv } from '../utils/csv';
 import SessionComparisonPanel from '../journal/SessionComparison';
+import { errorMessage } from '../utils/errors';
 
 const STARTING_BALANCE = 10000;
 
@@ -134,8 +135,8 @@ export default function JournalPage() {
       ]);
       setTrades(tradeList);
       setPerformance(report);
-    } catch (err: any) {
-      setError(err?.message || 'İşlem günlüğü yüklenemedi.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'İşlem günlüğü yüklenemedi.'));
       logError('journal_load_failed', err);
     } finally {
       setLoading(false);
@@ -152,8 +153,8 @@ export default function JournalPage() {
       setTrades((prev) => prev.filter((t) => t.id !== tradeId));
       // Silinen işlem rapora dahildi; metrikleri tazele.
       setPerformance(await getPerformance({ startingBalance: STARTING_BALANCE }));
-    } catch (err: any) {
-      setError(err?.message || 'İşlem silinemedi.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'İşlem silinemedi.'));
       logError('journal_delete_failed', err, { tradeId });
     }
   };
@@ -440,8 +441,8 @@ function TradeNotesEditor({
       onSaved(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err: any) {
-      setError(err?.message || 'Kaydedilemedi.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'Kaydedilemedi.'));
       logError('journal_update_failed', err, { tradeId: trade.id });
     } finally {
       setSaving(false);

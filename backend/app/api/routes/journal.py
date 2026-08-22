@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
-from app.data.loader import DataLoader, lookback_start_for_bars
+from app.data.loader import loader as shared_loader, lookback_start_for_bars
 from app.database.models import JournalTrade, User
 from app.database.postgres import get_db
 from app.engines.execution import ExecutionCosts
@@ -49,7 +49,10 @@ _journal = TradeJournal()
 # Karşılaştırma, stratejiyi aynı pencerede çalıştırmak için bunlara ihtiyaç
 # duyar; ikisi de durum tutmaz ve kendi önbelleklerine sahiptir.
 _strategy_engine = StrategyEngine()
-_loader = DataLoader()
+# Paylasilan tek ornek: her route kendi DataLoader()'ini yaratinca RAM
+# onbellegi kopyalaniyor ve parquet kilitleri ayri ayri calisip ise
+# yaramiyordu (bkz. data/loader.py sonundaki not).
+_loader = shared_loader
 
 
 def get_owned_trade(

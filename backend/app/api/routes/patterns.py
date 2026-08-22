@@ -19,14 +19,15 @@ from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
 from app.utils.time import utc_now
-from app.data.loader import DataLoader, lookback_start_for_bars
+from app.data.loader import loader as shared_loader, lookback_start_for_bars
 from app.database.models import User
 from app.engines import pattern_engine
 from app.rules.validation import validate_condition_group
 
 router = APIRouter(prefix="/patterns", tags=["Patterns"])
 
-loader = DataLoader()
+# Paylasilan tek ornek (bkz. data/loader.py sonundaki not).
+loader = shared_loader
 
 # Tek aramada taranacak en fazla bar. Üst sınır olmadan "tüm veri" seçen bir
 # kullanıcı on yıllık 1 dakikalık seriyi (milyonlarca bar) taratabilirdi.

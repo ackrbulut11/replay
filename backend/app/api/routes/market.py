@@ -19,7 +19,7 @@ from app.auth.dependencies import get_current_user
 from app.core.config import settings
 from app.core.security import RateLimiter
 from app.data.loader import (
-    DataLoader,
+    loader as shared_loader,
     SOURCE_TIMEFRAME_COLUMN,
     WINDOW_BARS_AFTER,
     WINDOW_BARS_BEFORE,
@@ -50,7 +50,8 @@ router = APIRouter(
     tags=["market"],
     dependencies=[Depends(rate_limited_user)],
 )
-loader = DataLoader()
+# Paylasilan tek ornek (bkz. data/loader.py sonundaki not).
+loader = shared_loader
 
 @router.get("/symbols")
 def list_symbols(

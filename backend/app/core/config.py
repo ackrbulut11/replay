@@ -71,6 +71,16 @@ class Settings(BaseSettings):
     # sunucu IP'sinin engellenmesine yol açabiliyor.
     MARKET_RATE_LIMIT_PER_MINUTE: int = 120
 
+    # Süreç içi (RAM) mum önbelleğinin azami toplam satır sayısı.
+    #
+    # Bu önbellek sınırsızdı: yüklenen her sembol+zaman dilimi çerçevesi RAM'de
+    # süresiz kalıyordu. 100 sembollük bir 15dk taraması, sembol başına
+    # RETENTION_1M'e (100.000 satır ≈ 5,6 MB) kadar çerçeve tutabildiği için
+    # tek başına yüzlerce MB demekti — Render'ın ücretsiz katmanı 512 MB.
+    # Sınır aşılınca EN AZ KULLANILAN çerçeveler düşürülür (LRU).
+    # 1.000.000 satır ≈ 56 MB.
+    MEM_CACHE_MAX_ROWS: int = 1_000_000
+
     # Veri Saklama Limitleri (Varsayılan bar sayıları)
     RETENTION_1M: int = 100000  # son birkaç ay
     RETENTION_1H: int = 20000   # son 1-2 yıl

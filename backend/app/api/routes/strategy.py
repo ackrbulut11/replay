@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.database.postgres import get_db, SessionLocal
 from app.database.models import User
 from app.auth.dependencies import get_current_user
-from app.data.loader import DataLoader, lookback_start_for_bars
+from app.data.loader import loader as shared_loader, lookback_start_for_bars
 from app.utils.time import utc_now
 from app.engines.scanner_engine import ScannerEngine
 from app.engines.execution import PositionSizing
@@ -53,7 +53,10 @@ router = APIRouter(prefix="/strategy", tags=["strategy"])
 # Singleton instance'lar (durum tutmazlar; veritabanı oturumu her istekte verilir)
 _engine = StrategyEngine()
 _scanner = ScannerEngine()
-_loader = DataLoader()
+# Paylasilan tek ornek: her route kendi DataLoader()'ini yaratinca RAM
+# onbellegi kopyalaniyor ve parquet kilitleri ayri ayri calisip ise
+# yaramiyordu (bkz. data/loader.py sonundaki not).
+_loader = shared_loader
 
 
 def get_owned_strategy(

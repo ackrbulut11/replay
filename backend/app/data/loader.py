@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import pandas as pd
@@ -13,6 +14,8 @@ from .providers.binance import BinanceProvider
 from .providers.nasdaq import NasdaqProvider
 from .providers.bist import BistProvider
 from .providers.forex import ForexProvider
+
+logger = logging.getLogger(__name__)
 
 # Replay penceresinin varsayılan ölçüleri — ilk boyamada gösterilen "hızlı"
 # pencere. Toplam ~2500 mum, sağlayıcıdan üç sayfa (sayfa başına 1000 mum) demek.
@@ -213,8 +216,13 @@ class DataLoader:
             "fx": ForexProvider(),
         }
         
-        # In-memory L1 cache: key -> (mtime, df)
-        self._mem_cache = {}
+        # Süreç içi (L1) mum önbelleği: key -> (mtime, df), EN AZ KULLANILAN
+        # önce düşer. Eskiden düz bir sözlüktü ve HİÇ boşalmıyordu: yüklenen
+        # her sembol+zaman dilimi çerçevesi RAM'de süresiz kalıyordu. Pencere
+        # önbelleğinin (`_window_cache`) LRU sınırı vardı, bunun yoktu —
+        # oysa asıl büyüyen buydu (RULES.md #24 ile aynı gerekçe).
+        self._mem_cache: OrderedDict[tuple, tuple[float, pd.DataFrame]] = OrderedDict()
+        self._mem_cache_lock = threading.Lock()
 
         # Replay pencereleri: ana parquet'ten ayrı, sınırlı bir LRU.
         # Ana önbelleğe karışmaz — bkz. get_window.
@@ -239,6 +247,38 @@ class DataLoader:
     def _get_file_lock(self, key_path: str) -> threading.Lock:
         with self._global_lock:
             return self._locks[key_path]
+
+    # ─── Süreç içi (L1) önbellek ─────────────────────────────────────────────
+
+    def _mem_cache_get(self, key: tuple, file_mtime: float) -> pd.DataFrame | None:
+        """Önbellekteki çerçeveyi döndürür — parquet o zamandan beri değişmediyse."""
+        with self._mem_cache_lock:
+            entry = self._mem_cache.get(key)
+            if entry is None:
+                return None
+            cached_mtime, df = entry
+            if cached_mtime != file_mtime:
+                # Dosya değişmiş: elimizdeki kopya bayat.
+                del self._mem_cache[key]
+                return None
+            self._mem_cache.move_to_end(key)
+            return df
+
+    def _mem_cache_put(self, key: tuple, file_mtime: float, df: pd.DataFrame) -> None:
+        """Çerçeveyi önbelleğe koyar ve toplam satır bütçesini uygular."""
+        with self._mem_cache_lock:
+            self._mem_cache[key] = (file_mtime, df)
+            self._mem_cache.move_to_end(key)
+
+            limit = settings.MEM_CACHE_MAX_ROWS
+            if limit <= 0:
+                return
+            total = sum(len(frame) for _, frame in self._mem_cache.values())
+            # En az bir giriş bırakılır: tek başına bütçeyi aşan bir çerçeve,
+            # konulur konulmaz düşürülüp önbelleği işe yaramaz hale getirmesin.
+            while total > limit and len(self._mem_cache) > 1:
+                _, (_, evicted) = self._mem_cache.popitem(last=False)
+                total -= len(evicted)
 
     def _retention_limit(self, timeframe: str) -> int | None:
         if timeframe in ("1m", "5m", "15m"):
@@ -893,6 +933,19 @@ class DataLoader:
         return sliced.reset_index(drop=True)
 
     @staticmethod
+    def _clip(df: pd.DataFrame, start_time: datetime, end_time: datetime) -> pd.DataFrame:
+        """Çerçeveyi istenen tarih aralığına kırpar.
+
+        Sağlayıcılar istenenden geniş bir aralık döndürebiliyor; her dönüş yolu
+        aynı kırpmadan geçmeli, aksi halde aynı istek hangi daldan döndüğüne
+        göre farklı sayıda mum veriyordu.
+        """
+        if df is None or df.empty:
+            return df
+        mask = (df["timestamp"] >= start_time) & (df["timestamp"] <= end_time)
+        return df[mask].reset_index(drop=True)
+
+    @staticmethod
     def _normalize_cached_frame(
         df: pd.DataFrame, provider_name: str, timeframe: str
     ) -> pd.DataFrame:
@@ -1012,14 +1065,12 @@ class DataLoader:
             df = None
             file_mtime = 0
 
+            cache_key = (provider_name, symbol, timeframe)
+
             # 1. Bellek İçi (RAM L1) Önbellek Kontrolü (0.1 ms)
             if os.path.exists(cache_path):
                 file_mtime = os.path.getmtime(cache_path)
-                cache_key = (provider_name, symbol, timeframe)
-                if cache_key in self._mem_cache:
-                    cached_mtime, cached_df = self._mem_cache[cache_key]
-                    if cached_mtime == file_mtime:
-                        df = cached_df
+                df = self._mem_cache_get(cache_key, file_mtime)
 
                 # RAM'de yoksa parquet dosyasından oku
                 if df is None:
@@ -1027,29 +1078,37 @@ class DataLoader:
                         df = self._normalize_cached_frame(
                             pd.read_parquet(cache_path), provider_name, timeframe
                         )
-                        self._mem_cache[cache_key] = (file_mtime, df)
+                        self._mem_cache_put(cache_key, file_mtime, df)
                     except Exception as e:
-                        print(f"Warning: Failed to load parquet cache at {cache_path}: {e}")
+                        logger.warning("Parquet onbellegi okunamadi (%s): %s", cache_path, e)
                         df = None
 
             # 2. Önbellek yoksa API'den çek
             if df is None or df.empty:
-                print(f"Cache miss for {provider_name}:{symbol} ({timeframe}). Fetching from API...")
+                logger.info(
+                    "Onbellek bos (%s:%s %s), saglayiciya gidiliyor",
+                    provider_name, symbol, timeframe,
+                )
                 provider = self.get_provider(provider_name)
                 df = provider.fetch_ohlcv(symbol, timeframe, start_time, end_time)
-                
+
                 if not df.empty:
-                    if timeframe in ["1d", "1w", "1mo"]:
-                        df['timestamp'] = pd.to_datetime(df['timestamp']).dt.normalize()
-                        df.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
-                    df = self._prune_to_retention(df, timeframe)
+                    # Taze veri de önbellekten okunan veriyle AYNI normalizasyondan
+                    # geçer. Eskiden bu dal yalnızca günlük dilimleri normalize
+                    # ediyordu; forex open/hacim düzeltmesi ilk yüklemede
+                    # uygulanmıyor, ikinci yüklemede (parquet'ten okurken)
+                    # uygulanıyordu — aynı sembol ilk ve sonraki isteklerde
+                    # FARKLI mumlar döndürüyordu.
+                    df = self._prune_to_retention(
+                        self._normalize_cached_frame(df, provider_name, timeframe), timeframe
+                    )
                     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                     df.to_parquet(cache_path, index=False)
                     file_mtime = os.path.getmtime(cache_path)
-                    self._mem_cache[(provider_name, symbol, timeframe)] = (file_mtime, df)
+                    self._mem_cache_put(cache_key, file_mtime, df)
                 # Diğer dönüş yolları gibi istenen aralığa kırpılır: sağlayıcı
                 # istenenden geniş bir aralık döndürebiliyor.
-                return df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)].reset_index(drop=True)
+                return self._clip(df, start_time, end_time)
 
             # 3. Önbellek Var: Tazelik & Kapsama Kontrolü
             cached_start = df['timestamp'].min()
@@ -1081,7 +1140,7 @@ class DataLoader:
             
             # Eğer HEM geçmiş (başlangıç) HEM DE güncel (bitiş) verisi kapsanıyorsa, doğrudan önbellekten dön
             if has_start_covered and has_end_covered:
-                return df[(df['timestamp'] >= needed_start) & (df['timestamp'] <= needed_end)].reset_index(drop=True)
+                return self._clip(df, needed_start, needed_end)
 
             # 4. Gerekirse sadece eksik parçayı dış API'den tamamla
             provider = self.get_provider(provider_name)
@@ -1110,21 +1169,46 @@ class DataLoader:
                 if not df_after.empty:
                     dfs_to_concat.append(df_after)
                     
-                df_combined = pd.concat(dfs_to_concat, ignore_index=True)
-                if timeframe in ["1d", "1w", "1mo"]:
-                    df_combined['timestamp'] = pd.to_datetime(df_combined['timestamp']).dt.normalize()
-                df_combined.drop_duplicates(subset=['timestamp'], keep='last', inplace=True)
-                df_combined.sort_values('timestamp', inplace=True)
-                df_combined.reset_index(drop=True, inplace=True)
-                df_combined = self._prune_to_retention(df_combined, timeframe)
+                # Birleştirilmiş veri de aynı normalizasyondan geçer (yukarıdaki
+                # gerekçe): aksi halde `/data` birleştirilmiş ham veriyi,
+                # `/window` parquet'ten normalize edilmiş veriyi döndürüyordu.
+                df_combined = self._prune_to_retention(
+                    self._normalize_cached_frame(
+                        pd.concat(dfs_to_concat, ignore_index=True),
+                        provider_name,
+                        timeframe,
+                    ),
+                    timeframe,
+                )
 
                 try:
                     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                     df_combined.to_parquet(cache_path, index=False)
                     file_mtime = os.path.getmtime(cache_path)
-                    self._mem_cache[(provider_name, symbol, timeframe)] = (file_mtime, df_combined)
-                    df = df_combined
+                    self._mem_cache_put(cache_key, file_mtime, df_combined)
                 except Exception as e:
-                    print(f"Warning: Failed to save merged data to cache: {e}")
+                    logger.warning("Birlestirilmis veri onbellege yazilamadi: %s", e)
+                # Yazma başarısız olsa bile birleştirilmiş veri DÖNDÜRÜLÜR:
+                # eksik parça zaten indirildi, çağırana yarım veri vermenin
+                # anlamı yok.
+                df = df_combined
 
-            return df[(df['timestamp'] >= needed_start) & (df['timestamp'] <= needed_end)].reset_index(drop=True)
+            return self._clip(df, needed_start, needed_end)
+
+
+# ─── Paylaşılan örnek ────────────────────────────────────────────────────────
+#
+# Her route dosyası kendi `DataLoader()`ını yaratıyordu (alerts, journal,
+# market, patterns, strategy = 5 örnek). Üç sonucu vardı:
+#
+#   1. **Bellek.** Her örneğin kendi RAM önbelleği var; aynı sembol beş ayrı
+#      sözlükte duruyordu.
+#   2. **Parquet kilitleri işe yaramıyordu.** `_locks` örnek bazlı olduğu için
+#      `/market/data` ile `/strategy/evaluate` aynı sembole aynı anda yazarken
+#      FARKLI kilitler kullanıyordu — yarım yazılmış parquet riski. Kilitlerin
+#      koruduğu şey tam da buydu.
+#   3. Pencere önbelleği (LRU) beşe bölünüyor, isabet oranı düşüyordu.
+#
+# Tek örnek bunların üçünü de çözer. Yeni bir yer veri yüklemek istediğinde
+# `DataLoader()` çağırmak yerine bunu import etmeli.
+loader = DataLoader()

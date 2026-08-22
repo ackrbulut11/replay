@@ -20,7 +20,7 @@ from app.alerts.models import (
     AlertUpdateRequest,
 )
 from app.auth.dependencies import get_current_user
-from app.data.loader import DataLoader
+from app.data.loader import loader as shared_loader
 from app.database.models import User
 from app.database.postgres import get_db
 
@@ -28,7 +28,10 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 _engine = AlertEngine()
 # Alarm değerlendirmesi gösterge hesabı için piyasa verisine ihtiyaç duyar;
 # loader'ın kendi önbelleği olduğu için tekil örnek paylaşılır.
-_loader = DataLoader()
+# Paylasilan tek ornek: her route kendi DataLoader()'ini yaratinca RAM
+# onbellegi kopyalaniyor ve parquet kilitleri ayri ayri calisip ise
+# yaramiyordu (bkz. data/loader.py sonundaki not).
+_loader = shared_loader
 
 
 def get_owned_alert(

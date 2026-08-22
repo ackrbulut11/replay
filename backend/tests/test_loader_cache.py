@@ -14,10 +14,12 @@ from __future__ import annotations
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 from datetime import datetime, timedelta
 
 import pandas as pd
 
+from app.core.config import settings
 from app.data.loader import DataLoader
 
 
@@ -217,3 +219,113 @@ class TestRetentionClampedRequest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMemCacheEviction(unittest.TestCase):
+    """Surec ici (RAM) mum onbellegi sinirsiz buyumez.
+
+    Onbellek duz bir sozluktu ve HIC bosalmiyordu: yuklenen her sembol+zaman
+    dilimi cercevesi RAM'de suresiz kaliyordu. 100 sembollu bir 15dk taramasi,
+    sembol basina 100.000 satira (~5,6 MB) kadar cerceve tutabildigi icin tek
+    basina yuzlerce MB demekti -- Render'in ucretsiz katmani 512 MB.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp()
+        self.loader = DataLoader()
+        self.loader.project_root = self.tmp
+        self.loader._retention_limit = lambda timeframe: None
+        self.end = datetime(2024, 6, 1)
+        self.provider = CountingProvider(history_start=datetime(2000, 1, 1))
+        self.loader.providers["binance"] = self.provider
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _load(self, symbol: str, days: int = 30):
+        return self.loader.load_data(
+            provider_name="binance", symbol=symbol, timeframe="1d",
+            start_time=self.end - timedelta(days=days), end_time=self.end,
+        )
+
+    def _rows(self) -> int:
+        return sum(len(df) for _, df in self.loader._mem_cache.values())
+
+    def test_butce_asilinca_en_az_kullanilan_dusurulur(self):
+        with unittest.mock.patch.object(settings, "MEM_CACHE_MAX_ROWS", 70):
+            for symbol in ("AAA", "BBB", "CCC", "DDD"):
+                self._load(symbol)
+            # Her cerceve ~31 satir; 70 satirlik butce en fazla ikisini tutar.
+            self.assertLessEqual(self._rows(), 70)
+            self.assertLess(len(self.loader._mem_cache), 4)
+
+    def test_en_son_kullanilan_kalir(self):
+        with unittest.mock.patch.object(settings, "MEM_CACHE_MAX_ROWS", 70):
+            self._load("AAA")
+            self._load("BBB")
+            # AAA'ya tekrar dokun: artik en yeni kullanilan o.
+            self._load("AAA")
+            self._load("CCC")
+            keys = {key[1] for key in self.loader._mem_cache}
+            self.assertIn("CCC", keys)
+            self.assertNotIn("BBB", keys)
+
+    def test_tek_buyuk_cerceve_onbellegi_ise_yaramaz_kilmaz(self):
+        # Butcenin tamamindan buyuk tek bir cerceve konulur konulmaz
+        # dusurulseydi onbellek hicbir zaman isabet etmezdi.
+        with unittest.mock.patch.object(settings, "MEM_CACHE_MAX_ROWS", 5):
+            self._load("AAA", days=100)
+            self.assertEqual(len(self.loader._mem_cache), 1)
+
+    def test_bayat_giris_dusurulur(self):
+        self._load("AAA")
+        key = ("binance", "AAA", "1d")
+        self.assertIsNotNone(self.loader._mem_cache_get(key, self.loader._mem_cache[key][0]))
+        # Dosya degismisse elimizdeki kopya bayattir.
+        self.assertIsNone(self.loader._mem_cache_get(key, 99999.0))
+        self.assertNotIn(key, self.loader._mem_cache)
+
+
+class TestNormalizationIsConsistent(unittest.TestCase):
+    """Ayni sembol ILK ve SONRAKI isteklerde ayni mumlari dondurmeli.
+
+    _normalize_cached_frame yalnizca parquet'ten OKUMA yolunda uygulaniyordu;
+    saglayicidan taze gelen veri ve birlestirilmis veri normalize edilmeden
+    hem donduruluyor hem onbellege yaziliyordu. Yani forex open/hacim
+    duzeltmesi ilk yuklemede uygulanmiyor, ikincisinde uygulaniyordu.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp()
+        self.loader = DataLoader()
+        self.loader.project_root = self.tmp
+        self.loader._retention_limit = lambda timeframe: None
+        self.end = datetime(2024, 6, 1)
+        self.provider = CountingProvider(history_start=datetime(2000, 1, 1))
+        self.loader.providers["forex"] = self.provider
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _load(self, days: int = 30):
+        return self.loader.load_data(
+            provider_name="forex", symbol="EURUSD", timeframe="1d",
+            start_time=self.end - timedelta(days=days), end_time=self.end,
+        )
+
+    def test_ilk_ve_ikinci_yukleme_ayni_mumlari_dondurur(self):
+        first = self._load()
+        # RAM onbellegini bosalt: ikinci istek parquet'ten okusun.
+        self.loader._mem_cache.clear()
+        second = self._load()
+        pd.testing.assert_frame_equal(first, second)
+
+    def test_taze_veri_de_hacim_duzeltmesinden_gecer(self):
+        # CountingProvider hacmi sabit 10 uretiyor; forex duzeltmesi
+        # yalnizca hacim TAMAMEN sifirken devreye girer, o yuzden burada
+        # beklenen sey hacmin DEGISMEMESI ama iki yolun ayni davranmasi.
+        first = self._load()
+        self.loader._mem_cache.clear()
+        second = self._load()
+        self.assertEqual(list(first["volume"]), list(second["volume"]))
+        self.assertEqual(list(first["open"]), list(second["open"]))

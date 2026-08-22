@@ -1,4 +1,5 @@
 import hmac
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
@@ -11,8 +12,15 @@ from google.auth.transport import requests as google_requests
 from app.database.postgres import get_db
 from app.database.models import User
 from app.auth.jwt import create_access_token, create_refresh_token, decode_token
-from app.auth.dependencies import get_current_user, is_user_admin
+from app.auth.dependencies import (
+    get_current_user,
+    get_current_user_optional,
+    is_user_admin,
+)
+from app.core.security import RateLimiter
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -27,6 +35,24 @@ _REFRESH_COOKIE_KWARGS = {
     "secure": _IS_PROD,
     "samesite": "none" if _IS_PROD else "lax",
 }
+
+# Kimlik uçları herkese açık ve her isteği bir veritabanı sorgusuna (Google
+# doğrulamasında ayrıca bir dış çağrıya) çeviriyor. IP başına sınır, kaba
+# kuvvet denemelerini ve token yenileme fırtınalarını sınırlar.
+_auth_rate_limiter = RateLimiter(
+    max_requests=30,
+    window_seconds=60,
+    detail="Çok fazla kimlik doğrulama denemesi. Lütfen biraz sonra tekrar deneyin.",
+)
+
+
+def _client_ip(request: Request) -> str:
+    """İstemci IP'si — ters vekil arkasında X-Forwarded-For'un ilk adresi."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
 
 class GoogleAuthRequest(BaseModel):
     credential: str
@@ -65,7 +91,13 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 @router.post("/google", response_model=TokenResponse)
-def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session = Depends(get_db)):
+def google_auth(
+    request_data: GoogleAuthRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    _auth_rate_limiter.check(f"google:{_client_ip(request)}")
     token = request_data.credential
     user_info = None
 
@@ -109,10 +141,14 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
             )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        # Ayrıntı istemciye SIZDIRILMAZ: kütüphane hataları iç durumu (beklenen
+        # audience, saat kayması, anahtar kimlikleri) açık ediyordu. Sunucu
+        # tarafında loglanır, Sentry'ye de oradan gider.
+        logger.warning("Google kimlik dogrulama basarisiz: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Google kimlik doğrulama hatası: {str(e)}"
+            detail="Google kimlik doğrulaması başarısız. Lütfen tekrar deneyin.",
         )
 
     if not user_info or not user_info.get("email"):
@@ -140,9 +176,13 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
         user.last_login_at = datetime.utcnow()
         db.commit()
 
-    # Access ve Refresh token üret
+    # Access ve Refresh token üret. Refresh token kullanıcının güncel
+    # `token_version`'ını taşır: çıkış bu sayacı artırınca eski token'lar
+    # anında geçersizleşir (bkz. /logout).
     access_token = create_access_token(data={"sub": user.id, "email": user.email})
-    refresh_token = create_refresh_token(data={"sub": user.id})
+    refresh_token = create_refresh_token(
+        data={"sub": user.id, "ver": user.token_version or 0}
+    )
 
     # Refresh token'ı httpOnly cookie olarak ekle
     response.set_cookie(
@@ -161,6 +201,7 @@ def google_auth(request_data: GoogleAuthRequest, response: Response, db: Session
 
 @router.post("/refresh", response_model=dict)
 def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+    _auth_rate_limiter.check(f"refresh:{_client_ip(request)}")
     cookie_refresh_token = request.cookies.get("refresh_token")
     if not cookie_refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token bulunamadı")
@@ -174,6 +215,12 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     if not user:
         raise HTTPException(status_code=401, detail="Kullanıcı bulunamadı")
 
+    # Çıkış yapılmışsa (ya da oturumlar sıfırlanmışsa) sayaç artmıştır ve eski
+    # token artık geçersizdir. Sürüm taşımayan token'lar bu alan eklenmeden
+    # önce üretilmiştir; onlar da 0 sayılır ve mevcut oturumlar kırılmaz.
+    if int(payload.get("ver", 0)) != int(user.token_version or 0):
+        raise HTTPException(status_code=401, detail="Oturum sonlandırılmış")
+
     new_access_token = create_access_token(data={"sub": user.id, "email": user.email})
     return {"access_token": new_access_token, "token_type": "bearer"}
 
@@ -184,7 +231,25 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/logout")
-def logout(response: Response):
+def logout(
+    response: Response,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Oturumu kapatır ve refresh token'ı SUNUCU TARAFINDA da geçersiz kılar.
+
+    Cookie'yi silmek tek başına yetmiyordu: sızmış (ya da paylaşılan bir
+    bilgisayarda ele geçirilmiş) bir refresh token 14 gün boyunca geçerli
+    kalıyor, çıkış yapmak onu geçersizleştirmiyordu. `token_version` artırılınca
+    o kullanıcıya ait tüm eski refresh token'lar anında düşer.
+
+    Kimlik doğrulaması ZORUNLU DEĞİL: token'ı çoktan düşmüş bir istemci de
+    çıkış yapabilmeli, cookie yine silinir.
+    """
+    if current_user is not None:
+        current_user.token_version = (current_user.token_version or 0) + 1
+        db.commit()
+
     response.delete_cookie(
         key="refresh_token",
         secure=_REFRESH_COOKIE_KWARGS["secure"],

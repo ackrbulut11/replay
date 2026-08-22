@@ -33,6 +33,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     # Her basarili girisde guncellenir; admin panelinde son aktiflik gostergesi.
     last_login_at = Column(DateTime, nullable=True)
+    # Refresh token iptali. Token uretilirken icine gomulur, dogrulamada bu
+    # degerle karsilastirilir; cikis sayaci artirinca o kullaniciya ait TUM
+    # eski refresh token'lar aninda gecersiz olur. Eskiden cikis yapmak
+    # token'i yalnizca tarayicidan siliyordu, sunucuda gecerli kaliyordu.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
 
     # Relationships
     strategies = relationship("Strategy", back_populates="user", cascade="all, delete-orphan")

@@ -101,6 +101,7 @@ def warm_binance_endpoint() -> None:
     threading.Thread(target=get_ordered_endpoints, daemon=True).start()
 
 
+settings.assert_production_ready()
 init_error_monitoring()
 run_migrations()
 start_market_update_scheduler()

@@ -66,25 +66,42 @@ export function notifyUnauthorized(): void {
 }
 
 /**
+ * Süren yenileme isteği. Sayfa açılışında paralel giden N istek aynı anda 401
+ * alıyor ve her biri kendi `/auth/refresh` çağrısını başlatıyordu: sunucuya
+ * gereksiz N istek, üstelik hepsi aynı cevabı bekliyordu. Artık ilk çağrı
+ * sözü tutuluyor, diğerleri ona bağlanıyor (singleflight).
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
+/**
  * httpOnly refresh_token cookie'siyle yeni bir access token almayı dener.
  * Access token 30 dakikada dolduğu için API katmanı 401 aldığında bunu
  * çağırıp isteği bir kez tekrar dener — aksi halde her 30 dakikada bir
  * oturum düşer. Başarısız olursa (cookie yok/expired) null döner.
  */
 export async function refreshAccessToken(): Promise<string | null> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (!res.ok) return null;
+  if (refreshInFlight) return refreshInFlight;
 
-    const data = await res.json();
-    localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
-    return data.access_token as string;
-  } catch {
-    return null;
-  }
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
+      return data.access_token as string;
+    } catch {
+      return null;
+    } finally {
+      // Bir sonraki 401 turu yeni bir istek başlatabilsin.
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

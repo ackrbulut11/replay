@@ -23,7 +23,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 import main
-from app.core.config import settings
+from app.core.config import DEV_JWT_SECRET_KEY, ProductionConfigError, settings
 from app.database.models import User
 from app.database.postgres import SessionLocal
 
@@ -154,6 +154,70 @@ class TestAuthenticatedFlow(unittest.TestCase):
 
     def test_logout_succeeds(self):
         self.assertEqual(client.post("/api/auth/logout").status_code, 200)
+
+    def test_cikis_refresh_tokeni_sunucu_tarafinda_gecersiz_kilar(self):
+        """Cikis, cerezi silmenin otesinde token'i GERCEKTEN iptal etmeli.
+
+        Eskiden cikis yalnizca tarayicidaki cerezi siliyordu; sizmis bir
+        refresh token 14 gun boyunca gecerli kaliyordu.
+        """
+        # Cikistan once token calisiyor.
+        before = client.post(
+            "/api/auth/refresh", cookies={"refresh_token": self.refresh_token}
+        )
+        self.assertEqual(before.status_code, 200)
+
+        client.post(
+            "/api/auth/logout",
+            headers={"Authorization": f"Bearer {self.access_token}"},
+        )
+        client.cookies.clear()
+
+        # Ayni token artik reddedilmeli.
+        after = client.post(
+            "/api/auth/refresh", cookies={"refresh_token": self.refresh_token}
+        )
+        self.assertEqual(after.status_code, 401)
+
+    def test_cikis_token_olmadan_da_calisir(self):
+        # Token'i coktan dusmus bir istemci de cikis yapabilmeli.
+        client.cookies.clear()
+        self.assertEqual(client.post("/api/auth/logout").status_code, 200)
+
+
+class TestProductionConfigGuard(unittest.TestCase):
+    """Uretimde guvensiz varsayilanlarla acilis ENGELLENIR.
+
+    JWT_SECRET_KEY Render'da tanimli degilse uygulama hicbir uyari vermeden
+    depodaki gelistirme anahtariyla token imzaliyordu; isteyen kendi `sub`
+    degeriyle token uretip her kullanicinin verisine erisebilirdi.
+    """
+
+    def test_gelistirme_ortaminda_kontrol_yapilmaz(self):
+        with patch.object(settings, "ENVIRONMENT", "development"),              patch.object(settings, "JWT_SECRET_KEY", DEV_JWT_SECRET_KEY):
+            self.assertEqual(settings.production_config_errors(), [])
+            settings.assert_production_ready()
+
+    def test_uretimde_varsayilan_jwt_anahtari_reddedilir(self):
+        with patch.object(settings, "ENVIRONMENT", "production"),              patch.object(settings, "JWT_SECRET_KEY", DEV_JWT_SECRET_KEY),              patch.object(settings, "DATABASE_URL", "postgresql://x/y"):
+            with self.assertRaises(ProductionConfigError) as ctx:
+                settings.assert_production_ready()
+            self.assertIn("JWT_SECRET_KEY", str(ctx.exception))
+
+    def test_uretimde_bos_jwt_anahtari_reddedilir(self):
+        with patch.object(settings, "ENVIRONMENT", "production"),              patch.object(settings, "JWT_SECRET_KEY", "   "),              patch.object(settings, "DATABASE_URL", "postgresql://x/y"):
+            with self.assertRaises(ProductionConfigError):
+                settings.assert_production_ready()
+
+    def test_uretimde_sqlite_reddedilir(self):
+        with patch.object(settings, "ENVIRONMENT", "production"),              patch.object(settings, "JWT_SECRET_KEY", "gercek-uzun-anahtar"),              patch.object(settings, "DATABASE_URL", "sqlite:///./storage/database/app.db"):
+            with self.assertRaises(ProductionConfigError) as ctx:
+                settings.assert_production_ready()
+            self.assertIn("SQLite", str(ctx.exception))
+
+    def test_dogru_yapilandirilmis_uretim_gecer(self):
+        with patch.object(settings, "ENVIRONMENT", "production"),              patch.object(settings, "JWT_SECRET_KEY", "gercek-uzun-anahtar"),              patch.object(settings, "DATABASE_URL", "postgresql://user:pw@host/db"):
+            settings.assert_production_ready()
 
 
 if __name__ == "__main__":

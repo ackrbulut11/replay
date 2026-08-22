@@ -1,6 +1,27 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
+# Geliştirme ortamının JWT imza anahtarı. Depoda açıkça duruyor ve bu BİLİNÇLİ:
+# yerelde çalışmak için kimsenin anahtar üretmesi gerekmesin. Tam da bu yüzden
+# ÜRETİMDE KULLANILAMAZ — `assert_production_ready` uygulamanın açılmasını
+# engeller. Aksi halde Render'da JWT_SECRET_KEY tanımlı değilse uygulama hiçbir
+# uyarı vermeden herkesin görebildiği bu sabitle token imzalar ve isteyen kendi
+# `sub` değeriyle token üretip her kullanıcının stratejilerine erişebilirdi;
+# tüm sahiplik kapıları (get_owned_strategy vb.) bu anahtara dayanıyor.
+DEV_JWT_SECRET_KEY = "dev-secret-key-change-this-in-production-123456789"
+
+# Google OAuth istemci kimliği bir SIR DEĞİLDİR: frontend paketine gömülüdür ve
+# tarayıcıda herkese görünür (bkz. frontend/src/main.tsx). Burada varsayılan
+# olması RULES.md #17 ihlali sayılmaz — gizli olan `GOOGLE_CLIENT_SECRET`'tır ve
+# onun varsayılanı boştur.
+DEFAULT_GOOGLE_CLIENT_ID = (
+    "985054967666-8dbbd2hemhb2qn8k2grncd8ufcqtarqc.apps.googleusercontent.com"
+)
+
+
+class ProductionConfigError(RuntimeError):
+    """Üretim yapılandırması güvenli değil; uygulama açılmamalı."""
+
 
 class Settings(BaseSettings):
     HOST: str = "127.0.0.1"
@@ -9,9 +30,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./storage/database/app.db"
     
     # Auth & OAuth Settings
-    GOOGLE_CLIENT_ID: str = "985054967666-8dbbd2hemhb2qn8k2grncd8ufcqtarqc.apps.googleusercontent.com"
+    GOOGLE_CLIENT_ID: str = DEFAULT_GOOGLE_CLIENT_ID
     GOOGLE_CLIENT_SECRET: str = ""
-    JWT_SECRET_KEY: str = "dev-secret-key-change-this-in-production-123456789"
+    JWT_SECRET_KEY: str = DEV_JWT_SECRET_KEY
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
@@ -72,6 +93,46 @@ class Settings(BaseSettings):
     def admin_emails(self) -> set[str]:
         """ADMIN_EMAILS'i normalize edilmiş (küçük harf, boşluksuz) bir kümeye çevirir."""
         return {e.strip().lower() for e in self.ADMIN_EMAILS.split(",") if e.strip()}
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() == "production"
+
+    def production_config_errors(self) -> list[str]:
+        """Üretimde kabul edilemez yapılandırmaları listeler (yoksa boş liste).
+
+        Bunlar uyarı değil, AÇILIŞI ENGELLEYEN hatalardır: ikisi de sessizce
+        yanlış çalışan, fark edilmesi zor ve pahalı durumlar.
+        """
+        if not self.is_production:
+            return []
+
+        errors: list[str] = []
+
+        if self.JWT_SECRET_KEY == DEV_JWT_SECRET_KEY or not self.JWT_SECRET_KEY.strip():
+            errors.append(
+                "JWT_SECRET_KEY ayarlanmamış; depodaki geliştirme anahtarı kullanılıyor. "
+                "Bu anahtarla üretilen token'ları herkes taklit edebilir ve tüm kullanıcı "
+                "verisine erişebilir. Üretmek için: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+
+        if self.DATABASE_URL.startswith("sqlite"):
+            errors.append(
+                "DATABASE_URL bir SQLite dosyasını gösteriyor. Render'ın diski kalıcı "
+                "değildir; her dağıtımda/uyanışta tüm kullanıcılar, stratejiler ve "
+                "işlem günlüğü silinir. Kalıcı bir Postgres bağlantısı verin."
+            )
+
+        return errors
+
+    def assert_production_ready(self) -> None:
+        """Üretim yapılandırması güvenli değilse `ProductionConfigError` fırlatır."""
+        errors = self.production_config_errors()
+        if errors:
+            raise ProductionConfigError(
+                "Üretim yapılandırması eksik/güvensiz:\n  - " + "\n  - ".join(errors)
+            )
 
     class Config:
         env_file = ".env"

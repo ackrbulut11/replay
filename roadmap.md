@@ -34,7 +34,7 @@ UI (React)
 ---
 
 > **Durum işaretleri:** ✅ tamam · 🔄 üzerinde çalışılıyor · ⚠️ kısmen (eksik maddeler
-> ayrıca işaretli) · ⬜ başlanmadı. Son gözden geçirme: 2026-08-16.
+> ayrıca işaretli) · ⬜ başlanmadı. Son gözden geçirme: 2026-08-22.
 
 ## Faz 1 — MVP ✅
 - Mum/çizgi grafiği, zoom, pan, crosshair, ölçüm araçları
@@ -54,10 +54,15 @@ UI (React)
   Tarama geçmişi `strategy_scans` tablosunda kullanıcı bazlı saklanıyor.
 - ⬜ **Pattern Search** — kapsamı büyüdüğü için ayrı faza taşındı, bkz. [Faz 3.5](#faz-35--örüntü-arama)
 - ✅ Watchlist: izleme listesi, sinyal renklendirme, sürükle-bırak sıralama, bölümler, notlar
-- ⚠️ Alarm Sistemi: koşul bazlı alarm motoru çalışıyor (`alerts/engine.py`), tetiklenme
-  ekranda modal ve sesle bildiriliyor.
-  ⬜ **Telegram entegrasyonu yazılmadı** — `alerts/telegram.py` ve `alerts/notification.py`
-  hâlâ birer satırlık iskelet. Uygulama kapalıyken alarm kullanıcıya ulaşmıyor.
+- ⚠️ Alarm Sistemi: koşul bazlı alarm motoru çalışıyor (`alerts/engine.py`) ve artık
+  **arka planda da tarıyor** (`check_all_active_alerts`, varsayılan 5 dk): eskiden alarm
+  yalnızca kullanıcı o sembole bakarken değerlendiriliyordu, yani THYAO alarmı ancak
+  THYAO ekranı açıkken tetikleniyordu. Gösterge alarmları kapanmış mumla okunuyor —
+  oluşan mum kalıcı yanlış tetikleme üretiyordu. Tetiklenme ekranda modal ve sesle
+  bildiriliyor.
+  ⬜ **Telegram/e-posta entegrasyonu yazılmadı** — `alerts/telegram.py` ve
+  `alerts/notification.py` hâlâ birer satırlık iskelet. Alarm arka planda tetikleniyor
+  ama kullanıcı ancak uygulamayı açınca görüyor.
 - ⬜ Ayrı "Scanner" sekmesi: menüde var ama yer tutucu ekran gösteriyor; tarama bugün
   Strateji Motoru içinden yapılıyor.
 
@@ -90,7 +95,7 @@ UI (React)
 - Replay klavye kısayolları (L/S/K) ve oturum özeti
 - Kör mod: sembol ve tarih gizli manuel test
 
-## Faz 3.5 — Örüntü arama 🔄
+## Faz 3.5 — Örüntü arama ⚠️
 
 "Pattern search" üç ayrı şeye denk geliyor. Üçü de aynı çıktıyı üretir — **geçmişte
 bir yerler listesi** — bu yüzden asıl iş üç arama değil, **sonuç yüzeyini bir kez
@@ -101,13 +106,17 @@ Strateji testinden farkı: orada pozisyon durum makinesi var (giriş → çıkı
 Burada pozisyon yok, çıkış kuralı yok, kâr/zarar yok. Tek soru: **bu durum ne zaman
 oluştu?** Kural kurmadan ÖNCEKİ aşama bu — "bu 3 yılda 40 kez mi oldu, 4 kez mi?"
 
-### Kapsamda
+### Kapsamda — ikisi de tamam ✅
 
-- 🔄 **Kural eşleşmesi.** Bir koşul grubunun doğru olduğu bar aralıklarını bul.
-  Primitif hazır: `RuleEvaluator.evaluate_group()` pozisyondan bağımsız çalışıyor.
-- 🔄 **Mum formasyonları.** Yutan mum, çekiç, doji, yıldız — 1–3 barın OHLC'sinden
-  çıkan deterministik formüller. İndikatör olarak eklenir; böylece yalnızca aramada
-  değil **strateji kurallarının içinde de** kullanılabilirler ("yutan mum VE RSI<30").
+- ✅ **Kural eşleşmesi.** `engines/pattern_engine.py`: bir koşul grubunun doğru olduğu
+  bitişik bar aralıklarını döndürür. Pozisyon durum makinesi yok — eşleşen bar sayısı
+  ve bölge sayısı ayrı raporlanır ("800 bar eşleşti ama 6 bölgede"). Uç:
+  `api/routes/patterns.py`, arayüz: `strategy/PatternSearchPanel.tsx`
+  (StrategyBuilder içinde).
+- ✅ **Mum formasyonları.** 7 formasyon (`indicators/patterns.py`): yutan boğa/ayı,
+  çekiç, kayan yıldız, doji, sabah/akşam yıldızı. İndikatör olarak kayıtlı, yani
+  **strateji kurallarının içinde de** kullanılabiliyorlar ("yutan mum VE RSI<30").
+  37 test.
 
 ### Bilinçli olarak ertelendi
 
@@ -143,9 +152,67 @@ Faz listesinde yer almayan ama tamamlanmış işler.
 - Admin paneli ve `ADMIN_EMAILS` ile router seviyesinde yetki
 - Alembic migration'ları (`create_all` bilinçli olarak kaldırıldı)
 - Sentry (iki tarafta da, DSN boşken devre dışı)
-- Landing page + bekleme listesi, Vercel/Render dağıtımı, CI (build + ruff + unittest)
-- 20 test modülü
+- Landing page + bekleme listesi, Vercel/Render dağıtımı
+- CI: frontend (eslint + build + Playwright) ve backend (ruff + import + unittest),
+  Python 3.9 ve 3.11 matrisinde — üretim eskiden hiç test edilmemiş bir yorumlayıcıda
+  koşuyordu
+- 27 test modülü / 522 backend testi + 11 Playwright testi
 - Launch öncesi kontrol listesi: [PRE_LAUNCH_CHECKLIST.md](PRE_LAUNCH_CHECKLIST.md)
+
+## Faz 4.9 — Doğruluk ve sağlamlaştırma ✅
+
+Yeni özellik değil; var olanın **doğru sonuç ürettiğinden emin olma** turu. Kapsamlı bir
+denetimde bulunan hatalar sırayla kapatıldı. Buraya yazılmasının sebebi: bunların
+çoğu sessizce yanlış sayı üreten şeylerdi, yani "çalışıyor" görünüyorlardı.
+
+### Backtest doğruluğu
+- **TP/SL boşluklu mumda açılıştan doluyor.** Çıkış her zaman tam seviyeye eşitleniyordu:
+  giriş 100, stop 95, mum 60'tan açtıysa zarar −%5 görünüyordu (gerçekte −%40). Bu, her
+  kaybeden işleme `-stop_loss_pct` diye yapay bir taban koyuyordu — stop kullanan hiçbir
+  stratejinin gerçek kuyruk riski görünmüyordu. Ortak hesap `execution.level_fill_price`,
+  iki motor da onu kullanıyor.
+- **Grafik ile backtest artık aynı sayıları üretiyor.** Göstergeler iki yerde, farklı
+  formüllerle hesaplanıyordu (Bollinger'da popülasyon vs örneklem std → bant her barda
+  ~%0,12 farklı ve hiç yakınsamıyor; EMA/RSI/MACD'de farklı tohumlama → EMA50'de %0,43).
+  Altın örnek (`backend/tests/indicator_parity.json`) iki tarafı bağlıyor.
+- **Açık pozisyon artık gizlenmiyor.** Al-tut benzeri bir strateji "0 işlem, %0 getiri,
+  al-tut'un 196 puan gerisinde" diye raporlanıyordu. Metriklere girmiyor (kâr/zararı
+  gerçekleşmemiş) ama `open_position` alanıyla görünüyor.
+- **Manuel↔strateji karşılaştırması adil hale geldi.** Kıyas ölçüsü net kârdı ama iki
+  taraf aynı tutarı riske atmıyor; ölçü ağırlıklı yüzdesel getiriye geçti ve stratejinin
+  komisyon/slipajı manuel tarafa da uygulanıyor. Ayrıca strateji artık manuel oturumdan
+  ~280 bar önce işlem açmıyor (ısınma payı değerlendirme aralığına karışıyordu).
+- **Manuel replay'de stop/hedef gerçekten tetikleniyor.** Seviyeler kaydediliyor ve
+  çiziliyordu ama hiçbir zaman tetiklenmiyordu — tek kapanış yolu "Kapat" düğmesiydi.
+- **Max drawdown yüzdesi** mutlak en büyük düşüşün noktasında hesaplanıyordu; hesap
+  büyüdükçe erken dönemdeki ağır yüzdesel düşüşler kayboluyordu (%50 yerine %20).
+
+### Güvenlik
+- Üretimde varsayılan JWT anahtarı ya da SQLite ile **açılış engelleniyor**. Anahtar
+  ayarlanmamışsa depodaki geliştirme anahtarıyla token imzalanıyordu ve bütün sahiplik
+  kapıları ona dayanıyor.
+- **Refresh token iptal edilebilir** (`users.token_version`): çıkış yalnızca tarayıcıdaki
+  çerezi siliyordu, sızmış token 14 gün geçerli kalıyordu.
+- Google doğrulama hatasının ham metni istemciye dönüyordu; `/auth/*` uçları hız sınırı aldı.
+
+### Altyapı
+- **Tek `DataLoader`.** Beş ayrı örnek vardı; RAM önbelleği beşe kopyalanıyor ve parquet
+  kilitleri ayrı ayrı çalıştığı için işe yaramıyordu. Önbellek artık satır bütçeli LRU
+  (`MEM_CACHE_MAX_ROWS`) — eskiden hiç boşalmıyordu.
+- **`import main` yan etkisiz.** Migration, zamanlayıcı ve ağ yoklaması modül seviyesinde
+  çalışıyordu; CI'ın import kontrolü ve tüm test suite'i bunları tetikliyordu.
+- Yahoo erişilemediğinde Twelve Data devreye giriyor (tek dış kaynağa bağımlılık).
+- Retention zaman dilimi başına; olay tabloları budanıyor; loglama `logging`'e geçti ve
+  yakalanan hatalar Sentry'ye gidiyor; `render.yaml` sürüm kontrolünde.
+
+### Araçlar
+- **Performans logu** (`app/core/perf.py` + `scripts/perf_log.py`): her isteği süre ölçüp
+  insan dilinde etiketliyor ("ilk pencere" / "geçmiş derinleştirme") ve süreyi neyin
+  harcadığını söylüyor (önbellek mi, sağlayıcı mı). Ayrı terminalde canlı izlenir.
+- **eslint çalışıyor** (script vardı, bağımlılık yoktu — komut anında patlıyordu) ve
+  frontend'de `any` sayısı 121 → 0.
+- **Playwright kuruldu**: gösterge uyum testi + arayüz duman testleri.
+- 22 ölü placeholder dosya silindi.
 
 ## Faz 5 — Gelişmiş Analiz ⬜
 `optimizer/parameter_search.py` ve `engines/backtest_engine.py` birer satırlık iskelet.
@@ -163,9 +230,6 @@ Faz listesinde yer almayan ama tamamlanmış işler.
 
 
 ---
-strateji motorunda buy denen yerlerde alıp satmasaydı son durumda kar zarar oranı karşılaştırması ekle
-
----
 
 ## Açık kalan işler
 
@@ -179,9 +243,9 @@ Yukarıda ⬜ ile işaretlenenlerin tek listesi. Sıra bir öneridir, karar sizi
    bir şema değişikliği gerektiriyor.
 2. **Scanner sekmesi.** Menüde duruyor, yer tutucu gösteriyor. Motor hazır, eksik olan
    kendi ekranı.
-3. ~~Pattern Search~~ → [Faz 3.5](#faz-35--örüntü-arama) olarak ayrıldı, üzerinde
-   çalışılıyor. Ertelenen iki maddesi (grafik formasyonları, benzerlik arama)
-   orada gerekçesiyle duruyor.
+3. ~~Pattern Search~~ → [Faz 3.5](#faz-35--örüntü-arama) kapsamındaki iki madde
+   (kural eşleşmesi, mum formasyonları) **tamamlandı**. Ertelenen iki maddesi
+   (grafik formasyonları, benzerlik arama) orada gerekçesiyle duruyor.
 4. **İşleme not / sebep yazma** (Faz 4'ten kalan) — manuel backtest'in "neden"i
    şu an hiçbir yere yazılmıyor.
 5. **Faz 5** — optimizer, walk-forward, Monte Carlo.

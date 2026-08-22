@@ -131,8 +131,17 @@ def max_drawdown(equity_curve: Sequence[float]) -> tuple[float, Optional[float]]
     """
     Zirveden dibe en büyük düşüş: (mutlak tutar, yüzde).
 
-    Yüzde, düşüşün başladığı zirveye göre hesaplanır. Zirve sıfır veya
-    negatifse (hesap tamamen eridiyse) yüzde tanımsızdır ve `None` döner.
+    İki değer BAĞIMSIZ olarak takip edilir. Eskiden yüzde, yalnızca MUTLAK en
+    büyük düşüşün olduğu noktada hesaplanıyordu; hesap büyüdükçe erken
+    dönemdeki ağır yüzdesel düşüşler raporda kayboluyordu:
+
+        [10.000, 5.000, 100.000, 80.000]
+        eski  -> (20.000, %20)   # gerçek risk gizlendi
+        yeni  -> (20.000, %50)   # %50'lik ilk düşüş görünür
+
+    Bir risk metriğinin riski olduğundan küçük göstermesi, hiç göstermemesinden
+    kötüdür. Zirve sıfır veya negatifse (hesap tamamen eridiyse) o noktanın
+    yüzdesi tanımsızdır ve atlanır.
     """
     if not equity_curve:
         return 0.0, None
@@ -147,7 +156,10 @@ def max_drawdown(equity_curve: Sequence[float]) -> tuple[float, Optional[float]]
         drop = peak - value
         if drop > worst_abs:
             worst_abs = drop
-            worst_pct = (drop / peak * 100.0) if peak > 0 else None
+        if drop > 0 and peak > 0:
+            pct = drop / peak * 100.0
+            if worst_pct is None or pct > worst_pct:
+                worst_pct = pct
 
     return worst_abs, worst_pct
 

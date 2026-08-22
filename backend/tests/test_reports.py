@@ -101,6 +101,29 @@ class TestEquityVeDrawdown(unittest.TestCase):
     def test_bos_egri(self):
         self.assertEqual(max_drawdown([]), (0.0, None))
 
+    def test_yuzde_mutlak_dususten_bagimsiz_olcuulur(self):
+        """En buyuk YUZDESEL dusus, en buyuk MUTLAK dususten farkli olabilir.
+
+        Eskiden yuzde yalnizca mutlak en buyuk dususun oldugu noktada
+        hesaplaniyordu; hesap buyudukce erken donemdeki agir yuzdesel dususler
+        raporda kayboluyor ve risk oldugundan kucuk gorunuyordu.
+        """
+        # 10.000 -> 5.000 (%50, mutlak 5.000), sonra 100.000 -> 80.000
+        # (%20 ama mutlak 20.000).
+        amount, percent = max_drawdown([10000.0, 5000.0, 100000.0, 80000.0])
+        self.assertAlmostEqual(amount, 20000.0)
+        self.assertAlmostEqual(percent, 50.0)
+
+    def test_ayni_noktada_ise_ikisi_de_ayni_dususu_gosterir(self):
+        amount, percent = max_drawdown([1000.0, 1200.0, 900.0])
+        self.assertAlmostEqual(amount, 300.0)
+        self.assertAlmostEqual(percent, 25.0)
+
+    def test_hesap_tamamen_eriyince_yuzde_100(self):
+        amount, percent = max_drawdown([1000.0, 0.0])
+        self.assertAlmostEqual(amount, 1000.0)
+        self.assertAlmostEqual(percent, 100.0)
+
 
 class TestSharpe(unittest.TestCase):
     def test_getiriler_onceki_bakiyeye_gore_hesaplanir(self):

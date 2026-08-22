@@ -9,15 +9,25 @@
  * olarak gönderilir; mutlak fiyata çevirme işi `replay_engine` içindedir.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { TrendingUp, TrendingDown, X, Loader2, AlertTriangle, GripHorizontal } from 'lucide-react';
 
-import { closeTrade, openTrade } from '../services/journalApi';
+import { advanceTrade, closeTrade, openTrade } from '../services/journalApi';
+import type { ReplayBarPayload } from '../services/journalApi';
 import { journalStore, useJournalStore } from '../store/journalStore';
 import { replayStore, useReplayStore } from '../store/replayStore';
 import { useDraggablePanel } from '../hooks/useDraggablePanel';
 import { logError, logEvent } from '../services/eventLog';
 import type { TradeSide } from '../types/journal';
+
+/** Stop/hedef kontrolü için gereken mum alanları. */
+export interface ReplayBarInput {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
 
 interface ReplayTradePanelProps {
   symbol: string;
@@ -28,6 +38,14 @@ interface ReplayTradePanelProps {
   currentBarIndex: number | null;
   /** Mumun zamanı (saniye cinsinden epoch, lightweight-charts biçimi). */
   currentBarTime?: number;
+  /**
+   * Replay'in o ana kadar açığa çıkardığı mumlar (imlecin ilerisi DAHİL DEĞİL).
+   *
+   * Stop/hedef kontrolü için gerekli: panel yalnızca kapanış fiyatını
+   * biliyordu, tetiklenme ise mumun yükseği/düşüğüne bakıyor. Karar yine
+   * sunucuda veriliyor (bkz. advanceTrade), buradan yalnızca ham mum geçiyor.
+   */
+  bars?: ReplayBarInput[];
 }
 
 type LevelMode = 'price' | 'percent';
@@ -56,6 +74,7 @@ export default function ReplayTradePanel({
   currentPrice,
   currentBarIndex,
   currentBarTime,
+  bars,
 }: ReplayTradePanelProps) {
   const { trades } = useJournalStore();
   // İşlemler açık replay oturumuna bağlanır; panel de yalnızca o oturumun
@@ -85,6 +104,82 @@ export default function ReplayTradePanel({
     journalStore.reload(symbol, sessionId);
     setError(null);
   }, [symbol, sessionId]);
+
+  // ─── Stop-loss / take-profit tetiklemesi ────────────────────────────────
+  //
+  // Seviyeler eskiden yalnızca KAYDEDİLİYORDU: panelde çiziliyor, grafikte
+  // görünüyor ama hiçbir zaman tetiklenmiyordu. Tek kapanış yolu "Kapat"
+  // düğmesiydi; kullanıcı stop koyup fiyat oradan geçtiğinde pozisyon açık
+  // kalıyordu ve manuel backtest, disiplinli bir stop'un değil "elle kapatana
+  // kadar taşı"nın sonucunu ölçüyordu.
+  //
+  // Karar burada VERİLMEZ (RULES.md: finansal hesap arayüze yazılmaz); geçilen
+  // ham mumlar sunucuya gönderilir, tetikleme ve çıkış fiyatı replay_engine'de
+  // hesaplanır.
+  const lastCheckedBarRef = useRef<number | null>(null);
+  const advanceInFlightRef = useRef(false);
+  const positionId = position?.id ?? null;
+  const positionEntryBar = position?.entry_bar_index ?? null;
+
+  // Yeni pozisyon (ya da oturum değişimi): kontrol imleci sıfırlanır.
+  useEffect(() => {
+    lastCheckedBarRef.current = null;
+  }, [positionId]);
+
+  useEffect(() => {
+    if (!positionId || currentBarIndex === null || !bars || bars.length === 0) return;
+    if (advanceInFlightRef.current) return;
+
+    // Girişin yapıldığı bar ve öncesi atlanır: kullanıcı o barın kapanışında
+    // girdi, o barın yükseği/düşüğü girişten ÖNCE oluşmuştu. Sunucu da aynı
+    // kontrolü yapıyor; burada yalnızca boşuna istek atmamak için.
+    const entryBar = positionEntryBar ?? -1;
+    let from = (lastCheckedBarRef.current ?? entryBar) + 1;
+    // Replay geriye sarıldıysa imleç de geri alınır.
+    if (currentBarIndex < from - 1) {
+      lastCheckedBarRef.current = null;
+      from = entryBar + 1;
+    }
+    const to = Math.min(currentBarIndex, bars.length - 1);
+    if (to < from) return;
+
+    const payload: ReplayBarPayload[] = [];
+    for (let i = from; i <= to; i++) {
+      const bar = bars[i];
+      if (!bar) continue;
+      payload.push({
+        bar_index: i,
+        timestamp: new Date(bar.time * 1000).toISOString(),
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+      });
+    }
+    if (payload.length === 0) return;
+
+    advanceInFlightRef.current = true;
+    advanceTrade(positionId, payload)
+      .then((updated) => {
+        lastCheckedBarRef.current = to;
+        if (updated.status === 'CLOSED') {
+          // Pozisyon seviyeden kapandı: oynatmayı durdur ve günlüğü tazele,
+          // aksi halde kullanıcı kapanmış bir pozisyonu taşıyor sanır.
+          replayStore.setState({ isPlaying: false });
+          void journalStore.reload(symbol, sessionId);
+          logEvent('replay_trade_level_hit', {
+            context: { symbol, reason: updated.exit_reason, pnl: updated.pnl },
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        // Seviye kontrolü "olsa iyi olur": başarısızlığı replay'i durdurmamalı.
+        logError('replay_trade_advance_failed', err, { symbol });
+      })
+      .finally(() => {
+        advanceInFlightRef.current = false;
+      });
+  }, [positionId, positionEntryBar, currentBarIndex, bars, symbol, sessionId]);
 
   const barTimeIso = currentBarTime ? new Date(currentBarTime * 1000).toISOString() : null;
 

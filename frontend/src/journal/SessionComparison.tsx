@@ -37,7 +37,7 @@ function delta(value: number | null | undefined, suffix = ''): string {
 const VERDICT_TEXT: Record<SessionComparison['verdict'], string> = {
   strateji: 'Bu dönemde strateji daha iyi sonuç verirdi',
   manuel: 'Bu dönemde sizin elle yaptığınız işlemler daha iyi',
-  berabere: 'İki taraf da aynı net sonucu verdi',
+  berabere: 'İki taraf da aynı getiriyi verdi',
   belirsiz: 'Karşılaştırma için yeterli veri yok',
 };
 
@@ -88,12 +88,25 @@ export default function SessionComparisonPanel({ trades }: SessionComparisonPane
   const rows = result
     ? [
         {
+          // Asıl kıyas ölçüsü en üstte. Net kâr değil: iki taraf aynı tutarı
+          // riske atmıyor (manuel miktar kullanıcının girdiği adet, strateji
+          // bakiyenin tamamı), bu yüzden mutlak kâr elmayla armut toplamak.
+          label: 'Getiri (bağlanan sermayeye göre)',
+          manual: metric(result.manual.weighted_return_pct, '%'),
+          strategy: metric(result.strategy.performance.weighted_return_pct, '%'),
+          diff: delta(result.delta.weighted_return_pct, '%'),
+          positiveIsBetter: true,
+          diffValue: result.delta.weighted_return_pct,
+        },
+        {
           label: 'Net Kâr',
           manual: metric(result.manual.net_profit),
           strategy: metric(result.strategy.performance.net_profit),
           diff: delta(result.delta.net_profit),
           positiveIsBetter: true,
-          diffValue: result.delta.net_profit,
+          // Renklendirilmez: pozisyon büyüklükleri farklı olduğu için mutlak
+          // kâr farkı "kim daha iyi yaptı" sorusunu cevaplamıyor.
+          diffValue: null,
         },
         {
           label: 'Başarı Oranı',

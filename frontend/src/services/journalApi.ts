@@ -169,6 +169,36 @@ export async function closeTrade(
   }
 }
 
+/** Replay'de geçilen bir mum — stop/hedef kontrolü için sunucuya gönderilir. */
+export interface ReplayBarPayload {
+  bar_index: number;
+  timestamp: string | null;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+/**
+ * Replay ilerledi: bu mumlarda stop-loss/take-profit tetiklendi mi?
+ *
+ * Tetikleme kararını ve çıkış fiyatını SUNUCU verir (RULES.md: finansal hesap
+ * arayüze yazılmaz). Seviyeler eskiden yalnızca kaydediliyordu — panelde
+ * çiziliyor ama hiçbir zaman tetiklenmiyordu; tek kapanış yolu "Kapat"
+ * düğmesiydi.
+ *
+ * Çağrı idempotenttir: tetikleme yoksa işlem olduğu gibi döner.
+ */
+export async function advanceTrade(
+  tradeId: string,
+  bars: ReplayBarPayload[]
+): Promise<JournalTrade> {
+  return request<JournalTrade>(`${API_BASE}/trades/${tradeId}/advance`, {
+    method: 'POST',
+    body: JSON.stringify({ bars }),
+  });
+}
+
 export async function updateTrade(
   tradeId: string,
   data: TradeUpdateRequest

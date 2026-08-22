@@ -133,6 +133,16 @@ export interface SessionComparison {
   };
   /** Strateji − manuel. Pozitifse strateji önde. */
   delta: {
+    /**
+     * Asıl kıyas ölçüsü: bağlanan sermayeye göre getiri.
+     *
+     * Net kâr kıyas için kullanılamaz — iki taraf aynı tutarı riske atmıyor.
+     * Manuel işlemin miktarı kullanıcının girdiği adettir (varsayılan 1),
+     * strateji ise bakiyenin tamamını kullanır; BTCUSDT'de "1 adet" 60.000 $,
+     * THYAO'da 300 ₺ demek.
+     */
+    weighted_return_pct: number | null;
+    /** Bilgi amaçlı; tek başına okunmamalı (bkz. weighted_return_pct). */
     net_profit: number | null;
     win_rate: number | null;
     profit_factor: number | null;

@@ -22,6 +22,7 @@ import { useVisibleInterval } from '../hooks/useVisibleInterval';
 import { useReplayStore, replayStore } from '../store/replayStore';
 import ReplayControls from '../replay/ReplayControls';
 import ReplayTradePanel from '../replay/ReplayTradePanel';
+import type { ReplayBarInput } from '../replay/ReplayTradePanel';
 import ReplayHistoryPanel from '../replay/ReplayHistoryPanel';
 import SymbolSearchModal from '../components/SymbolSearchModal';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
@@ -3294,6 +3295,10 @@ export default function CandleChart({
               currentBarTime={
                 data[Math.min(replayState.currentIndex ?? data.length - 1, data.length - 1)]?.time as number
               }
+              /* Stop/hedef kontrolü mumun yükseğine/düşüğüne bakıyor; panel
+                 yalnızca kapanışı biliyordu. `visibleData` imlecin ilerisini
+                 içermez, yani lookahead sızıntısı yok. */
+              bars={visibleData as ReplayBarInput[]}
             />
           )}
           {!replayState.isSelectingCutoff && <ReplayHistoryPanel symbol={symbol} />}

@@ -18,6 +18,7 @@ from app.auth.dependencies import get_current_user
 from app.data.loader import DataLoader, lookback_start_for_bars
 from app.database.models import JournalTrade, User
 from app.database.postgres import get_db
+from app.engines.execution import ExecutionCosts
 from app.engines.comparison import (
     ComparisonWindowError,
     build_comparison,
@@ -33,6 +34,7 @@ from app.journal.models import (
     PerformanceResponse,
     ReplaySessionCreateRequest,
     ReplaySessionResponse,
+    TradeAdvanceRequest,
     TradeCloseRequest,
     TradeOpenRequest,
     TradeResponse,
@@ -199,6 +201,29 @@ def close_trade(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@router.post("/trades/{trade_id}/advance", response_model=TradeResponse)
+def advance_trade(
+    request: TradeAdvanceRequest,
+    trade: JournalTrade = Depends(get_owned_trade),
+    db: Session = Depends(get_db),
+):
+    """Replay ilerledi: verilen mumlarda stop-loss/take-profit tetiklendi mi?
+
+    Tetiklendiyse pozisyon kapatılıp kapanmış işlem döner, tetiklenmediyse
+    işlem olduğu gibi. Zaten kapalı bir işlem için de güvenle çağrılabilir
+    (idempotent), böylece istemci yarış durumlarını ayrıca ele almak zorunda
+    kalmaz.
+
+    Tetikleme kararı ve çıkış fiyatı `engines/replay_engine` içindedir; route
+    iş mantığı taşımaz (RULES.md #9) ve finansal hesap arayüze yazılmaz.
+    """
+    try:
+        return _journal.advance(db, trade, request.bars)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.patch("/trades/{trade_id}", response_model=TradeResponse)
 def update_trade(
     request: TradeUpdateRequest,
@@ -281,9 +306,14 @@ def compare_session_with_strategy(
     symbol = session.symbol
     timeframe = session.timeframe or trades[0].timeframe or "1h"
 
-    # Manuel taraf: oturumun kendi işlemleri.
+    # Manuel taraf: oturumun kendi işlemleri — ama STRATEJİNİN maliyetleriyle.
+    # Günlük kayıtları maliyetsiz tutuluyor, strateji şablonları ise 10 bps
+    # komisyon + 5 bps slipajla geliyor; aynı maliyeti iki tarafa da uygulamadan
+    # fark stratejiden değil varsayımdan gelirdi. Kayıtlar değiştirilmez,
+    # yalnızca karşılaştırma kopyası maliyetlendirilir.
     manual_report = calculate_performance(
-        manual_trades_payload(trades), starting_balance=starting_balance
+        manual_trades_payload(trades, ExecutionCosts.from_strategy(strategy)),
+        starting_balance=starting_balance,
     )
 
     # Strateji tarafı: AYNI pencere, aynı sembol ve zaman dilimi.

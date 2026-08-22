@@ -16,6 +16,7 @@ from app.database.models import User
 from app.database.postgres import Base
 from app.journal.models import (
     ExitReason,
+    ReplayBar,
     TradeCloseRequest,
     TradeOpenRequest,
     TradeSide,
@@ -438,3 +439,114 @@ class TestSessionBalance(JournalTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAdvanceSeviyeTetikleme(JournalTestCase):
+    """Replay ilerledikce stop-loss/take-profit gercekten tetiklenir.
+
+    Seviyeler eskiden yalnizca KAYDEDILIYORDU: replay_engine.check_exit canli
+    akista hic cagrilmiyordu (sadece testlerden), tek kapanis yolu 'Kapat'
+    dugmesiydi. Kullanici stop koyup fiyat oradan gectiginde pozisyon acik
+    kaliyor, manuel backtest disiplinli bir stop'un degil 'elle kapatana kadar
+    tasi'nin sonucunu olcuyordu.
+    """
+
+    def _open(self, **overrides):
+        session_id = self._session(self.alice.id)
+        return self.journal.open_trade(
+            self.db,
+            _open_request(session_id=session_id, entry_bar_index=10, **overrides),
+            user_id=self.alice.id,
+        )
+
+    @staticmethod
+    def _bar(index, high, low, open_=None, close=None):
+        return ReplayBar(
+            bar_index=index,
+            timestamp=datetime(2024, 1, 1, 12, 0),
+            open=open_ if open_ is not None else (high + low) / 2,
+            high=high,
+            low=low,
+            close=close if close is not None else (high + low) / 2,
+        )
+
+    def test_stop_tetiklenmezse_islem_acik_kalir(self):
+        trade = self._open()
+        result = self.journal.advance(self.db, trade, [self._bar(11, high=105, low=99)])
+        self.assertEqual(result.status, TradeStatus.OPEN.value)
+        self.assertIsNone(result.exit_price)
+
+    def test_stop_delinince_pozisyon_kapanir(self):
+        trade = self._open()
+        result = self.journal.advance(self.db, trade, [self._bar(11, high=101, low=90, open_=99)])
+        self.assertEqual(result.status, TradeStatus.CLOSED.value)
+        self.assertEqual(result.exit_reason, ExitReason.STOP_LOSS.value)
+        self.assertAlmostEqual(result.exit_price, 95.0)
+        self.assertEqual(result.exit_bar_index, 11)
+
+    def test_hedef_tetiklenince_pozisyon_kapanir(self):
+        trade = self._open()
+        result = self.journal.advance(self.db, trade, [self._bar(11, high=115, low=101, open_=102)])
+        self.assertEqual(result.status, TradeStatus.CLOSED.value)
+        self.assertEqual(result.exit_reason, ExitReason.TAKE_PROFIT.value)
+        self.assertAlmostEqual(result.exit_price, 110.0)
+
+    def test_bosluklu_acilista_seviyeden_degil_acilistan_dolar(self):
+        trade = self._open()
+        # Mum stop'un (95) cok altinda aciyor: emir 95'ten degil 60'tan dolar.
+        result = self.journal.advance(self.db, trade, [self._bar(11, high=62, low=58, open_=60)])
+        self.assertEqual(result.status, TradeStatus.CLOSED.value)
+        self.assertAlmostEqual(result.exit_price, 60.0)
+        # Giris 100, miktar 2 -> -80 TL
+        self.assertAlmostEqual(result.pnl, -80.0)
+
+    def test_giris_bari_ve_oncesi_atlanir(self):
+        # Kullanici 10. barin KAPANISINDA girdi; o barin dusugu girisden once
+        # olusmustu, seviyeyi tetiklememeli.
+        trade = self._open()
+        result = self.journal.advance(
+            self.db, trade, [self._bar(9, high=101, low=50), self._bar(10, high=101, low=50)]
+        )
+        self.assertEqual(result.status, TradeStatus.OPEN.value)
+
+    def test_ilk_tetiklenen_mum_kazanir(self):
+        trade = self._open()
+        result = self.journal.advance(
+            self.db,
+            trade,
+            [
+                self._bar(11, high=105, low=99),
+                self._bar(12, high=101, low=90, open_=99),   # stop
+                self._bar(13, high=130, low=120, open_=125),  # hedef (gec kaldi)
+            ],
+        )
+        self.assertEqual(result.exit_reason, ExitReason.STOP_LOSS.value)
+        self.assertEqual(result.exit_bar_index, 12)
+
+    def test_ayni_mumda_ikisi_de_tetiklenirse_stop_kazanir(self):
+        trade = self._open()
+        result = self.journal.advance(self.db, trade, [self._bar(11, high=115, low=90, open_=100)])
+        self.assertEqual(result.exit_reason, ExitReason.STOP_LOSS.value)
+
+    def test_seviyesiz_islem_dokunulmaz(self):
+        trade = self._open(stop_loss=None, take_profit=None)
+        result = self.journal.advance(self.db, trade, [self._bar(11, high=500, low=1)])
+        self.assertEqual(result.status, TradeStatus.OPEN.value)
+
+    def test_kapali_islem_yeniden_degerlendirilmez(self):
+        trade = self._open()
+        self.journal.close_trade(
+            self.db, trade, TradeCloseRequest(exit_price=103.0, exit_reason=ExitReason.MANUAL)
+        )
+        # Idempotent: istemci yaris durumlarini ayrica ele almak zorunda kalmasin.
+        result = self.journal.advance(self.db, trade, [self._bar(11, high=101, low=50)])
+        self.assertEqual(result.exit_reason, ExitReason.MANUAL.value)
+        self.assertAlmostEqual(result.exit_price, 103.0)
+
+    def test_kapanis_oturum_bakiyesine_islenir(self):
+        trade = self._open()
+        session_id = trade.session_id
+        self.journal.advance(self.db, trade, [self._bar(11, high=101, low=90, open_=99)])
+        session = self.journal.get_session(self.db, session_id, user_id=self.alice.id)
+        # Giris 100, cikis 95, miktar 2 -> -10 TL
+        self.assertAlmostEqual(session.current_balance, 10000.0 - 10.0)

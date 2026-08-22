@@ -21,6 +21,8 @@ from sqlalchemy.orm import Session
 from app.database.models import JournalTrade, ReplaySession, generate_uuid
 from app.engines import replay_engine
 from app.journal.models import (
+    ExitReason,
+    ReplayBar,
     ReplaySessionCreateRequest,
     TradeCloseRequest,
     TradeOpenRequest,
@@ -269,6 +271,82 @@ class TradeJournal:
 
         db.commit()
         db.refresh(trade)
+        return trade
+
+    @staticmethod
+    def advance(
+        db: Session,
+        trade: JournalTrade,
+        bars: list[ReplayBar],
+    ) -> JournalTrade:
+        """Replay ilerledikçe stop-loss/take-profit tetiklendi mi kontrol eder.
+
+        Seviyeler eskiden yalnızca KAYDEDİLİYORDU: `replay_engine.check_exit`
+        canlı akışta hiç çağrılmıyordu (yalnızca testlerden), tek kapanış yolu
+        "Kapat" düğmesiydi. Kullanıcı stop koyup fiyat oradan geçtiğinde pozisyon
+        açık kalıyor, manuel backtest disiplinli bir stop'un değil "elle
+        kapatana kadar taşı"nın sonucunu ölçüyordu — üstelik strateji tarafında
+        stop çalıştığı için karşılaştırma da bozuluyordu.
+
+        Tetikleme kararı ve çıkış fiyatı `engines/replay_engine` içindedir
+        (RULES.md #8, finansal hesap arayüze yazılmaz): fiyat gap farkındalıdır,
+        aynı mumda ikisi de tetiklenirse stop kazanır.
+
+        Girişin yapıldığı bar ve öncesi ATLANIR: kullanıcı o barın kapanışında
+        pozisyona girdi, o barın yükseği/düşüğü girişten önce oluşmuştu.
+        Çağrı idempotenttir — tetikleme yoksa işlem olduğu gibi döner, kapanmış
+        bir işlem hiç değerlendirilmez.
+        """
+        if trade.status == TradeStatus.CLOSED.value:
+            return trade
+        if trade.stop_loss is None and trade.take_profit is None:
+            return trade
+
+        position = {
+            "side": trade.side,
+            "entry_price": trade.entry_price,
+            "quantity": trade.quantity or 1.0,
+            "stop_loss": trade.stop_loss,
+            "take_profit": trade.take_profit,
+            "entry_bar_index": trade.entry_bar_index,
+            "entry_time": trade.entry_time,
+        }
+        entry_bar = trade.entry_bar_index
+
+        for bar in bars:
+            if (
+                entry_bar is not None
+                and bar.bar_index is not None
+                and bar.bar_index <= entry_bar
+            ):
+                continue
+
+            result = replay_engine.advance_bar(
+                position,
+                {
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
+                    "close": bar.close,
+                    "timestamp": bar.timestamp,
+                },
+                bar_index=bar.bar_index if bar.bar_index is not None else -1,
+            )
+            closed = result["closed_trade"]
+            if closed is None:
+                continue
+
+            return TradeJournal.close_trade(
+                db,
+                trade,
+                TradeCloseRequest(
+                    exit_price=closed["exit_price"],
+                    exit_bar_index=bar.bar_index,
+                    exit_time=bar.timestamp,
+                    exit_reason=ExitReason(closed["exit_reason"]),
+                ),
+            )
+
         return trade
 
     @staticmethod

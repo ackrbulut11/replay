@@ -16,6 +16,7 @@ from app.engines.comparison import (
     manual_trades_payload,
     session_window,
 )
+from app.engines.execution import ExecutionCosts
 
 
 class FakeTrade:
@@ -125,6 +126,97 @@ class TestBuildComparison(unittest.TestCase):
         strategy_result = {"performance": {"net_profit": 200.0}, "total_trades": 1}
         result = build_comparison(manual, strategy_result, "X", "1h", self.WINDOW)
         self.assertIsNone(result["delta"]["win_rate"])
+
+
+class TestVerdictUsesWeightedReturn(unittest.TestCase):
+    """Kiyas olcusu net kar DEGIL, baglanan sermayeye gore getiridir.
+
+    Iki taraf ayni tutari riske atmiyor: manuel islemin miktari kullanicinin
+    girdigi adet (arayuz varsayilani 1), strateji ise bakiyenin tamamini
+    kullanir. BTCUSDT'de '1 adet' 60.000 $, THYAO'da 300 TL demek; bu iki
+    net_profit'i karsilastirmak elmayla armut toplamakti.
+    """
+
+    WINDOW = (datetime(2024, 1, 1), datetime(2024, 2, 1))
+
+    def _build(self, manual_ret, strategy_ret, manual_profit, strategy_profit):
+        manual = {
+            "net_profit": manual_profit,
+            "weighted_return_pct": manual_ret,
+            "win_rate": 50.0,
+            "total_trades": 10,
+        }
+        strategy_result = {
+            "performance": {
+                "net_profit": strategy_profit,
+                "weighted_return_pct": strategy_ret,
+                "win_rate": 60.0,
+                "total_trades": 7,
+            },
+            "total_trades": 7,
+            "signals": [],
+        }
+        return build_comparison(manual, strategy_result, "BTCUSDT", "1h", self.WINDOW)
+
+    def test_kucuk_pozisyonlu_manuel_yuzdede_kazanabilir(self):
+        # Manuel 300 TL baglayip %20, strateji 10.000 TL baglayip %5 kazanmis.
+        # Net karda strateji onde (500 > 60) ama getiride manuel onde.
+        result = self._build(
+            manual_ret=20.0, strategy_ret=5.0, manual_profit=60.0, strategy_profit=500.0
+        )
+        self.assertEqual(result["verdict"], "manuel")
+        self.assertAlmostEqual(result["delta"]["weighted_return_pct"], -15.0)
+        # Net kar bilgi olarak duruyor ama karari o vermiyor.
+        self.assertAlmostEqual(result["delta"]["net_profit"], 440.0)
+
+    def test_strateji_yuzdede_ondeyse_strateji_kazanir(self):
+        result = self._build(
+            manual_ret=4.0, strategy_ret=11.0, manual_profit=900.0, strategy_profit=110.0
+        )
+        self.assertEqual(result["verdict"], "strateji")
+
+    def test_agirlikli_getiri_yoksa_net_kara_dusulur(self):
+        # Fiyat/miktar eksikse weighted_return_pct None gelir; kiyas yine yapilir.
+        result = self._build(
+            manual_ret=None, strategy_ret=None, manual_profit=100.0, strategy_profit=250.0
+        )
+        self.assertEqual(result["verdict"], "strateji")
+        self.assertIsNone(result["delta"]["weighted_return_pct"])
+
+
+class TestManualSideCarriesStrategyCosts(unittest.TestCase):
+    """Stratejinin komisyon/slipaji manuel tarafa da uygulanir.
+
+    Manuel gunluk maliyetsiz tutuluyor, strateji sablonlari 10 bps komisyon +
+    5 bps slipajla geliyordu; ayni maliyet iki tarafa uygulanmadan fark
+    stratejiden degil varsayimdan geliyordu.
+    """
+
+    def _trade(self):
+        t = FakeTrade(datetime(2024, 1, 1), datetime(2024, 1, 2), pnl=100.0,
+                      entry_price=1000.0, quantity=2.0)
+        t.pnl_percent = 5.0
+        return t
+
+    def test_maliyetsiz_cagri_kayitlari_degistirmez(self):
+        payload = manual_trades_payload([self._trade()])
+        self.assertAlmostEqual(payload[0]["pnl"], 100.0)
+        self.assertAlmostEqual(payload[0]["pnl_percent"], 5.0)
+
+    def test_komisyon_ve_slipaj_dusulur(self):
+        costs = ExecutionCosts(commission_bps=10.0, slippage_bps=5.0)
+        payload = manual_trades_payload([self._trade()], costs)
+        # Gidis-donus toplam maliyet: komisyon %0,2 + slipaj %0,1 = %0,3
+        self.assertAlmostEqual(payload[0]["pnl_percent"], 4.7, places=6)
+        # Baglanan sermaye 1000 x 2 = 2000; %0,3'u 6 TL.
+        self.assertAlmostEqual(payload[0]["pnl"], 94.0, places=6)
+
+    def test_gunluk_kaydinin_kendisi_degismez(self):
+        trade = self._trade()
+        manual_trades_payload([trade], ExecutionCosts(commission_bps=10.0))
+        # Gecmisi geriye donuk yeniden yazmak gunlugun guvenilirligini bitirirdi.
+        self.assertAlmostEqual(trade.pnl, 100.0)
+        self.assertAlmostEqual(trade.pnl_percent, 5.0)
 
 
 if __name__ == "__main__":

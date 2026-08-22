@@ -97,6 +97,39 @@ class TradeCloseRequest(BaseModel):
     exit_reason: ExitReason = ExitReason.MANUAL
 
 
+# Tek bir "ilerlet" isteğinde değerlendirilecek azami mum. Replay hızlı
+# oynatılırken istemci biriken mumları toplu gönderiyor; sınırsız bırakmak
+# sunucuya keyfi büyüklükte gövde göndermeye açık kapı bırakırdı.
+MAX_ADVANCE_BARS = 5000
+
+
+class ReplayBar(BaseModel):
+    """Replay'de geçilen tek bir mum — SL/TP kontrolü için.
+
+    Yalnızca OHLC gerekiyor; hacim tetiklemeye girmez.
+    """
+
+    bar_index: Optional[int] = None
+    timestamp: Optional[datetime] = None
+    open: float = Field(gt=0)
+    high: float = Field(gt=0)
+    low: float = Field(gt=0)
+    close: float = Field(gt=0)
+
+
+class TradeAdvanceRequest(BaseModel):
+    """Replay ilerledi; bu mumlarda stop-loss/take-profit tetiklendi mi?
+
+    Seviyeler eskiden yalnızca KAYDEDİLİYORDU: panelde çiziliyor, grafikte
+    görünüyor ama hiçbir zaman tetiklenmiyordu (`replay_engine.check_exit`
+    canlı akışta hiç çağrılmıyordu, sadece testlerden). Kullanıcı stop koyup
+    fiyat oradan geçtiğinde pozisyon açık kalıyordu; manuel backtest'in
+    sonucu, disiplinli bir stop'un sonucu değildi.
+    """
+
+    bars: list[ReplayBar] = Field(default_factory=list, max_length=MAX_ADVANCE_BARS)
+
+
 class TradeUpdateRequest(BaseModel):
     """
     İşlem günlüğü alanlarını günceller.

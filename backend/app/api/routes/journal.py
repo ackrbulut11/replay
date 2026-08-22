@@ -350,6 +350,12 @@ def compare_session_with_strategy(
             df=df,
             multi_tf_data=multi_tf_data or None,
             starting_balance=starting_balance,
+            # `df` ısınma için 300 bar geriden başlıyor ama DEĞERLENDİRME
+            # oturumun kendi penceresinde yapılmalı. Bunsuz strateji, manuel
+            # oturum başlamadan ~280 bar önce alım satım yapıyordu ve "aynı
+            # pencere" iddiası gerçek değildi.
+            eval_start=window[0],
+            eval_end=window[1],
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

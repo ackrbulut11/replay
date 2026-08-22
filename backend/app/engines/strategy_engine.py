@@ -404,6 +404,8 @@ class StrategyEngine:
         allow_short: bool | None = None,
         starting_balance: float = DEFAULT_STARTING_BALANCE,
         sizing: PositionSizing | None = None,
+        eval_start: datetime | None = None,
+        eval_end: datetime | None = None,
     ) -> dict:
         """Stratejiyi verilen veri üzerinde değerlendirir.
 
@@ -411,6 +413,14 @@ class StrategyEngine:
         başlangıç bakiyesi ve boyutlandırma kuralıyla işlemler sırayla
         uygulanır ve `performance` altında tam metrik seti döner (Sharpe,
         max drawdown, profit factor, expectancy, bakiye eğrisi).
+
+        `eval_start`/`eval_end` verilirse değerlendirme YALNIZCA o tarih
+        aralığında yapılır; `df` bundan daha geniş olabilir ve fazlası
+        göstergelerin ısınması için kullanılır. Manuel oturum karşılaştırması
+        (`/journal/sessions/{id}/compare`) buna muhtaç: ısınma payı için 300
+        bar geriden veri yükleniyordu ama değerlendirme de o bardan başlıyordu,
+        yani strateji manuel oturum başlamadan ~280 bar önce alım satım
+        yapıyordu. "Aynı pencere" iddiası bu yüzden gerçek değildi.
         """
         if param_overrides is None:
             param_overrides = {}
@@ -420,12 +430,20 @@ class StrategyEngine:
         if allow_short is not None:
             param_overrides["allow_short"] = allow_short
 
+        start_index, end_index = self._window_bounds(df, strategy, param_overrides, eval_start, eval_end)
+
         signals = RuleEngine.evaluate_range(
             strategy=strategy,
             df=df,
+            start_index=start_index,
+            end_index=end_index,
             params=param_overrides,
             multi_tf_data=multi_tf_data,
         )
+
+        # Al-tut kıyası ve "toplam bar" da DEĞERLENDİRİLEN aralığa aittir;
+        # ısınma payı üzerinden hesaplanan bir kıyas farklı bir dönemi ölçerdi.
+        scored_df = self._slice(df, start_index, end_index)
 
         buy_count = sum(1 for s in signals if s["signal"] == "BUY")
         sell_count = sum(1 for s in signals if s["signal"] == "SELL")
@@ -458,7 +476,7 @@ class StrategyEngine:
         # Al-tut kiyasi: strateji bu donemde "hicbir sey yapmamaya" gore
         # deger uretti mi? Ayni maliyetler uygulanir ki karsilastirma adil olsun.
         costs = ExecutionCosts.from_strategy(strategy, param_overrides)
-        benchmark = self.buy_and_hold(df, costs)
+        benchmark = self.buy_and_hold(scored_df, costs)
         outperformance = (
             round(total_pnl_percent - benchmark["return_pct"], 2)
             if benchmark["return_pct"] is not None
@@ -468,7 +486,8 @@ class StrategyEngine:
         return {
             "strategy_id": strategy.get("id", ""),
             "strategy_name": strategy.get("name", ""),
-            "total_bars": len(df),
+            # Degerlendirilen bar sayisi (isinma payi haric).
+            "total_bars": len(scored_df),
             "signals": signals,
             "buy_count": buy_count,
             "sell_count": sell_count,
@@ -483,7 +502,7 @@ class StrategyEngine:
             "outperformance_pct": outperformance,
             # Aralık sonunda açık kalan pozisyon — metriklerin DIŞINDA, yalnızca
             # bilgi amaçlı (bkz. `_open_position`). None ise pozisyon nakitte.
-            "open_position": self._open_position(signals, df, costs),
+            "open_position": self._open_position(signals, scored_df, costs),
         }
 
     @staticmethod
@@ -522,6 +541,58 @@ class StrategyEngine:
             "entry_price": round(entry, 4),
             "exit_price": round(exit_price, 4),
         }
+
+    @staticmethod
+    def _slice(df: pd.DataFrame, start_index: int | None, end_index: int | None) -> pd.DataFrame:
+        """Değerlendirilen aralığın kendisi (ısınma payı hariç)."""
+        if start_index is None and end_index is None:
+            return df
+        start = max(int(start_index or 0), 0)
+        end = len(df) - 1 if end_index is None else min(int(end_index), len(df) - 1)
+        if end < start:
+            return df.iloc[0:0]
+        return df.iloc[start : end + 1]
+
+    @staticmethod
+    def _window_bounds(
+        df: pd.DataFrame,
+        strategy: dict,
+        param_overrides: dict,
+        eval_start: datetime | None,
+        eval_end: datetime | None,
+    ) -> tuple[int | None, int | None]:
+        """Tarih penceresini bar indekslerine çevirir.
+
+        Pencere verilmemişse `(None, None)` döner ve `evaluate_range` her zamanki
+        gibi ısınmadan başlayıp son bara kadar gider.
+
+        Verilmişse başlangıç ISINMA ile birlikte alınır: pencerenin ilk barında
+        gösterge henüz hazır değilse orada zaten sinyal üretilemez, ama başlangıcı
+        ısınmanın gerisine çekmek stratejinin pencereden ÖNCE işlem açmasına yol
+        açardı — karşılaştırmayı bozan hata tam olarak buydu.
+        """
+        if eval_start is None and eval_end is None:
+            return None, None
+        if "timestamp" not in df.columns or df.empty:
+            return None, None
+
+        stamps = pd.to_datetime(df["timestamp"])
+
+        start_index = 0
+        if eval_start is not None:
+            after = stamps[stamps >= pd.Timestamp(eval_start)]
+            # Pencere verinin tamamen ilerisindeyse değerlendirilecek bar yok.
+            start_index = int(after.index[0]) if not after.empty else len(df)
+
+        end_index = len(df) - 1
+        if eval_end is not None:
+            before = stamps[stamps <= pd.Timestamp(eval_end)]
+            end_index = int(before.index[-1]) if not before.empty else -1
+
+        # Isınma tabanı: göstergeler hazır olmadan sinyal üretilemez.
+        effective_params = RuleEngine._resolve_params(strategy, param_overrides)
+        warmup = RuleEngine._get_warmup_period(strategy, effective_params)
+        return max(start_index, warmup), end_index
 
     @staticmethod
     def _open_position(

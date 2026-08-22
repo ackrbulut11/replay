@@ -3,6 +3,7 @@ Rule Engine & Conditions Unit Tests using standard unittest.
 """
 
 import unittest
+from datetime import datetime
 import pandas as pd
 import numpy as np
 
@@ -1162,3 +1163,112 @@ class TestOpenPositionReporting(unittest.TestCase):
         strategy["slippage_bps"] = 0.0
         without_costs = StrategyEngine().evaluate(strategy, self._rising_frame())
         self.assertLess(with_costs, without_costs["open_position"]["unrealized_pnl_percent"])
+
+
+class TestEvaluationWindow(unittest.TestCase):
+    """Degerlendirme penceresi verilirse strateji SADECE o aralikta islem yapar.
+
+    Manuel oturum karsilastirmasi isinma payi icin 300 bar geriden veri
+    yukluyordu ama degerlendirme de o bardan basliyordu: strateji, manuel
+    oturum baslamadan ~280 bar once alim satim yapiyordu. Docstring 'ayni
+    pencere' diyordu, kod oyle yapmiyordu.
+    """
+
+    @staticmethod
+    def _always_in_strategy():
+        return {
+            "id": "t",
+            "name": "HerBarAl",
+            "parameters": [],
+            "entry_rules": {
+                "logic": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "operator": ">",
+                        "right": {"type": "value", "value": 0},
+                    }
+                ],
+            },
+            # Cikis da her barda dogru: her mumda bir islem kapanir.
+            "exit_rules": {
+                "logic": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "operator": ">",
+                        "right": {"type": "value", "value": 0},
+                    }
+                ],
+            },
+            "bar_delay": 1,
+            "allow_short": False,
+            "commission_bps": 0.0,
+            "slippage_bps": 0.0,
+            "take_profit_pct": None,
+            "stop_loss_pct": None,
+        }
+
+    @staticmethod
+    def _frame(n=60):
+        close = [100.0 + i for i in range(n)]
+        return pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2024-01-01", periods=n, freq="D"),
+                "open": close,
+                "high": [c + 0.5 for c in close],
+                "low": [c - 0.5 for c in close],
+                "close": close,
+                "volume": [1] * n,
+            }
+        )
+
+    def test_pencere_yoksa_tum_veri_degerlendirilir(self):
+        result = StrategyEngine().evaluate(self._always_in_strategy(), self._frame())
+        self.assertEqual(result["total_bars"], 60)
+        # bar_delay=1: her islem iki bar suruyor, 60 barda ~29 kapanis.
+        self.assertGreater(result["total_trades"], 20)
+
+    def test_pencere_disinda_islem_acilmaz(self):
+        df = self._frame()
+        # Yalnizca son 10 gun degerlendirilsin.
+        result = StrategyEngine().evaluate(
+            self._always_in_strategy(),
+            df,
+            eval_start=datetime(2024, 2, 20),
+            eval_end=datetime(2024, 2, 29),
+        )
+        self.assertEqual(result["total_bars"], 10)
+        for signal in result["signals"]:
+            self.assertGreaterEqual(
+                signal["timestamp"], int(datetime(2024, 2, 20).timestamp())
+            )
+
+    def test_pencere_al_tut_kiyasini_da_daraltir(self):
+        df = self._frame()
+        wide = StrategyEngine().evaluate(self._always_in_strategy(), df)
+        narrow = StrategyEngine().evaluate(
+            self._always_in_strategy(),
+            df,
+            eval_start=datetime(2024, 2, 20),
+            eval_end=datetime(2024, 2, 29),
+        )
+        # Genis aralikta al-tut cok daha fazla getirir; dar pencerede degil.
+        self.assertGreater(wide["buy_and_hold"]["return_pct"], 40.0)
+        self.assertLess(narrow["buy_and_hold"]["return_pct"], 10.0)
+
+    def test_isinma_penceredeki_baslangici_geriye_cekemez(self):
+        # Isinma 20 bar isteyen bir gosterge, pencere 5. barda baslasa bile
+        # degerlendirme 20'den once baslamaz.
+        strategy = self._always_in_strategy()
+        strategy["entry_rules"]["conditions"][0]["left"] = {
+            "type": "indicator",
+            "name": "EMA",
+            "period": 20,
+        }
+        df = self._frame()
+        result = StrategyEngine().evaluate(
+            strategy, df, eval_start=datetime(2024, 1, 3), eval_end=datetime(2024, 2, 29)
+        )
+        first_signal_bar = min(s["bar_index"] for s in result["signals"])
+        self.assertGreaterEqual(first_signal_bar, 20)

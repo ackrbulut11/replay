@@ -1,0 +1,78 @@
+# Render dağıtım yapılandırması.
+#
+# ⚠️  BU DOSYA MEVCUT SERVİSİ DEĞİŞTİRMEZ. Render, blueprint'i yalnızca panelden
+#     bir "Blueprint" örneği oluşturulursa okur; hâlihazırda elle yapılandırılmış
+#     servis olduğu gibi çalışmaya devam eder. Blueprint'i BAĞLARSANIZ Render
+#     BURADAKİLERİ YENİ servisler olarak yaratmaya çalışır — mevcut servisi
+#     devralmaz. Bağlamadan önce panelinizdeki ayarlarla karşılaştırın.
+#
+# Neden var: dağıtım yapılandırmasının tamamı yalnızca Render panelindeydi,
+# yani sürüm kontrolünün dışındaydı. İki somut sonucu vardı:
+#
+#   1. Hangi ortam değişkenlerinin ZORUNLU olduğu hiçbir yerde yazmıyordu.
+#      JWT_SECRET_KEY ayarlanmazsa uygulama depodaki geliştirme anahtarıyla
+#      token imzalıyordu ve bunu kimse fark etmiyordu (artık açılmıyor,
+#      bkz. app/core/config.assert_production_ready).
+#   2. DATABASE_URL verilmezse SQLite'a düşülüyordu; Render'ın diski kalıcı
+#      olmadığı için her dağıtımda tüm kullanıcılar, stratejiler ve işlem
+#      günlüğü siliniyordu (bu da artık açılışı engelliyor).
+#
+# NOT — kalıcı disk: `storage/market_data/` altındaki parquet önbelleği de
+# geçici diskte duruyor. Yani üç katmanlı önbellek üretimde fiilen iki
+# katmanlı: her soğuk başlangıçta tüm geçmiş sağlayıcıdan yeniden iniyor ve
+# gece yarısı güncelleme işinin yazdıkları uyanışta kayboluyor. Kalıcı disk
+# eklemek ayrı bir karardır (ücretli plan gerektirir), bu yüzden burada
+# yalnızca not edilmiştir.
+
+services:
+  - type: web
+    name: replay-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      # ─── Zorunlu ────────────────────────────────────────────────────────
+      - key: ENVIRONMENT
+        value: production
+      - key: JWT_SECRET_KEY
+        # Render üretir ve panelde saklar; koda hiç girmez (RULES.md #17).
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: replay-db
+          property: connectionString
+
+      # ─── Kimlik ─────────────────────────────────────────────────────────
+      # Client ID sır değildir (frontend paketinde de var); secret sırdır ve
+      # panelden elle girilir.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        value: https://replay-nine-gold.vercel.app
+      # Virgülle ayrılmış e-posta listesi. Boş bırakılırsa /api/admin/* uçlarına
+      # hiç kimse erişemez (güvenli varsayılan).
+      - key: ADMIN_EMAILS
+        sync: false
+
+      # ─── İsteğe bağlı ───────────────────────────────────────────────────
+      # Boş bırakılırsa hata izleme tamamen kapalıdır.
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: "0.1"
+      # Yahoo'nun intraday geçmiş sınırlarını aşan istekler için ikincil kaynak.
+      - key: TWELVE_API_KEY
+        sync: false
+      # Birden fazla worker'a geçilirse gece yarısı işi yalnızca birinde açık
+      # kalmalı; aksi halde her worker aynı işi çalıştırır.
+      - key: ENABLE_SCHEDULER
+        value: "true"
+
+databases:
+  - name: replay-db
+    plan: free

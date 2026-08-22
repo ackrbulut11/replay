@@ -31,15 +31,26 @@ jobs:
 
   backend:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # İKİ sürümde de koşulur ve ikisi de gereklidir:
+        #
+        #   3.9  — `backend/.venv`in sürümü. Geliştirici burada çalışıyor ve
+        #          3.9'da annotation'lar hevesle değerlendirildiği için yalnızca
+        #          orada patlayan import hataları var (bkz. CLAUDE.md
+        #          "Annotation evaluation").
+        #   3.11 — Render'ın çalıştırdığı modern sürüm. Yalnızca 3.9 test
+        #          edilirken üretim, HİÇ test edilmemiş bir yorumlayıcıda
+        #          koşuyordu; `pyproject.toml` da ^3.10 diyerek üçüncü bir
+        #          şey iddia ediyordu.
+        python-version: ["3.9", "3.11"]
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          # backend/.venv 3.9 kullanıyor; CI'ın da aynı sürümde koşması,
-          # yalnızca 3.10+ ile çalışan annotation hatalarının burada
-          # yakalanmasını sağlıyor (bkz. CLAUDE.md "Annotation evaluation").
-          python-version: "3.9"
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies (backend)
         run: |
           cd backend

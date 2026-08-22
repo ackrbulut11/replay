@@ -7,6 +7,8 @@ CRUD endpointleri ve strateji değerlendirme.
 
 from __future__ import annotations
 
+import logging
+
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -39,7 +41,9 @@ from app.rules.strategy_models import (
     StrategyUpdateRequest,
 )
 
-MAX_LIMIT_BARS = 10000  # Strateji testinde (tekli/toplu) izin verilen azami mum sayısı
+MAX_LIMIT_BARS = 10000
+logger = logging.getLogger(__name__)
+  # Strateji testinde (tekli/toplu) izin verilen azami mum sayısı
 
 
 class ImportEvaluationsRequest(BaseModel):
@@ -356,7 +360,7 @@ def evaluate_strategy(
         )
     except Exception as e:
         db.rollback()
-        print(f"Uyarı: test geçmişi kaydedilemedi: {e}")
+        logger.warning("Test gecmisi kaydedilemedi: %s", e, exc_info=True)
 
     return EvaluateResponse(
         strategy_id=result["strategy_id"],
@@ -491,7 +495,7 @@ def _run_batch_scan_job(
         except Exception as e:
             # Portfoy ozeti "olsa iyi olur": hesabi patlarsa taramanin kendisi
             # yine de tamamlanmis sayilmali.
-            print(f"Portfoy simulasyonu basarisiz ({scan_id}): {e}")
+            logger.warning("Portfoy simulasyonu basarisiz (%s): %s", scan_id, e, exc_info=True)
 
         _scanner.finish_scan(db, scan_id=scan_id, portfolio=portfolio)
     except Exception as e:

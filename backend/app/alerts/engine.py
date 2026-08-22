@@ -13,6 +13,7 @@ ve finansal hesap arayüze yazılmaz (RULES.md "Yasaklar").
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -30,6 +31,8 @@ from app.data.loader import lookback_start_for_bars
 from app.database.models import Alert
 from app.indicators.registry import IndicatorRegistry
 from app.rules.conditions import cross_above, cross_below
+
+logger = logging.getLogger(__name__)
 
 # AlertModel ile birebir eşleşen kolonlar (satır -> sözlük çevirisinde kullanılır)
 _PLAIN_FIELDS = (
@@ -309,7 +312,7 @@ class AlertEngine:
                 # Veri gelmiyorsa alarm DEĞERLENDİRİLMEZ. Alternatif (istemcinin
                 # gönderdiği fiyata düşmek) doğrulanmamış veriyle tetikleme
                 # yapmak olurdu.
-                print(f"Alarm verisi yüklenemedi ({symbol} {tf}): {exc}")
+                logger.warning("Alarm verisi yuklenemedi (%s %s): %s", symbol, tf, exc)
                 continue
             if df is not None and not df.empty:
                 frames[tf] = df

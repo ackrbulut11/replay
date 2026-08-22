@@ -14,6 +14,7 @@ ve bir kullanıcı başkasının stratejisine erişemez.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Union
 
@@ -39,6 +40,8 @@ from app.rules.strategy_models import (
     StrategyModel,
     StrategyUpdateRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Kullanıcı başına saklanacak azami tekli test sayısı; aşan en eski kayıtlar silinir.
@@ -879,7 +882,7 @@ class StrategyEngine:
                     res = future.result()
                     results.append(res)
                 except Exception as ex:
-                    print(f"Batch evaluation error: {ex}")
+                    logger.warning("Toplu degerlendirme hatasi: %s", ex, exc_info=True)
 
         # PnL'e göre büyükten küçüğe sırala
         results.sort(

@@ -29,6 +29,7 @@ def init_error_monitoring() -> None:
         return
 
     import sentry_sdk
+    from sentry_sdk.integrations.logging import LoggingIntegration
 
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
@@ -36,6 +37,15 @@ def init_error_monitoring() -> None:
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
         # Kullanıcı e-postası/IP gibi kişisel veriler varsayılan olarak gönderilmez.
         send_default_pii=False,
+        integrations=[
+            # Yakalanan hatalar da Sentry'ye gitsin. Sağlayıcı arızaları,
+            # önbellek yazma hataları ve toplu tarama başarısızlıkları geniş
+            # `except Exception` bloklarında yakalanıp yalnızca stdout'a
+            # yazılıyordu — Sentry kurulu olduğu hâlde bunların HİÇBİRİ
+            # raporlanmıyordu, çünkü Sentry yalnızca yakalanmamış exception'ları
+            # görüyor. ERROR seviyesi olay üretir, WARNING iz bırakır.
+            LoggingIntegration(level=logging.WARNING, event_level=logging.ERROR),
+        ],
     )
 
 
@@ -60,10 +70,16 @@ def start_market_update_scheduler():
 
     from apscheduler.schedulers.background import BackgroundScheduler
 
+    from app.database.retention import run_event_retention
+
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_market_update, trigger="cron", hour=0, minute=0, id="nightly_market_update")
+    # Telemetri tabloları da sınırsız büyüyordu (RULES.md §24 ile aynı gerekçe):
+    # `/api/analytics/events` kimlik doğrulaması gerektirmiyor ve tek bir IP
+    # günde on binlerce satır ekleyebiliyordu.
+    scheduler.add_job(run_event_retention, trigger="cron", hour=3, minute=0, id="event_retention")
     scheduler.start()
-    logger.info("Gece yarisi piyasa verisi guncelleme isi zamanlandi: %s", scheduler.get_jobs())
+    logger.info("Zamanlanmis isler: %s", scheduler.get_jobs())
     return scheduler
 
 

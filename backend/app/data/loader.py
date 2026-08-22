@@ -385,7 +385,7 @@ class DataLoader:
             )
             if fallback.empty:
                 raise
-            print(f"Pencere isteği başarısız, en eskiye çekildi ({symbol} {timeframe}): {exc}")
+            logger.info("Pencere istegi basarisiz, en eskiye cekildi (%s %s): %s", symbol, timeframe, exc)
             return fallback
 
         if not df.empty:
@@ -566,7 +566,7 @@ class DataLoader:
         except Exception as exc:
             # Geri çekilme yolu "olsa iyi olur" niteliğinde: burada patlamak,
             # asıl istekteki boş sonucu bir 500'e çevirmek olurdu.
-            print(f"En eski mum yoklaması başarısız ({symbol} {timeframe}): {exc}")
+            logger.warning("En eski mum yoklamasi basarisiz (%s %s): %s", symbol, timeframe, exc)
             return empty
 
         if df is None or df.empty:
@@ -604,7 +604,7 @@ class DataLoader:
                 bars_before=DISPLAY_FILL_BARS, bars_after=0,
             )
         except Exception as exc:
-            print(f"Görsel dolgu alınamadı ({symbol} {fill_tf}): {exc}")
+            logger.info("Gorsel dolgu alinamadi (%s %s): %s", symbol, fill_tf, exc)
             return trimmed
 
         fill = fill[fill["timestamp"] < earliest]
@@ -675,7 +675,7 @@ class DataLoader:
             with open(self._window_store_meta_path(store_path), "w", encoding="utf-8") as fh:
                 json.dump(payload, fh)
         except Exception as exc:
-            print(f"Pencere deposu manifesti yazılamadı ({store_path}): {exc}")
+            logger.warning("Pencere deposu manifesti yazilamadi (%s): %s", store_path, exc)
 
     @staticmethod
     def _merge_ranges(ranges: list[dict], timeframe: str) -> list[dict]:
@@ -835,7 +835,7 @@ class DataLoader:
                 os.makedirs(os.path.dirname(store_path), exist_ok=True)
                 merged_df.to_parquet(store_path, index=False)
             except Exception as exc:
-                print(f"Pencere deposu yazılamadı ({store_path}): {exc}")
+                logger.warning("Pencere deposu yazilamadi (%s): %s", store_path, exc)
                 return
 
             self._write_window_store_meta(store_path, ranges)
@@ -1046,7 +1046,7 @@ class DataLoader:
                     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
                     df_4h.to_parquet(cache_path, index=False)
                 except Exception as e:
-                    print(f"Warning: Failed to save resampled 4h cache: {e}")
+                    logger.warning("Yeniden orneklenmis 4h onbellegi yazilamadi: %s", e)
             return df_4h
 
         # Retention tavanının ötesindeki geçmişi İSTEMEDEN önce kırp: aşağıdaki
@@ -1153,13 +1153,13 @@ class DataLoader:
                 try:
                     df_before = provider.fetch_ohlcv(symbol, timeframe, needed_start, cached_start)
                 except Exception as e:
-                    print(f"Warning: Failed to fetch prefix data: {e}")
+                    logger.warning("Onek verisi cekilemedi (%s %s): %s", symbol, timeframe, e)
                     
             if needed_end > cached_end and (needed_end - cached_end) > timedelta(minutes=15):
                 try:
                     df_after = provider.fetch_ohlcv(symbol, timeframe, cached_end, needed_end)
                 except Exception as e:
-                    print(f"Warning: Failed to fetch suffix data: {e}")
+                    logger.warning("Sonek verisi cekilemedi (%s %s): %s", symbol, timeframe, e)
                     
             if not df_before.empty or not df_after.empty:
                 dfs_to_concat = []

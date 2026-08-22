@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -8,6 +9,8 @@ import requests
 import pandas as pd
 from datetime import datetime
 from .base import IDataProvider
+
+logger = logging.getLogger(__name__)
 
 # Binance'in aynı veriyi veren yansıları. Sıra ÖNEMSİZ değildir: eskiden liste
 # baştan sona denendiği için daima ilk sıradaki kullanılıyordu ve o, ölçümde en
@@ -78,7 +81,7 @@ def _probe_fastest_endpoint() -> str:
             if result is None:
                 continue
             url, elapsed = result
-            print(f"Binance yansısı seçildi: {url} ({elapsed:.2f}s)")
+            logger.info("Binance yansisi secildi: %s (%.2fs)", url, elapsed)
             return url
 
     return KLINE_ENDPOINTS[0]
@@ -223,7 +226,7 @@ class BinanceProvider(IDataProvider):
                     timeout=15,
                 )
             except Exception as e:
-                print("KuCoin fallback error:", e)
+                logger.warning("KuCoin yedegi basarisiz: %s", e)
                 break
 
             if res.status_code != 200:
@@ -406,9 +409,9 @@ class BinanceProvider(IDataProvider):
             # döndürmemek doğru: çağıran taraf önbelleği bozmadan bir sonraki
             # istekte yeniden dener. `reachable` bilgisi korunur — hiçbir sayfa
             # gelmediyse KuCoin yedeği devreye girmelidir.
-            print(
-                f"Binance sayfaları eksik ({symbol} {timeframe}): "
-                f"{len(pending)}/{len(starts)} sayfa alınamadı"
+            logger.warning(
+                "Binance sayfalari eksik (%s %s): %d/%d sayfa alinamadi",
+                symbol, timeframe, len(pending), len(starts),
             )
             return [], reachable
 

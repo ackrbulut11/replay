@@ -4,6 +4,8 @@ TradingResearchPlatform/
 ├── README.md
 ├── LICENSE
 ├── .gitignore
+├── vercel.json                       # Kök kopya — Vercel'in okuduğu frontend/vercel.json (ikisi de güncel tutulur)
+├── render.yaml                       # Render servis/ortam değişkeni tanımı (belgeleyici; blueprint bağlanmadıkça etkisiz)
 ├── docs/
 │
 ├── frontend/                         # Modern Web Application (React + Vite + TypeScript)
@@ -163,6 +165,7 @@ TradingResearchPlatform/
 │   │   │   ├── postgres.py           # Kullanılmıyor / gelecekteki Postgres desteği için
 │   │   │   ├── models.py             # User, Strategy, StrategyScan, StrategyEvaluation, Alert, Watchlist, ReplaySession, JournalTrade, ChartLayout
 │   │   │   ├── migrate.py            # run_migrations() — açılışta ve testlerde şemayı güncel tutar
+│   │   │   ├── retention.py          # Olay tablolarının budanması (RULES.md §24 ile aynı gerekçe)
 │   │   │   └── migrations/           # Alembic
 │   │   │       ├── env.py
 │   │   │       ├── script.py.mako

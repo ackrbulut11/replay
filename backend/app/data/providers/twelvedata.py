@@ -19,6 +19,7 @@ en az 2020'ye kadar kesintisiz sayfalanabiliyor.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from datetime import datetime
@@ -27,6 +28,8 @@ import pandas as pd
 import requests
 
 from ...core.config import settings
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.twelvedata.com/time_series"
 MAX_OUTPUTSIZE = 5000
@@ -210,9 +213,9 @@ def fetch_ohlcv(
         if waited is None:
             # Throttle bütçesi doldu: kalan sayfaları beklemek yerine elde
             # olanla dön (bkz. MAX_THROTTLE_WAIT_SECONDS).
-            print(
-                f"Twelve Data throttle bütçesi doldu ({sym} {interval}); "
-                f"{len(rows)} mumla yetinildi"
+            logger.info(
+                "Twelve Data throttle butcesi doldu (%s %s); %d mumla yetinildi",
+                sym, interval, len(rows),
             )
             break
         wait_budget -= waited

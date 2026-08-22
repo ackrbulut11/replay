@@ -272,7 +272,15 @@ class StrategyCreateRequest(BaseModel):
 
 
 class StrategyUpdateRequest(BaseModel):
-    """Strateji güncelleme isteği — tüm alanlar opsiyonel."""
+    """Strateji güncelleme isteği — tüm alanlar opsiyonel.
+
+    **Kısmi güncelleme (PATCH) anlamı:** yalnızca İSTEK GÖVDESİNDE GEÇEN alanlar
+    güncellenir; geçmeyenler olduğu gibi kalır. Ayrım `model_fields_set`
+    üzerinden yapılır, `is not None` ile DEĞİL — aksi halde `null` göndererek
+    bir alanı temizlemek imkânsızdı: kullanıcı kâr al hedefini kaldırmak
+    isteyip `take_profit_pct: null` gönderdiğinde istek sessizce yok sayılıyor
+    ve eski hedef yerinde kalıyordu.
+    """
 
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)

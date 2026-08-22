@@ -281,13 +281,24 @@ class DataLoader:
                 total -= len(evicted)
 
     def _retention_limit(self, timeframe: str) -> int | None:
-        if timeframe in ("1m", "5m", "15m"):
-            return settings.RETENTION_1M
-        if timeframe in ("1h", "4h"):
-            return settings.RETENTION_1H
-        if timeframe in ("1d", "1w", "1mo"):
-            return settings.RETENTION_1D
-        return None
+        """Zaman dilimi başına saklanacak azami mum sayısı (RULES.md §24-27).
+
+        Her dilimin KENDİ limiti var. Eskiden 1dk/5dk/15dk aynı limiti (100.000)
+        paylaşıyordu; bu, 15dk'da ≈2,9 yıl demekti ve §25'in "son birkaç ay"
+        beklentisinin çok ötesindeydi.
+        """
+        limits = {
+            "1m": settings.RETENTION_1M,
+            "5m": settings.RETENTION_5M,
+            "15m": settings.RETENTION_15M,
+            "1h": settings.RETENTION_1H,
+            "4h": settings.RETENTION_4H,
+            "1d": settings.RETENTION_1D,
+            # 1w/1mo: 5.000 hafta ≈ 96 yıl — §25'in "tüm geçmiş"i fiilen bu.
+            "1w": settings.RETENTION_1D,
+            "1mo": settings.RETENTION_1D,
+        }
+        return limits.get(timeframe)
 
     def get_coverage(self, provider_name: str, symbol: str, timeframe: str) -> dict | None:
         """
@@ -1036,18 +1047,19 @@ class DataLoader:
         provider_name = provider_name.lower()
         symbol = symbol.upper()
         
-        # Doğrudan desteklenmeyen hisse senedi/forex zaman dilimleri için yeniden örnekleme (örneğin 4h)
+        # Doğrudan desteklenmeyen hisse senedi/forex zaman dilimleri için yeniden
+        # örnekleme (örneğin 4h). RULES.md #26: yüksek çözünürlükten türetmek
+        # serbest, tersi değil.
+        #
+        # Sonuç parquet'e YAZILMAZ. Eskiden yazılıyordu ama hiç OKUNMUYORDU: bu
+        # dal önbellek kontrolünden ÖNCE olduğu için her istek 1h'ten yeniden
+        # örnekliyor, dosya yalnızca diske yazılıp unutuluyordu — üstelik
+        # retention budamasına da girmediği için sınırsız büyüyordu. 1h zaten
+        # hem RAM'de hem parquet'te önbellekli ve yeniden örnekleme tek bir
+        # pandas işlemi; yazmanın hiçbir karşılığı yoktu.
         if provider_name in ["nasdaq", "bist", "forex", "fx"] and timeframe == "4h":
             df_1h = self.load_data(provider_name, symbol, "1h", start_time, end_time)
-            df_4h = self.resample_ohlcv(df_1h, "4h")
-            if not df_4h.empty:
-                cache_path = self._get_cache_path(provider_name, symbol, timeframe)
-                try:
-                    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-                    df_4h.to_parquet(cache_path, index=False)
-                except Exception as e:
-                    logger.warning("Yeniden orneklenmis 4h onbellegi yazilamadi: %s", e)
-            return df_4h
+            return self.resample_ohlcv(df_1h, "4h")
 
         # Retention tavanının ötesindeki geçmişi İSTEMEDEN önce kırp: aşağıdaki
         # bütün yollar (soğuk indirme, önek tamamlama, kapsama kontrolü) bu

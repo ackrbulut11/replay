@@ -209,29 +209,41 @@ class StrategyEngine:
 
         rules = dict(row.rules or {})
 
-        if request.name is not None:
+        # Yalnızca İSTEK GÖVDESİNDE GEÇEN alanlar güncellenir. Ayrım
+        # `model_fields_set` üzerinden yapılır, `is not None` ile DEĞİL: eski
+        # kontrol `null` ile bir alanı TEMİZLEMEYİ imkânsız kılıyordu.
+        # Kullanıcı kâr al hedefini kaldırmak isteyip `take_profit_pct: null`
+        # gönderdiğinde istek sessizce yok sayılıyor, eski hedef yerinde
+        # kalıyor ve strateji beklenmedik yerde pozisyon kapatmaya devam
+        # ediyordu.
+        sent = request.model_fields_set
+
+        if "name" in sent and request.name is not None:
             row.name = request.name
-        if request.description is not None:
+        if "description" in sent:
             row.description = request.description
-        if request.parameters is not None:
-            rules["parameters"] = [p.model_dump() for p in request.parameters]
-        if request.entry_rules is not None:
+        if "parameters" in sent:
+            rules["parameters"] = [p.model_dump() for p in (request.parameters or [])]
+        if "entry_rules" in sent and request.entry_rules is not None:
             rules["entry_rules"] = request.entry_rules.model_dump()
-        if request.exit_rules is not None:
+        if "exit_rules" in sent and request.exit_rules is not None:
             rules["exit_rules"] = request.exit_rules.model_dump()
-        if request.timeframe_filters is not None:
-            rules["timeframe_filters"] = [tf.model_dump() for tf in request.timeframe_filters]
-        if request.allow_short is not None:
-            rules["allow_short"] = request.allow_short
-        if request.take_profit_pct is not None:
+        if "timeframe_filters" in sent:
+            rules["timeframe_filters"] = [
+                tf.model_dump() for tf in (request.timeframe_filters or [])
+            ]
+        if "allow_short" in sent:
+            rules["allow_short"] = bool(request.allow_short)
+        # Bu üçü açıkça `null` ile temizlenebilir olmalı (hedef/stop kaldırma).
+        if "take_profit_pct" in sent:
             rules["take_profit_pct"] = request.take_profit_pct
-        if request.stop_loss_pct is not None:
+        if "stop_loss_pct" in sent:
             rules["stop_loss_pct"] = request.stop_loss_pct
-        if request.bar_delay is not None:
+        if "bar_delay" in sent and request.bar_delay is not None:
             rules["bar_delay"] = request.bar_delay
-        if request.commission_bps is not None:
+        if "commission_bps" in sent and request.commission_bps is not None:
             rules["commission_bps"] = request.commission_bps
-        if request.slippage_bps is not None:
+        if "slippage_bps" in sent and request.slippage_bps is not None:
             rules["slippage_bps"] = request.slippage_bps
 
         # Guncellenen agac da dogrulanir: kismi bir guncelleme gecerli bir

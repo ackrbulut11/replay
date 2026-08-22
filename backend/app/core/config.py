@@ -87,10 +87,26 @@ class Settings(BaseSettings):
     # 1.000.000 satır ≈ 56 MB.
     MEM_CACHE_MAX_ROWS: int = 1_000_000
 
-    # Veri Saklama Limitleri (Varsayılan bar sayıları)
-    RETENTION_1M: int = 100000  # son birkaç ay
-    RETENTION_1H: int = 20000   # son 1-2 yıl
-    RETENTION_1D: int = 5000    # son 5-10 yıl
+    # ─── Veri Saklama Limitleri (bar sayısı, RULES.md §24-27) ────────────────
+    #
+    # Limit ZAMAN DİLİMİ BAŞINA tanımlanır. Eskiden 1dk/5dk/15dk aynı limiti
+    # (100.000) paylaşıyordu ve bu, kuralın söylediğinin çok ötesiydi:
+    # 100.000 adet 15dk mumu ≈ 2,9 YIL, oysa §25 "son birkaç ay" diyor.
+    #
+    # Kabaca karşılıkları (7/24 piyasa; kapalı piyasalarda daha uzun süreye
+    # denk gelir):
+    RETENTION_1M: int = 100_000   # ≈ 69 gün
+    RETENTION_5M: int = 50_000    # ≈ 174 gün
+    RETENTION_15M: int = 20_000   # ≈ 208 gün
+    RETENTION_1H: int = 20_000    # ≈ 2,3 yıl
+    RETENTION_4H: int = 6_000     # ≈ 2,7 yıl
+    RETENTION_1D: int = 5_000     # ≈ 13,7 yıl (işlem günüyle daha uzun)
+    # 1h/1g üstü uzun dilimler (1w/1mo) `RETENTION_1D` ile sınırlanır; 5.000
+    # hafta ≈ 96 yıl, yani §25'in "tüm geçmiş" beklentisini fiilen karşılar.
+    #
+    # NOT: bu değerler yalnızca DİSKTE ne kadar geçmiş tutulacağını belirler ve
+    # aynı zamanda testlerin ne kadar geriye gidebileceğini sınırlar. Daha derin
+    # intraday testi gerekiyorsa .env'den yükseltilebilir.
 
     @field_validator("DATABASE_URL")
     @classmethod

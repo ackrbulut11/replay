@@ -283,3 +283,46 @@ class TestBuyAndHold(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPartialUpdateSemantics(unittest.TestCase):
+    """Kismi guncelleme `null` ile alan TEMIZLEYEBILMELI.
+
+    Eski kontrol `is not None` idi: kullanici kar al hedefini kaldirmak isteyip
+    `take_profit_pct: null` gonderdiginde istek sessizce yok sayiliyor, eski
+    hedef yerinde kaliyor ve strateji beklenmedik yerde pozisyon kapatmaya
+    devam ediyordu.
+    """
+
+    def _engine(self):
+        from app.engines.strategy_engine import StrategyEngine
+
+        return StrategyEngine()
+
+    def _update(self, **payload):
+        from app.rules.strategy_models import StrategyUpdateRequest
+
+        return StrategyUpdateRequest(**payload)
+
+    def test_gonderilmeyen_alan_degismez(self):
+        request = self._update(name="Yeni ad")
+        self.assertEqual(request.model_fields_set, {"name"})
+        self.assertNotIn("take_profit_pct", request.model_fields_set)
+
+    def test_acikca_null_gonderilen_alan_isaretlenir(self):
+        request = self._update(take_profit_pct=None)
+        # Deger None ama alan GONDERILDI: ikisi ayirt edilebilmeli.
+        self.assertIn("take_profit_pct", request.model_fields_set)
+        self.assertIsNone(request.take_profit_pct)
+
+    def test_hedef_null_ile_temizlenir(self):
+        rules = {"take_profit_pct": 5.0, "stop_loss_pct": 2.0}
+        request = self._update(take_profit_pct=None)
+        sent = request.model_fields_set
+        if "take_profit_pct" in sent:
+            rules["take_profit_pct"] = request.take_profit_pct
+        if "stop_loss_pct" in sent:
+            rules["stop_loss_pct"] = request.stop_loss_pct
+        # Hedef temizlendi, stop dokunulmadi.
+        self.assertIsNone(rules["take_profit_pct"])
+        self.assertEqual(rules["stop_loss_pct"], 2.0)

@@ -329,3 +329,42 @@ class TestNormalizationIsConsistent(unittest.TestCase):
         second = self._load()
         self.assertEqual(list(first["volume"]), list(second["volume"]))
         self.assertEqual(list(first["open"]), list(second["open"]))
+
+
+class TestPerTimeframeRetention(unittest.TestCase):
+    """Retention limiti ZAMAN DILIMI BASINA tanimlanir (RULES.md §24-27).
+
+    Eskiden 1dk/5dk/15dk ayni limiti (100.000) paylasiyordu; 100.000 adet 15dk
+    mumu ≈ 2,9 YIL demek, oysa §25 'son birkac ay' diyor.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp()
+        self.loader = DataLoader()
+        self.loader.project_root = self.tmp
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_her_dilimin_kendi_limiti_var(self):
+        limits = {tf: self.loader._retention_limit(tf) for tf in
+                  ("1m", "5m", "15m", "1h", "4h", "1d", "1w", "1mo")}
+        # Hicbiri bos degil
+        self.assertTrue(all(v is not None for v in limits.values()), limits)
+        # Cozunurluk arttikca saklanan gecmis KISALIR (§25).
+        self.assertGreater(limits["1m"], limits["5m"])
+        self.assertGreater(limits["5m"], limits["15m"])
+        self.assertGreater(limits["1h"], limits["4h"])
+
+    def test_15dk_artik_1dk_ile_ayni_limiti_paylasmaz(self):
+        self.assertNotEqual(
+            self.loader._retention_limit("15m"), self.loader._retention_limit("1m")
+        )
+
+    def test_haftalik_ve_aylik_gunluk_limitini_kullanir(self):
+        daily = self.loader._retention_limit("1d")
+        self.assertEqual(self.loader._retention_limit("1w"), daily)
+        self.assertEqual(self.loader._retention_limit("1mo"), daily)
+
+    def test_bilinmeyen_dilim_limitsizdir(self):
+        self.assertIsNone(self.loader._retention_limit("3h"))

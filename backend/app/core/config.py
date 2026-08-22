@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     PERF_LOG: Optional[bool] = None
     # Boş bırakılırsa `storage/logs/perf.jsonl` (bkz. perf_log_path).
     PERF_LOG_PATH: str = ""
+    # Log dosyası bu boyutu aşınca devredilir (mevcut dosya `.1` olur, yenisi
+    # sıfırdan başlar). Sınırsız bırakmak RULES.md §24'ün yasakladığı şeydi:
+    # istek başına bir satır, yoğun bir günde on binlerce satır, hiç temizlik.
+    # Tek yedek tutulur — bu bir hata ayıklama aracı, arşiv değil.
+    PERF_LOG_MAX_MB: float = 5.0
 
     # Arka plan alarm taramasının sıklığı (dakika).
     #
@@ -171,6 +176,11 @@ class Settings(BaseSettings):
         altına düşer — izleyicinin varsayılanı da orayı arar.
         """
         return self.PERF_LOG_PATH or os.path.join("storage", "logs", "perf.jsonl")
+
+    @property
+    def perf_log_max_bytes(self) -> int:
+        """Devretme eşiği (bayt). En az 64 KB — sıfır vermek dosyayı işlevsiz kılardı."""
+        return max(int(self.PERF_LOG_MAX_MB * 1024 * 1024), 64 * 1024)
 
     def production_config_errors(self) -> list[str]:
         """Üretimde kabul edilemez yapılandırmaları listeler (yoksa boş liste).

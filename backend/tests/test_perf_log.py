@@ -249,3 +249,88 @@ class TestFormatLine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDevretme(unittest.TestCase):
+    """Log dosyasi sinirsiz buyumez (RULES.md §24 ile ayni gerekce).
+
+    Istek basina bir satir ekleniyor ve hic temizlenmiyordu: yogun bir gunde
+    on binlerce satir, aylarca birikirse yuzlerce MB.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.log_path = os.path.join(self.tmp, "logs", "perf.jsonl")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _client(self, max_bytes):
+        app = FastAPI()
+        app.add_middleware(
+            perf.PerfLoggingMiddleware, log_path=self.log_path, max_bytes=max_bytes
+        )
+
+        @app.get("/api/market/window")
+        def window(bars_before: int = 1500, bars_after: int = 1000):
+            return {"ok": True}
+
+        return TestClient(app)
+
+    def _sizes(self):
+        current = os.path.getsize(self.log_path) if os.path.exists(self.log_path) else 0
+        backup_path = self.log_path + ".1"
+        backup = os.path.getsize(backup_path) if os.path.exists(backup_path) else 0
+        return current, backup
+
+    def test_esik_asilinca_devredilir(self):
+        client = self._client(max_bytes=8 * 1024)
+        # Her satir ~250 bayt; 60 istek 8 KB esigi asar.
+        for _ in range(60):
+            client.get("/api/market/window")
+
+        current, backup = self._sizes()
+        self.assertGreater(backup, 0, "yedek olusmadi")
+        self.assertLessEqual(current, 8 * 1024, "guncel dosya esigi asti")
+
+    def test_toplam_boyut_iki_dosyayla_sinirli(self):
+        limit = 8 * 1024
+        client = self._client(max_bytes=limit)
+        for _ in range(300):
+            client.get("/api/market/window")
+
+        current, backup = self._sizes()
+        # Tek yedek tutulur: tavan kabaca 2 x limit.
+        self.assertLessEqual(current + backup, limit * 2 + 1024)
+
+    def test_devretme_sonrasi_yazmaya_devam_eder(self):
+        client = self._client(max_bytes=8 * 1024)
+        for _ in range(60):
+            client.get("/api/market/window")
+        client.get("/api/market/window")
+        # Devretmeden SONRA gelen istek yeni dosyada olmali.
+        with open(self.log_path, "r", encoding="utf-8") as handle:
+            lines = [line for line in handle if line.strip()]
+        self.assertGreater(len(lines), 0)
+        json.loads(lines[-1])  # gecerli JSON
+
+    def test_onceki_oturumun_dosyasi_hesaba_katilir(self):
+        # Surec yeniden baslayinca sayac sifirlanip dosya iki katina cikmamali.
+        os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
+        with open(self.log_path, "w", encoding="utf-8") as handle:
+            handle.write("x" * 60_000 + "\n")
+
+        client = self._client(max_bytes=64 * 1024)
+        for _ in range(50):
+            client.get("/api/market/window")
+
+        _, backup = self._sizes()
+        self.assertGreater(backup, 0, "onceki oturumun dosyasi devredilmedi")
+
+    def test_devretme_basarisizsa_istek_bozulmaz(self):
+        client = self._client(max_bytes=8 * 1024)
+        # Windows'ta hedef acikken os.replace hata verebilir.
+        with patch("app.core.perf.os.replace", side_effect=OSError("dosya kilitli")):
+            for _ in range(60):
+                response = client.get("/api/market/window")
+                self.assertEqual(response.status_code, 200)

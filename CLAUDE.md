@@ -34,7 +34,9 @@ python main.py                   # uvicorn on 127.0.0.1:8000 with reload
 ### Performans logu (`scripts/`)
 Backend her isteği süre ölçüp `backend/storage/logs/perf.jsonl`'a yazar ve uvicorn
 terminaline basar (`app/core/perf.py`). Üretimde kendiliğinden kapalı; `PERF_LOG`
-ile zorlanabilir. Ayrı bir terminalde canlı izlemek için:
+ile zorlanabilir. Dosya `PERF_LOG_MAX_MB`'yi (varsayılan 5) aşınca devreder —
+tek yedek (`.jsonl.1`) tutulur, yani disk tavanı kabaca 10 MB. Log dosyaları
+git'e girmez (`.gitignore`: `**/storage/logs/`); kod ve testler girer. Ayrı bir terminalde canlı izlemek için:
 ```bash
 python scripts/perf_log.py            # canlı akış
 python scripts/perf_log.py --ozet     # uç bazında medyan/en kötü/sağlayıcı payı

@@ -130,8 +130,8 @@ def format_entry(entry: dict) -> str:
     return "".join(line)
 
 
-def read_entries(path: str) -> list[dict]:
-    """Dosyadaki tüm kayıtları okur; bozuk satırlar atlanır."""
+def _read_one(path: str) -> list[dict]:
+    """Tek bir dosyayı okur; bozuk satırlar atlanır."""
     if not os.path.exists(path):
         return []
     entries = []
@@ -145,6 +145,19 @@ def read_entries(path: str) -> list[dict]:
             except json.JSONDecodeError:
                 # Tail sırasında yarım yazılmış son satıra denk gelinebilir.
                 continue
+    return entries
+
+
+def read_entries(path: str, include_backup: bool = True) -> list[dict]:
+    """Kayıtları kronolojik sırada okur — devredilmiş yedek de dahil.
+
+    Backend dosya belli bir boyutu aşınca devrediyor (`perf.jsonl` → `.1`).
+    Yalnızca güncel dosyayı okumak, devretmenin hemen ardından çalıştırılan
+    bir `--ozet`'in neredeyse boş çıkması demekti; yedek daha ESKİ olduğu için
+    önce okunur.
+    """
+    entries = _read_one(path + ".1") if include_backup else []
+    entries.extend(_read_one(path))
     return entries
 
 
@@ -220,7 +233,9 @@ def follow(path: str, min_ms: float, tail: int) -> None:
 
             size = os.path.getsize(path)
             if size < position:
-                # Dosya döndürülmüş/silinmiş: baştan oku.
+                # Dosya devredilmiş (`.1` oldu) ya da silinmiş: yeni dosyayı
+                # baştan oku, aksi halde okuma imleci dosyanın sonunda kalır
+                # ve hiçbir yeni satır görünmezdi.
                 position = 0
             if size == position:
                 time.sleep(0.25)
@@ -274,11 +289,14 @@ def main() -> None:
     path = os.path.abspath(args.path)
 
     if args.temizle:
-        if os.path.exists(path):
-            os.remove(path)
-            print(f"Silindi: {path}")
-        else:
-            print(f"Zaten yok: {path}")
+        removed = []
+        # Yedek de silinir: yalnızca güncel dosyayı silmek, bir sonraki
+        # `--ozet`'te devredilmiş eski kayıtların geri gelmesi demekti.
+        for target in (path, path + ".1"):
+            if os.path.exists(target):
+                os.remove(target)
+                removed.append(os.path.basename(target))
+        print(f"Silindi: {', '.join(removed)}" if removed else "Zaten temiz.")
         return
 
     if args.ozet:

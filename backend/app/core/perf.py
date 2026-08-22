@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -216,12 +217,60 @@ SLOW_MS = 1000.0
 
 
 class PerfLoggingMiddleware(BaseHTTPMiddleware):
-    """Her isteği süre ölçüp stdout'a ve JSONL dosyasına yazar."""
+    """Her isteği süre ölçüp stdout'a ve JSONL dosyasına yazar.
 
-    def __init__(self, app, log_path: str):
+    Dosya `max_bytes`ı aşınca devredilir: mevcut dosya `.1` uzantısıyla yedeğe
+    alınır, yenisi sıfırdan başlar. Sınırsız bırakmak RULES.md §24'ün yasakladığı
+    şeyin ta kendisiydi — istek başına bir satır, yoğun bir günde on binlerce
+    satır ve hiç temizlenmiyor.
+
+    Tek yedek tutulur: bu bir hata ayıklama aracı, arşiv değil. Daha eskisine
+    ihtiyaç duyulduğu an zaten yeniden ölçmek gerekir.
+    """
+
+    def __init__(self, app, log_path: str, max_bytes: int = 5 * 1024 * 1024):
         super().__init__(app)
         self.log_path = log_path
+        self.max_bytes = max_bytes
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+        # Boyut süreç içinde sayılır: her istekte `os.path.getsize` çağırmak
+        # gereksiz bir sistem çağrısı olurdu. Başlangıçta bir kez okunur ki
+        # önceki oturumdan kalan dosya da hesaba katılsın.
+        self._size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
+        self._lock = threading.Lock()
+
+    @property
+    def backup_path(self) -> str:
+        return self.log_path + ".1"
+
+    def _rotate(self) -> None:
+        """Mevcut dosyayı yedeğe alır ve sayacı sıfırlar.
+
+        Windows'ta hedef dosya bir başkası tarafından açıksa `os.replace`
+        hata verebilir. O durumda devretme ATLANIR ve bir sonraki yazımda
+        yeniden denenir — sayaç yüksek kaldığı için deneme kendiliğinden
+        tekrarlanır. Ölçüm uğruna veri kaybetmektense dosyanın bir süre
+        daha büyümesi yeğdir.
+        """
+        try:
+            if os.path.exists(self.backup_path):
+                os.remove(self.backup_path)
+            if os.path.exists(self.log_path):
+                os.replace(self.log_path, self.backup_path)
+            self._size = 0
+        except OSError:
+            pass
+
+    def _write(self, line: str) -> None:
+        data = line + "\n"
+        size = len(data.encode("utf-8"))
+        with self._lock:
+            if self._size + size > self.max_bytes:
+                self._rotate()
+            with open(self.log_path, "a", encoding="utf-8") as handle:
+                handle.write(data)
+            self._size += size
 
     async def dispatch(self, request: Request, call_next):
         record = RequestPerf()
@@ -258,9 +307,7 @@ class PerfLoggingMiddleware(BaseHTTPMiddleware):
             "notes": record.notes,
         }
 
-        with open(self.log_path, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
+        self._write(json.dumps(entry, ensure_ascii=False))
         _safe_print(format_line(entry))
 
 
@@ -326,5 +373,9 @@ def install(app, settings_obj=settings) -> Optional[str]:
     if not settings_obj.perf_log_enabled:
         return None
     path = settings_obj.perf_log_path
-    app.add_middleware(PerfLoggingMiddleware, log_path=path)
+    app.add_middleware(
+        PerfLoggingMiddleware,
+        log_path=path,
+        max_bytes=settings_obj.perf_log_max_bytes,
+    )
     return path

@@ -1,6 +1,8 @@
+import logging
 import os
 import sys
 import threading
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
@@ -8,8 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
 from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
+from app.database.migrate import run_migrations
 from app.auth.router import router as auth_router
 from app.api.routes import alerts, market, strategy, admin, watchlist, analytics, waitlist, chart_settings, journal, patterns
+
+logger = logging.getLogger(__name__)
 
 
 def init_error_monitoring() -> None:
@@ -34,38 +39,7 @@ def init_error_monitoring() -> None:
     )
 
 
-def run_migrations() -> None:
-    """
-    Şemayı Alembic ile güncel tutar (RULES.md #11).
-
-    `Base.metadata.create_all()` yerine migration çalıştırılır; create_all
-    eksik tabloları yaratır ama mevcut tabloya kolon ekleyemez ve alembic
-    damgası bırakmadığı için sonraki migration'ları bozar.
-
-    Üç durumu da güvenle karşılar:
-      1. Sıfır veritabanı            -> tüm revizyonlar uygulanır
-      2. Alembic öncesi veritabanı   -> önce 0001 olarak damgalanır, sonra yükseltilir
-         (aksi halde "tablo zaten var" hatası verir ve uygulama hiç açılmaz)
-      3. Zaten güncel veritabanı     -> hiçbir şey yapılmaz
-    """
-    from alembic import command
-    from alembic.config import Config
-    from sqlalchemy import inspect
-
-    from app.database.postgres import engine
-
-    alembic_cfg = Config(os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic.ini"))
-
-    tables = set(inspect(engine).get_table_names())
-    if "alembic_version" not in tables and "users" in tables:
-        # Alembic devreye alınmadan önce create_all ile kurulmuş veritabanı.
-        print("Alembic damgası yok, mevcut şema 0001 olarak damgalanıyor...")
-        command.stamp(alembic_cfg, "0001")
-
-    command.upgrade(alembic_cfg, "head")
-
-
-def start_market_update_scheduler() -> None:
+def start_market_update_scheduler():
     """
     Gece yarısı toplu piyasa verisi güncellemesini zamanlar (`scripts/update_market.py`).
 
@@ -74,6 +48,11 @@ def start_market_update_scheduler() -> None:
     gün içindeki tüm istekler bu önbellekten okur. Tek uvicorn worker varsayılır —
     birden fazla worker'a geçilirse job'ın tekrar tetiklenmemesi için ek bir
     koruma (ör. sadece "primary" worker'da başlatma) eklenmesi gerekir.
+
+    Kapatılabilmesi için zamanlayıcı DÖNDÜRÜLÜR: eskiden modül seviyesinde
+    başlatılıp hiç durdurulmuyordu, yani `import main` yapan her süreç (CI'daki
+    import kontrolü ve tüm test suite'i dahil) arkada bir zamanlayıcı thread'i
+    bırakıyordu.
     """
     scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")
     sys.path.insert(0, os.path.abspath(scripts_dir))
@@ -84,7 +63,8 @@ def start_market_update_scheduler() -> None:
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_market_update, trigger="cron", hour=0, minute=0, id="nightly_market_update")
     scheduler.start()
-    print(f"Gece yarısı piyasa verisi güncelleme işi zamanlandı: {scheduler.get_jobs()}")
+    logger.info("Gece yarisi piyasa verisi guncelleme isi zamanlandi: %s", scheduler.get_jobs())
+    return scheduler
 
 
 def warm_binance_endpoint() -> None:
@@ -101,16 +81,45 @@ def warm_binance_endpoint() -> None:
     threading.Thread(target=get_ordered_endpoints, daemon=True).start()
 
 
-settings.assert_production_ready()
-init_error_monitoring()
-run_migrations()
-start_market_update_scheduler()
-warm_binance_endpoint()
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Açılış/kapanış işleri.
+
+    Bunlar eskiden MODÜL SEVİYESİNDE, `app = FastAPI(...)` satırından bile önce
+    çalışıyordu. Yani `import main` demek migration çalıştırmak, bir zamanlayıcı
+    thread'i başlatmak ve dışarı ağ isteği atmak demekti — CI'daki
+    `python -c "import main"` adımı ve tüm test suite'i bunları tetikliyordu.
+    Birden fazla uvicorn worker'a geçilirse her worker aynı anda
+    `alembic upgrade head` çalıştırırdı.
+
+    Artık yalnızca uygulama GERÇEKTEN ayağa kalkarken çalışıyorlar ve kapanışta
+    düzgün durduruluyorlar.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    settings.assert_production_ready()
+    init_error_monitoring()
+    run_migrations()
+
+    scheduler = None
+    if settings.ENABLE_SCHEDULER:
+        scheduler = start_market_update_scheduler()
+    warm_binance_endpoint()
+
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+
 
 app = FastAPI(
     title="Trading Research Platform API",
     version="0.1.0",
-    description="Backend services for Replay, Strategy, Scanner and Journal"
+    description="Backend services for Replay, Strategy, Scanner and Journal",
+    lifespan=lifespan,
 )
 
 origins = [

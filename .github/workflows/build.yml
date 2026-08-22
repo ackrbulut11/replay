@@ -51,6 +51,10 @@ jobs:
           ruff check .
       # Uygulamanın import edilebildiğini ayrıca doğrula: import zamanı
       # annotation hataları testlerden önce ve daha anlaşılır şekilde patlasın.
+      #
+      # Bu adım artık GERÇEKTEN yalnızca import kontrolü: açılış işleri
+      # (migration, zamanlayıcı, ağ yoklaması) lifespan'a taşındı, eskiden
+      # burada kendiliğinden çalışıyorlardı.
       - name: Import check
         run: |
           cd backend

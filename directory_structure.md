@@ -162,6 +162,7 @@ TradingResearchPlatform/
 │   │   │   ├── sqlite.py             # Engine & Session (aktif — DATABASE_URL sqlite:///./storage/database/app.db)
 │   │   │   ├── postgres.py           # Kullanılmıyor / gelecekteki Postgres desteği için
 │   │   │   ├── models.py             # User, Strategy, StrategyScan, StrategyEvaluation, Alert, Watchlist, ReplaySession, JournalTrade, ChartLayout
+│   │   │   ├── migrate.py            # run_migrations() — açılışta ve testlerde şemayı güncel tutar
 │   │   │   └── migrations/           # Alembic
 │   │   │       ├── env.py
 │   │   │       ├── script.py.mako

@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # sunucu IP'sinin engellenmesine yol açabiliyor.
     MARKET_RATE_LIMIT_PER_MINUTE: int = 120
 
+    # Gece yarısı piyasa verisi güncelleme işi. Testlerde ve CI'da kapatılabilsin
+    # diye ayar: eskiden `import main` yapan her süreç arkada bir zamanlayıcı
+    # thread'i bırakıyordu. Birden fazla uvicorn worker'a geçilirse de yalnızca
+    # birinde açık bırakmak için kullanılabilir.
+    ENABLE_SCHEDULER: bool = True
+
     # Süreç içi (RAM) mum önbelleğinin azami toplam satır sayısı.
     #
     # Bu önbellek sınırsızdı: yüklenen her sembol+zaman dilimi çerçevesi RAM'de

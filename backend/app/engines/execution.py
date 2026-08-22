@@ -75,6 +75,34 @@ def fill_price(price: float, is_buy: bool, costs: ExecutionCosts) -> float:
     return float(price) * (1.0 + direction * costs.slippage_rate)
 
 
+LONG_SIDE = "long"
+
+
+def level_fill_price(side: str, level: float, bar_open: float, is_stop: bool) -> float:
+    """Seviyeye dokunan koşullu emrin (TP/SL) GERÇEKLEŞME fiyatı.
+
+    Eskiden hem otomatik hem manuel backtest, çıkışı her zaman TAM seviyeden
+    yazıyordu. Mum seviyenin ötesinde AÇTIĞINDA bu imkânsız bir fiyattır:
+    giriş 100, stop 95, sonraki mum 60'tan açıyorsa emir 95'ten değil 60'tan
+    dolar. Sonuç, her kaybeden işleme `-stop_loss_pct` diye yapay bir taban
+    koymaktı — stop kullanan hiçbir stratejinin gerçek kuyruk riski
+    görünmüyordu ve backtest sistematik olarak iyimser çıkıyordu.
+
+    Kural: emir mumun AÇILIŞINDA zaten tetiklenmişse açılıştan, mum içinde
+    tetiklenmişse seviyeden dolar. Bu, aleyhe boşlukları (stop) cezalandırırken
+    lehe boşlukları (kâr al) da hakkıyla verir — ikisi de gerçekte olan şeydir.
+
+    `bar_open` verilmezse (0/None) seviyeye düşülür: açılış bilinmeden boşluk
+    tespit edilemez ve eski davranış korunur.
+    """
+    if not bar_open or bar_open <= 0:
+        return float(level)
+
+    # long+stop ve short+kâr al aşağıdan, diğer ikisi yukarıdan tetiklenir.
+    take_lower = (str(side).lower() == LONG_SIDE) == bool(is_stop)
+    return float(min(level, bar_open) if take_lower else max(level, bar_open))
+
+
 def round_trip_commission_pct(costs: ExecutionCosts) -> float:
     """Bir gidiş-dönüş işlemin komisyon yükü — giriş notional'ının yüzdesi olarak.
 

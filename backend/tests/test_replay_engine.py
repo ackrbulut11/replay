@@ -230,3 +230,38 @@ class TestReportEntegrasyonu(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGapFill(unittest.TestCase):
+    """Manuel replay cikisi da bosluk (gap) farkindalidir.
+
+    Iki motorun ayni konvansiyonu paylasmasi sart: manuel taraf her zaman tam
+    seviyeden ciksaydi, otomatik tarafa gore yapay olarak korunakli gorunur ve
+    karsilastirma stratejiyi degil varsayimi olcerdi.
+    """
+
+    def test_long_stop_asagi_boslukta_acilistan_dolar(self):
+        pos = open_position(LONG, 100.0, bar_index=0, stop_loss=95.0)
+        hit = check_exit(pos, {"open": 60.0, "high": 62.0, "low": 58.0, "close": 60.0})
+        self.assertEqual(hit, (60.0, REASON_STOP_LOSS))
+
+    def test_long_stop_mum_ici_delinirse_seviyeden_dolar(self):
+        pos = open_position(LONG, 100.0, bar_index=0, stop_loss=95.0)
+        hit = check_exit(pos, {"open": 99.0, "high": 100.0, "low": 90.0, "close": 96.0})
+        self.assertEqual(hit, (95.0, REASON_STOP_LOSS))
+
+    def test_long_take_profit_lehe_boslukta_acilistan_dolar(self):
+        pos = open_position(LONG, 100.0, bar_index=0, take_profit=110.0)
+        hit = check_exit(pos, {"open": 130.0, "high": 132.0, "low": 128.0, "close": 130.0})
+        self.assertEqual(hit, (130.0, REASON_TAKE_PROFIT))
+
+    def test_short_stop_yukari_boslukta_acilistan_dolar(self):
+        pos = open_position(SHORT, 100.0, bar_index=0, stop_loss=105.0)
+        hit = check_exit(pos, {"open": 140.0, "high": 142.0, "low": 138.0, "close": 140.0})
+        self.assertEqual(hit, (140.0, REASON_STOP_LOSS))
+
+    def test_acilis_yoksa_seviyeye_dusulur(self):
+        # Eski cagrilar (open tasimayan mum) davranis degistirmez.
+        pos = open_position(LONG, 100.0, bar_index=0, stop_loss=95.0)
+        hit = check_exit(pos, {"high": 101.0, "low": 60.0, "close": 60.0})
+        self.assertEqual(hit, (95.0, REASON_STOP_LOSS))

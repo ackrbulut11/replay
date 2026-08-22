@@ -14,9 +14,12 @@ kalıcılık ise journal katmanının işidir.
   1. **Aynı mumda hem SL hem TP tetiklenirse SL kazanır.** Mum içi (intrabar)
      fiyat sırası bilinmediğinden kötü senaryo varsayılır; aksi halde
      backtest sonuçları sistematik olarak iyimser çıkar.
-  2. **Çıkış fiyatı, mumun high/low'u değil tam SL/TP seviyesidir.** Emrin
-     tam o seviyede dolduğu varsayılır; mumun uç noktasını kullanmak
-     gerçekleşmeyecek bir fiyattan çıkış yazmak olurdu.
+  2. **Çıkış fiyatı SL/TP seviyesidir — mum o seviyenin ötesinde AÇMADIYSA.**
+     Emrin tam seviyeden dolduğu varsayılır; ama mum seviyeyi atlayarak
+     açtıysa (boşluk/gap) emir açılıştan dolar. Ortak hesap
+     `engines/execution.level_fill_price` içindedir ve strateji motoruyla
+     paylaşılır — aksi halde manuel taraf her zaman tam seviyeden çıkıp
+     otomatik tarafa göre yapay olarak korunaklı görünürdü.
 
 Lookahead bias yoktur (RULES.md §19-21): her kontrol yalnızca o anki muma
 bakar, sonraki mumlara erişmez.
@@ -25,6 +28,8 @@ bakar, sonraki mumlara erişmez.
 from __future__ import annotations
 
 from typing import Any, Mapping, Optional
+
+from app.engines.execution import level_fill_price
 
 # Açık bir pozisyon ya da kapanmış bir işlem — düz sözlük olarak taşınır
 # (rule engine'in strateji sözlüğü alması gibi).
@@ -167,6 +172,10 @@ def check_exit(position: Position, bar: Bar) -> Optional[tuple[float, str]]:
     Tetiklendiyse `(çıkış_fiyatı, sebep)`, tetiklenmediyse `None` döner.
     Aynı mumda ikisi de tetiklenirse stop-loss kazanır (modül başlığındaki
     1. konvansiyon).
+
+    Çıkış fiyatı boşluk (gap) farkındalıdır: mum seviyenin ötesinde açtıysa
+    emir açılıştan dolar (2. konvansiyon). Mumda `open` yoksa seviyeye
+    düşülür — açılış bilinmeden boşluk tespit edilemez.
     """
     side = position["side"]
     stop_loss = position.get("stop_loss")
@@ -174,19 +183,21 @@ def check_exit(position: Position, bar: Bar) -> Optional[tuple[float, str]]:
 
     high = float(bar["high"])
     low = float(bar["low"])
+    raw_open = bar.get("open")
+    bar_open = float(raw_open) if raw_open is not None else 0.0
 
     if side == LONG:
         if stop_loss is not None and low <= stop_loss:
-            return stop_loss, REASON_STOP_LOSS
+            return level_fill_price(LONG, stop_loss, bar_open, is_stop=True), REASON_STOP_LOSS
         if take_profit is not None and high >= take_profit:
-            return take_profit, REASON_TAKE_PROFIT
+            return level_fill_price(LONG, take_profit, bar_open, is_stop=False), REASON_TAKE_PROFIT
         return None
 
     if side == SHORT:
         if stop_loss is not None and high >= stop_loss:
-            return stop_loss, REASON_STOP_LOSS
+            return level_fill_price(SHORT, stop_loss, bar_open, is_stop=True), REASON_STOP_LOSS
         if take_profit is not None and low <= take_profit:
-            return take_profit, REASON_TAKE_PROFIT
+            return level_fill_price(SHORT, take_profit, bar_open, is_stop=False), REASON_TAKE_PROFIT
         return None
 
     raise ValueError(f"Geçersiz pozisyon yönü: {side!r}")

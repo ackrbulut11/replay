@@ -18,7 +18,12 @@ from typing import Union
 
 import pandas as pd
 
-from app.engines.execution import ExecutionCosts, fill_price, net_pnl_percent
+from app.engines.execution import (
+    ExecutionCosts,
+    fill_price,
+    level_fill_price,
+    net_pnl_percent,
+)
 from app.indicators.registry import IndicatorRegistry
 from app.rules.evaluator import RuleEvaluator, iter_operands
 from app.rules.strategy_models import SignalType
@@ -369,39 +374,56 @@ class RuleEngine:
             tp_sl_reason = []
             exec_price = close_price
 
+            # Seviyeler mutlak fiyata çevrilir; tetiklenme mumun high/low'una,
+            # gerçekleşme fiyatı ise `level_fill_price` ile mumun AÇILIŞINA göre
+            # belirlenir (boşluklu açılışta emir seviyeden dolmaz).
+            #
+            # `or pnl_close ...` koşulları kaldırıldı: low <= close <= high her
+            # zaman geçerli olduğundan bu dallar hiçbir zaman tek başına
+            # tetiklenemiyordu (ölü kod).
             if position_state == "long" and last_entry_price is not None and last_entry_price > 0:
-                pnl_high = ((high_price - last_entry_price) / last_entry_price) * 100.0
-                pnl_low = ((low_price - last_entry_price) / last_entry_price) * 100.0
-                pnl_close = ((close_price - last_entry_price) / last_entry_price) * 100.0
-
                 # 1. Önce Zarar Durdur (Stop Loss) kontrol et
-                if stop_loss_pct is not None and stop_loss_pct > 0 and (pnl_low <= -stop_loss_pct or pnl_close <= -stop_loss_pct):
+                if stop_loss_pct is not None and stop_loss_pct > 0:
+                    stop_level = last_entry_price * (1.0 - (stop_loss_pct / 100.0))
+                else:
+                    stop_level = None
+                if take_profit_pct is not None and take_profit_pct > 0:
+                    target_level = last_entry_price * (1.0 + (take_profit_pct / 100.0))
+                else:
+                    target_level = None
+
+                if stop_level is not None and low_price <= stop_level:
                     tp_sl_signal = SignalType.SELL
                     tp_sl_reason = [f"Zarar Durdur (-%{stop_loss_pct})"]
-                    exec_price = last_entry_price * (1.0 - (stop_loss_pct / 100.0))
+                    exec_price = level_fill_price("long", stop_level, open_price, is_stop=True)
 
                 # 2. Sonra Kar Al (Take Profit) kontrol et
-                elif take_profit_pct is not None and take_profit_pct > 0 and (pnl_high >= take_profit_pct or pnl_close >= take_profit_pct):
+                elif target_level is not None and high_price >= target_level:
                     tp_sl_signal = SignalType.SELL
                     tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
-                    exec_price = last_entry_price * (1.0 + (take_profit_pct / 100.0))
+                    exec_price = level_fill_price("long", target_level, open_price, is_stop=False)
 
             elif position_state == "short" and last_entry_price is not None and last_entry_price > 0:
-                pnl_high_loss = ((last_entry_price - high_price) / last_entry_price) * 100.0
-                pnl_low_gain = ((last_entry_price - low_price) / last_entry_price) * 100.0
-                pnl_close = ((last_entry_price - close_price) / last_entry_price) * 100.0
+                if stop_loss_pct is not None and stop_loss_pct > 0:
+                    stop_level = last_entry_price * (1.0 + (stop_loss_pct / 100.0))
+                else:
+                    stop_level = None
+                if take_profit_pct is not None and take_profit_pct > 0:
+                    target_level = last_entry_price * (1.0 - (take_profit_pct / 100.0))
+                else:
+                    target_level = None
 
                 # 1. Önce Zarar Durdur (Stop Loss) kontrol et
-                if stop_loss_pct is not None and stop_loss_pct > 0 and (pnl_high_loss <= -stop_loss_pct or pnl_close <= -stop_loss_pct):
+                if stop_level is not None and high_price >= stop_level:
                     tp_sl_signal = SignalType.BUY
                     tp_sl_reason = [f"Zarar Durdur (-%{stop_loss_pct})"]
-                    exec_price = last_entry_price * (1.0 + (stop_loss_pct / 100.0))
+                    exec_price = level_fill_price("short", stop_level, open_price, is_stop=True)
 
                 # 2. Sonra Kar Al (Take Profit) kontrol et
-                elif take_profit_pct is not None and take_profit_pct > 0 and (pnl_low_gain >= take_profit_pct or pnl_close >= take_profit_pct):
+                elif target_level is not None and low_price <= target_level:
                     tp_sl_signal = SignalType.BUY
                     tp_sl_reason = [f"Kar Al (%{take_profit_pct})"]
-                    exec_price = last_entry_price * (1.0 - (take_profit_pct / 100.0))
+                    exec_price = level_fill_price("short", target_level, open_price, is_stop=False)
 
             unrealized_pnl = 0.0
             if position_state == "long" and last_entry_price is not None and last_entry_price > 0:

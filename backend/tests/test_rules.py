@@ -932,3 +932,127 @@ class TestOffsetAndTrendOperators(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStopLossGapFill(unittest.TestCase):
+    """Bosluklu (gap) mumda stop/hedef seviyeden degil ACILISTAN dolar.
+
+    Eskiden cikis fiyati her zaman tam seviyeye esitleniyordu; bu, her kaybeden
+    isleme -stop_loss_pct diye yapay bir taban koyuyor ve stop kullanan her
+    stratejinin kuyruk riskini gizliyordu.
+    """
+
+    @staticmethod
+    def _strategy(**overrides):
+        strategy = {
+            "parameters": [],
+            # Giris kurali her barda dogru: pozisyon hemen acilsin.
+            "entry_rules": {
+                "logic": "AND",
+                "conditions": [
+                    {
+                        "left": {"type": "price", "field": "close"},
+                        "operator": ">",
+                        "right": {"type": "value", "value": 0},
+                    }
+                ],
+            },
+            "exit_rules": {"logic": "AND", "conditions": []},
+            "bar_delay": 1,
+            "allow_short": False,
+            "commission_bps": 0.0,
+            "slippage_bps": 0.0,
+            "take_profit_pct": None,
+            "stop_loss_pct": None,
+        }
+        strategy.update(overrides)
+        return strategy
+
+    @staticmethod
+    def _frame(opens, highs, lows, closes):
+        return pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2024-01-01", periods=len(opens), freq="D"),
+                "open": opens,
+                "high": highs,
+                "low": lows,
+                "close": closes,
+                "volume": [1] * len(opens),
+            }
+        )
+
+    def test_long_stop_gapten_dolar_seviyeden_degil(self):
+        # Giris 100 (2. mumun acilisi), stop %5 -> 95. 4. mum 60'tan aciyor.
+        df = self._frame(
+            opens=[100, 100, 100, 60, 60],
+            highs=[101, 101, 101, 62, 62],
+            lows=[99, 99, 99, 58, 58],
+            closes=[100, 100, 100, 60, 60],
+        )
+        signals = RuleEngine.evaluate_range(
+            self._strategy(stop_loss_pct=5.0), df, start_index=0
+        )
+        closing = [s for s in signals if s.get("pnl_percent") is not None]
+        self.assertEqual(len(closing), 1)
+        # Seviye 95 degil, acilis 60 kullanilir.
+        self.assertAlmostEqual(closing[0]["price"], 60.0, places=4)
+        self.assertAlmostEqual(closing[0]["pnl_percent"], -40.0, places=2)
+
+    def test_long_stop_mum_ici_delinirse_seviyeden_dolar(self):
+        # Acilis stop'un ustunde (99), seviye mum icinde deliniyor -> tam 95.
+        df = self._frame(
+            opens=[100, 100, 100, 99, 99],
+            highs=[101, 101, 101, 100, 100],
+            lows=[99, 99, 99, 90, 90],
+            closes=[100, 100, 100, 96, 96],
+        )
+        signals = RuleEngine.evaluate_range(
+            self._strategy(stop_loss_pct=5.0), df, start_index=0
+        )
+        closing = [s for s in signals if s.get("pnl_percent") is not None]
+        self.assertEqual(len(closing), 1)
+        self.assertAlmostEqual(closing[0]["price"], 95.0, places=4)
+        self.assertAlmostEqual(closing[0]["pnl_percent"], -5.0, places=2)
+
+    def test_long_take_profit_lehe_boslukta_acilistan_dolar(self):
+        # Hedef %10 -> 110; 4. mum 130'dan aciyor, kazanc seviyede kirpilmaz.
+        df = self._frame(
+            opens=[100, 100, 100, 130, 130],
+            highs=[101, 101, 101, 132, 132],
+            lows=[99, 99, 99, 128, 128],
+            closes=[100, 100, 100, 130, 130],
+        )
+        signals = RuleEngine.evaluate_range(
+            self._strategy(take_profit_pct=10.0), df, start_index=0
+        )
+        closing = [s for s in signals if s.get("pnl_percent") is not None]
+        self.assertEqual(len(closing), 1)
+        self.assertAlmostEqual(closing[0]["price"], 130.0, places=4)
+        self.assertAlmostEqual(closing[0]["pnl_percent"], 30.0, places=2)
+
+    def test_short_stop_yukari_boslukta_acilistan_dolar(self):
+        # Short giris 100, stop %5 -> 105. 4. mum 140'tan aciyor.
+        df = self._frame(
+            opens=[100, 100, 100, 140, 140],
+            highs=[101, 101, 101, 142, 142],
+            lows=[99, 99, 99, 138, 138],
+            closes=[100, 100, 100, 140, 140],
+        )
+        strategy = self._strategy(stop_loss_pct=5.0, allow_short=True)
+        # Giris kurali yerine cikis kurali her barda dogru olsun: short acilsin.
+        strategy["entry_rules"] = {"logic": "AND", "conditions": []}
+        strategy["exit_rules"] = {
+            "logic": "AND",
+            "conditions": [
+                {
+                    "left": {"type": "price", "field": "close"},
+                    "operator": ">",
+                    "right": {"type": "value", "value": 0},
+                }
+            ],
+        }
+        signals = RuleEngine.evaluate_range(strategy, df, start_index=0)
+        closing = [s for s in signals if s.get("pnl_percent") is not None]
+        self.assertEqual(len(closing), 1)
+        self.assertAlmostEqual(closing[0]["price"], 140.0, places=4)
+        self.assertAlmostEqual(closing[0]["pnl_percent"], -40.0, places=2)

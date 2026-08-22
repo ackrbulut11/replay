@@ -14,6 +14,7 @@ from app.engines.execution import (
     PositionSizing,
     SizingMode,
     fill_price,
+    level_fill_price,
     net_pnl_percent,
     position_quantity,
     round_trip_commission_pct,
@@ -231,3 +232,42 @@ class TestSimulatePortfolio(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLevelFillPrice(unittest.TestCase):
+    """Bosluklu (gap) acilista TP/SL seviyeden degil ACILISTAN dolar.
+
+    Eskiden cikis her zaman tam seviyeden yaziliyordu: giris 100, stop 95,
+    sonraki mum 60'tan aciyorsa zarar -%5 gorunuyordu (gercekte -%40).
+    Bu, her kaybeden isleme yapay bir taban koyuyordu.
+    """
+
+    def test_long_stop_gap_asagi_acilista_dolar(self):
+        # Mum stop'un (95) cok altinda actiysa emir 60'tan dolar.
+        self.assertEqual(level_fill_price("long", 95.0, 60.0, is_stop=True), 60.0)
+
+    def test_long_stop_mum_ici_tetiklenirse_seviyeden_dolar(self):
+        # Acilis stop'un ustunde: seviye mum icinde delinmis, tam 95'ten dolar.
+        self.assertEqual(level_fill_price("long", 95.0, 99.0, is_stop=True), 95.0)
+
+    def test_long_take_profit_gap_yukari_acilista_dolar(self):
+        # Lehe bosluk da hakkiyla verilir: hedef 110 iken mum 130'dan actiysa 130.
+        self.assertEqual(level_fill_price("long", 110.0, 130.0, is_stop=False), 130.0)
+
+    def test_long_take_profit_mum_ici_tetiklenirse_seviyeden_dolar(self):
+        self.assertEqual(level_fill_price("long", 110.0, 101.0, is_stop=False), 110.0)
+
+    def test_short_stop_gap_yukari_acilista_dolar(self):
+        # Short'ta zarar YUKARI: stop 105 iken mum 140'tan actiysa 140.
+        self.assertEqual(level_fill_price("short", 105.0, 140.0, is_stop=True), 140.0)
+
+    def test_short_stop_mum_ici_tetiklenirse_seviyeden_dolar(self):
+        self.assertEqual(level_fill_price("short", 105.0, 101.0, is_stop=True), 105.0)
+
+    def test_short_take_profit_gap_asagi_acilista_dolar(self):
+        self.assertEqual(level_fill_price("short", 90.0, 70.0, is_stop=False), 70.0)
+
+    def test_acilis_bilinmiyorsa_seviyeye_dusulur(self):
+        # Acilis yoksa bosluk tespit edilemez; eski davranis korunur.
+        self.assertEqual(level_fill_price("long", 95.0, 0.0, is_stop=True), 95.0)
+        self.assertEqual(level_fill_price("long", 95.0, None, is_stop=True), 95.0)

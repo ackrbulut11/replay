@@ -172,8 +172,11 @@ strateji motorunda buy denen yerlerde alıp satmasaydı son durumda kar zarar or
 Yukarıda ⬜ ile işaretlenenlerin tek listesi. Sıra bir öneridir, karar sizin —
 ölçüt: "kullanıcı bugün neyi yapamıyor?"
 
-1. **Telegram/e-posta bildirimi.** Alarm motoru çalışıyor ama tetiklenme yalnızca
-   uygulama açıkken duyuluyor; alarmın asıl değeri kapalıyken haber vermesi.
+1. **Telegram/e-posta bildirimi.** Alarm motoru artık arka planda da tarıyor
+   (uygulama kapalıyken de tetikleniyor), ama tetiklenmeyi DUYURACAK bir kanal yok:
+   kullanıcı ancak uygulamayı açınca görüyor. `alerts/notification.py` ve
+   `alerts/telegram.py` hâlâ boş; bot token'ı, kullanıcı başına chat kimliği ve
+   bir şema değişikliği gerektiriyor.
 2. **Scanner sekmesi.** Menüde duruyor, yer tutucu gösteriyor. Motor hazır, eksik olan
    kendi ekranı.
 3. ~~Pattern Search~~ → [Faz 3.5](#faz-35--örüntü-arama) olarak ayrıldı, üzerinde
@@ -188,6 +191,26 @@ Yukarıda ⬜ ile işaretlenenlerin tek listesi. Sıra bir öneridir, karar sizi
 - Screener, Heatmap, çoklu grafik görünümü, Strategy Compare
 - Risk Yönetimi: max günlük zarar, pozisyon büyüklüğü, risk/ödül, dinamik/ATR stop
 - Bildirimler: Discord, Email, Desktop Notification
+
+### Bilinen teknik borç (kayıt altında, bilinçli olarak ertelendi)
+- **Göstergeleri backend'den çekmek.** `utils/indicators.ts` hesabı backend ile
+  birebir eşitlendi ve bir altın örnekle bağlandı, ama hesap hâlâ iki yerde —
+  RULES.md'nin "chart tarafına finansal hesap yazma" yasağı kâğıt üstünde
+  ihlal edilmeye devam ediyor. Doğru çözüm serileri API'den almak; replay her
+  mum adımında yeniden hesap istediği için önbellek/streaming tasarımı gerekiyor.
+- **Gösterge ısınma payları.** `warmup_bars` EMA/RSI/ATR için ham `period`
+  kullanıyor, oysa `ewm(adjust=False)` orada henüz yakınsamamış oluyor.
+  Düzeltmek (ör. 3×period) her kayıtlı backtest sonucunu kaydırır, o yüzden
+  ayrı ve ölçülerek yapılmalı.
+- **React Compiler kuralları.** `react-hooks/refs`, `set-state-in-effect` ve
+  `immutability` uyarıları açık (62 adet, çoğu `CandleChart.tsx`). Dosyanın
+  testi yok; hepsini birden düzeltmek regresyon üretmenin kestirme yolu.
+- **Python 3.11'e tam geçiş.** CI iki sürümde de koşuyor ama `backend/.venv`
+  hâlâ 3.9 (ömrü dolmuş). `.venv` yeniden kurulup tüm suite orada
+  doğrulanmalı.
+- **Kalıcı disk.** `storage/market_data/` Render'da geçici diskte: her
+  dağıtımda tüm parquet önbelleği ve gece yarısı işinin yazdıkları kayboluyor.
+  Ücretli plan kararı (bkz. render.yaml).
 
 ---
 

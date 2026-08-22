@@ -163,10 +163,31 @@ export const alertStore = {
     try {
       const url = symbol ? `/api/alerts?symbol=${encodeURIComponent(symbol)}` : '/api/alerts';
       const data = await apiRequest<{ alerts: AlertItem[]; count: number }>(url);
+      const fresh = data.alerts || [];
+
+      // Sunucu artık alarmları ARKA PLANDA da değerlendiriyor (bkz. backend
+      // AlertEngine.check_all_active_alerts): kullanıcı başka bir sembole
+      // bakarken, hatta uygulama kapalıyken tetiklenen alarmlar olabiliyor.
+      // Liste tazelendiğinde ACTIVE -> TRIGGERED geçişi yapmış olanlar burada
+      // yakalanır, aksi halde kullanıcı yalnızca durumun değiştiğini görür ama
+      // hiçbir bildirim almazdı.
+      const previous = alertStore.getState().alerts;
+      const wasActive = new Set(
+        previous.filter((a) => a.status === 'ACTIVE').map((a) => a.id)
+      );
+      const newlyTriggered = fresh.filter(
+        (a) => a.status === 'TRIGGERED' && wasActive.has(a.id)
+      );
+
       alertStore.setState(() => ({
-        alerts: data.alerts || [],
+        alerts: fresh,
         loading: false,
+        ...(newlyTriggered.length > 0
+          ? { latestTriggeredAlert: newlyTriggered[newlyTriggered.length - 1] }
+          : {}),
       }));
+
+      if (newlyTriggered.length > 0) playBellSound(5);
     } catch (err: unknown) {
       alertStore.setState(() => ({
         error: errorMessage(err, 'Alert fetch error'),

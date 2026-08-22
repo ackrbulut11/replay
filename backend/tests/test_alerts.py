@@ -6,6 +6,7 @@ geçici, bellek içi bir SQLite veritabanı kullanır.
 """
 
 import unittest
+from datetime import timedelta
 
 import pandas as pd
 
@@ -14,6 +15,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.alerts.engine import AlertEngine
+from app.database.models import Alert
+from app.utils.time import utc_now
 from app.alerts.models import (
     AlertCondition,
     AlertCreateRequest,
@@ -331,3 +334,162 @@ class TestEmaCross(_AlertTestBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOlusanMumKullanilmaz(unittest.TestCase):
+    """Gosterge alarmlari KAPANMIS mumla degerlendirilir.
+
+    Serinin son bari genellikle hala olusmakta olan mumdur: 1g'lik bir alarm
+    saat 14:00'te bugunun yarim mumunu goruyordu. Gun icinde bir esik gecilip
+    geri donse bile alarm tetikleniyor ve tetiklenme kalici oldugu icin geri
+    alinamiyordu.
+    """
+
+    def setUp(self):
+        self.alice = User(id="user-alice", email="alice@example.com", name="Alice")
+
+    @staticmethod
+    def _frame(last_open, periods=60, freq="D"):
+        stamps = pd.date_range(end=last_open, periods=periods, freq=freq)
+        close = [100.0 + i for i in range(periods)]
+        return pd.DataFrame({
+            "timestamp": stamps,
+            "open": close,
+            "high": [c + 1 for c in close],
+            "low": [c - 1 for c in close],
+            "close": close,
+            "volume": [1.0] * periods,
+        })
+
+    def _alert(self, target_type="RSI", timeframe="1d"):
+        row = Alert(
+            user_id=self.alice.id, symbol="BTCUSDT", provider="binance",
+            timeframe=timeframe, target_type=target_type,
+            indicator_period=14, condition="rises_above", threshold_value=70.0,
+            status="ACTIVE",
+        )
+        return row
+
+    def test_kapanmamis_son_bar_gosterge_icin_atlanir(self):
+        # Son mum bugun acilmis, henuz kapanmamis.
+        now = utc_now()
+        df = self._frame(last_open=now.replace(hour=0, minute=0, second=0, microsecond=0))
+        engine = AlertEngine()
+        last = engine._last_usable_index(self._alert(), df)
+        self.assertEqual(last, len(df) - 2)
+
+    def test_kapanmis_son_bar_kullanilir(self):
+        # Son mum 3 gun once acilmis: coktan kapandi.
+        df = self._frame(last_open=utc_now() - timedelta(days=3))
+        engine = AlertEngine()
+        last = engine._last_usable_index(self._alert(), df)
+        self.assertEqual(last, len(df) - 1)
+
+    def test_fiyat_alarmi_olusan_mumu_kullanir(self):
+        # "BTC 100.000'i gecerse" diyen biri gun sonunu degil O ANI kastediyor.
+        now = utc_now()
+        df = self._frame(last_open=now.replace(hour=0, minute=0, second=0, microsecond=0))
+        engine = AlertEngine()
+        last = engine._last_usable_index(self._alert(target_type="price"), df)
+        self.assertEqual(last, len(df) - 1)
+
+    def test_bilinmeyen_dilimde_son_bara_dusulur(self):
+        df = self._frame(last_open=utc_now())
+        engine = AlertEngine()
+        last = engine._last_usable_index(self._alert(timeframe="3h"), df)
+        self.assertEqual(last, len(df) - 1)
+
+
+class TestArkaPlanTaramasi(unittest.TestCase):
+    """Alarmlar artik TUM kullanicilar ve TUM semboller icin arka planda taranir.
+
+    Eskiden check_alerts yalnizca istemci sordugunda ve yalnizca O AN BAKILAN
+    sembol icin calisiyordu: THYAO'ya kurulmus bir alarm, kullanici uygulamayi
+    acip THYAO'ya bakmadigi surece hic tetiklenmiyordu.
+    """
+
+    def setUp(self):
+        self.db_engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
+        Base.metadata.create_all(bind=self.db_engine)
+        self.db = sessionmaker(bind=self.db_engine)()
+        self.alice = User(id="user-alice", email="alice@example.com", name="Alice")
+        self.bob = User(id="user-bob", email="bob@example.com", name="Bob")
+        self.db.add_all([self.alice, self.bob])
+        self.db.commit()
+        self.engine = AlertEngine()
+
+    def tearDown(self):
+        self.db.close()
+        Base.metadata.drop_all(bind=self.db_engine)
+
+    def _add_alert(self, user_id, symbol, threshold, status="ACTIVE"):
+        row = Alert(
+            user_id=user_id, symbol=symbol, provider="binance", timeframe="1d",
+            target_type="price", condition="rises_above",
+            threshold_value=threshold, status=status,
+        )
+        self.db.add(row)
+        self.db.commit()
+        return row
+
+    class _Loader:
+        """Her sembol icin sabit fiyatli seri dondurur ve cagrilari sayar."""
+
+        def __init__(self, prices):
+            self.prices = prices
+            self.calls = []
+
+        def load_data(self, provider_name, symbol, timeframe, start_time, end_time):
+            self.calls.append((provider_name, symbol, timeframe))
+            price = self.prices.get(symbol)
+            if price is None:
+                raise RuntimeError("veri yok")
+            stamps = pd.date_range(end=utc_now() - timedelta(days=1), periods=30, freq="D")
+            return pd.DataFrame({
+                "timestamp": stamps,
+                "open": [price] * 30, "high": [price] * 30,
+                "low": [price] * 30, "close": [price] * 30,
+                "volume": [1.0] * 30,
+            })
+
+    def test_bakilmayan_sembolun_alarmi_da_tetiklenir(self):
+        self._add_alert(self.alice.id, "THYAO", threshold=50.0)
+        loader = self._Loader({"THYAO": 100.0})
+        triggered = self.engine.check_all_active_alerts(self.db, loader)
+        self.assertEqual(triggered, 1)
+        self.assertEqual(self.db.query(Alert).first().status, "TRIGGERED")
+
+    def test_esik_asilmadiysa_tetiklenmez(self):
+        self._add_alert(self.alice.id, "THYAO", threshold=500.0)
+        loader = self._Loader({"THYAO": 100.0})
+        self.assertEqual(self.engine.check_all_active_alerts(self.db, loader), 0)
+        self.assertEqual(self.db.query(Alert).first().status, "ACTIVE")
+
+    def test_ayni_sembol_icin_veri_bir_kez_yuklenir(self):
+        # Iki farkli kullanici ayni sembole alarm kurmus: tek istek yeter.
+        self._add_alert(self.alice.id, "THYAO", threshold=50.0)
+        self._add_alert(self.bob.id, "THYAO", threshold=60.0)
+        loader = self._Loader({"THYAO": 100.0})
+        self.engine.check_all_active_alerts(self.db, loader)
+        self.assertEqual(len(loader.calls), 1)
+
+    def test_bir_sembolun_hatasi_taramayi_durdurmaz(self):
+        self._add_alert(self.alice.id, "BOZUK", threshold=50.0)
+        self._add_alert(self.alice.id, "THYAO", threshold=50.0)
+        loader = self._Loader({"THYAO": 100.0})  # BOZUK yok -> hata
+        triggered = self.engine.check_all_active_alerts(self.db, loader)
+        self.assertEqual(triggered, 1)
+
+    def test_tetiklenmis_alarm_yeniden_degerlendirilmez(self):
+        self._add_alert(self.alice.id, "THYAO", threshold=50.0, status="TRIGGERED")
+        loader = self._Loader({"THYAO": 100.0})
+        self.assertEqual(self.engine.check_all_active_alerts(self.db, loader), 0)
+        # Veri bile yuklenmemeli.
+        self.assertEqual(loader.calls, [])
+
+    def test_hic_alarm_yoksa_saglayiciya_gidilmez(self):
+        loader = self._Loader({})
+        self.assertEqual(self.engine.check_all_active_alerts(self.db, loader), 0)
+        self.assertEqual(loader.calls, [])

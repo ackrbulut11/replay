@@ -70,10 +70,23 @@ def start_market_update_scheduler():
 
     from apscheduler.schedulers.background import BackgroundScheduler
 
+    from app.alerts.engine import run_alert_scan
     from app.database.retention import run_event_retention
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_market_update, trigger="cron", hour=0, minute=0, id="nightly_market_update")
+    # Alarmlar eskiden YALNIZCA istemci sorduğunda ve yalnızca o an bakılan
+    # sembol için değerlendiriliyordu: THYAO'ya kurulmuş bir alarm, kullanıcı
+    # uygulamayı açıp THYAO'ya bakmadığı sürece hiç tetiklenmiyordu.
+    scheduler.add_job(
+        run_alert_scan,
+        trigger="interval",
+        minutes=settings.ALERT_SCAN_INTERVAL_MINUTES,
+        id="alert_scan",
+        # Bir tarama uzarsa üst üste binmesin; kaçırılan tur atlanır.
+        max_instances=1,
+        coalesce=True,
+    )
     # Telemetri tabloları da sınırsız büyüyordu (RULES.md §24 ile aynı gerekçe):
     # `/api/analytics/events` kimlik doğrulaması gerektirmiyor ve tek bir IP
     # günde on binlerce satır ekleyebiliyordu.

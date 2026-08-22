@@ -27,7 +27,10 @@ from app.alerts.models import (
     AlertTargetType,
     AlertUpdateRequest,
 )
-from app.data.loader import lookback_start_for_bars
+import pandas as pd
+
+from app.data.loader import lookback_start_for_bars, timeframe_delta
+from app.utils.time import utc_now
 from app.database.models import Alert
 from app.indicators.registry import IndicatorRegistry
 from app.rules.conditions import cross_above, cross_below
@@ -169,6 +172,38 @@ class AlertEngine:
         return True
 
     # ─── Değerlendirme ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _last_usable_index(row: Alert, df) -> int:
+        """Alarmın değerlendirileceği son bar indeksi.
+
+        Serinin SON barı genellikle HÂLÂ OLUŞMAKTA olan mumdur: 1g'lik bir
+        alarm saat 14:00'te bugünün yarım mumunu görür. Gösterge alarmları bu
+        mumla değerlendirilirse gün içinde bir eşik geçilip geri dönse bile
+        alarm tetiklenir — ve tetiklenme kalıcı olduğu için geri alınamaz.
+        Kullanıcı "RSI 70'i geçmedi ki" derken haklı olur.
+
+        Bu yüzden gösterge/kesişim/yüzde alarmları KAPANMIŞ son mumla
+        değerlendirilir. FİYAT alarmları istisnadır: "BTC 100.000'i geçerse"
+        diyen biri gün sonunu değil o anı kastediyor, oluşan mumun kapanışı da
+        anlık fiyattır.
+        """
+        last = len(df) - 1
+        if last < 0:
+            return last
+        if row.target_type == AlertTargetType.PRICE.value:
+            return last
+
+        try:
+            duration = timeframe_delta(row.timeframe or "1d")
+        except ValueError:
+            return last
+
+        last_open = pd.to_datetime(df["timestamp"].iloc[last]).to_pydatetime()
+        # Mum kapanmışsa kullanılabilir; kapanmamışsa bir öncekine düşülür.
+        if last_open + duration <= utc_now():
+            return last
+        return last - 1
 
     @staticmethod
     def _series_value(row: Alert, df, bar_index: int) -> Optional[float]:
@@ -324,7 +359,11 @@ class AlertEngine:
             if df is None or len(df) == 0:
                 continue
 
-            last = len(df) - 1
+            # Oluşmakta olan mum gösterge alarmlarını yanlış tetikliyordu
+            # (bkz. `_last_usable_index`).
+            last = self._last_usable_index(row, df)
+            if last < 1:
+                continue
             current_val = self._series_value(row, df, last)
             if current_val is None:
                 continue
@@ -342,3 +381,98 @@ class AlertEngine:
 
         db.commit()
         return triggered
+
+    # ─── Arka plan değerlendirmesi ────────────────────────────────────────
+
+    def check_all_active_alerts(self, db: Session, loader) -> int:
+        """TÜM kullanıcıların etkin alarmlarını değerlendirir; tetiklenen sayısını döner.
+
+        **Neden gerekli:** `check_alerts` yalnızca istemci sorduğunda ve
+        yalnızca O AN BAKILAN sembol için çalışıyordu. Yani THYAO'ya kurulmuş
+        bir alarm, kullanıcı uygulamayı açıp THYAO'ya bakmadığı sürece hiç
+        tetiklenmiyordu — "alarm" özelliği fiilen bir grafik süslemesiydi.
+
+        Veri yükleme (sağlayıcı, sembol, zaman dilimi) üçlüsü başına BİR KEZ
+        yapılır: aynı sembole birden fazla kullanıcının alarm kurması ek bir
+        istek üretmez. Tek bir sembolün başarısız olması taramayı durdurmaz.
+        """
+        rows = (
+            db.query(Alert)
+            .filter(Alert.status == AlertStatus.ACTIVE.value)
+            .all()
+        )
+        if not rows:
+            return 0
+
+        # (provider, symbol, timeframe) -> o grupta gereken azami mum sayısı
+        groups: Dict[tuple, int] = {}
+        for row in rows:
+            key = (row.provider or "binance", (row.symbol or "").upper(), row.timeframe or "1d")
+            try:
+                groups[key] = max(groups.get(key, 0), self._required_bars(row))
+            except ValueError:
+                continue
+
+        frames: Dict[tuple, object] = {}
+        for key, bars in groups.items():
+            provider, symbol, timeframe = key
+            end_dt = utc_now()
+            try:
+                df = loader.load_data(
+                    provider_name=provider,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=lookback_start_for_bars(end_dt, timeframe, bars),
+                    end_time=end_dt,
+                )
+            except Exception as exc:
+                # Bir sembolün verisi gelmiyorsa yalnızca o atlanır; alarm
+                # taramasının tamamı bir sembol yüzünden durmamalı.
+                logger.warning("Alarm verisi yuklenemedi (%s %s %s): %s",
+                               provider, symbol, timeframe, exc)
+                continue
+            if df is not None and not df.empty:
+                frames[key] = df
+
+        triggered = 0
+        for row in rows:
+            key = (row.provider or "binance", (row.symbol or "").upper(), row.timeframe or "1d")
+            df = frames.get(key)
+            if df is None or len(df) == 0:
+                continue
+
+            last = self._last_usable_index(row, df)
+            if last < 1:
+                continue
+
+            current_val = self._series_value(row, df, last)
+            if current_val is None:
+                continue
+            previous_val = self._series_value(row, df, last - 1)
+
+            row.last_value = current_val
+            if self._is_triggered(row, current_val, previous_val):
+                row.status = AlertStatus.TRIGGERED.value
+                row.triggered_at = datetime.utcnow()
+                triggered += 1
+
+        db.commit()
+        if triggered:
+            logger.info("Arka plan alarm taramasi: %d alarm tetiklendi", triggered)
+        return triggered
+
+
+def run_alert_scan() -> int:
+    """Zamanlayıcıdan çağrılan sarmalayıcı — kendi oturumunu açar ve kapatır."""
+    from app.data.loader import loader
+    from app.database.postgres import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return AlertEngine().check_all_active_alerts(db, loader)
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Arka plan alarm taramasi basarisiz: %s", exc, exc_info=True)
+        return 0
+    finally:
+        db.close()

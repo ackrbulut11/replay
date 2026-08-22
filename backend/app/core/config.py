@@ -77,6 +77,14 @@ class Settings(BaseSettings):
     # birinde açık bırakmak için kullanılabilir.
     ENABLE_SCHEDULER: bool = True
 
+    # Arka plan alarm taramasının sıklığı (dakika).
+    #
+    # Alarmlar eskiden yalnızca istemci sorduğunda ve yalnızca o an bakılan
+    # sembol için değerlendiriliyordu. Aralık, sağlayıcı kotasıyla tetiklenme
+    # gecikmesi arasındaki denge: tarama sembol+dilim başına TEK istek atıyor
+    # ve çoğu zaman parquet önbelleğinden dönüyor.
+    ALERT_SCAN_INTERVAL_MINUTES: int = 5
+
     # Süreç içi (RAM) mum önbelleğinin azami toplam satır sayısı.
     #
     # Bu önbellek sınırsızdı: yüklenen her sembol+zaman dilimi çerçevesi RAM'de

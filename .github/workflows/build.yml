@@ -33,6 +33,20 @@ jobs:
         run: |
           cd frontend
           npm run build
+      # Gösterge uyum testi tarayıcı gerektirmiyor ve altın örneğe karşı
+      # koşuyor: frontend ile backend aynı sayıları üretmek zorunda
+      # (bkz. backend/tests/indicator_parity.json).
+      - name: E2E — hesap testleri
+        env:
+          PW_SKIP_SERVER: "1"
+        run: |
+          cd frontend
+          npx playwright test --project=logic
+      - name: E2E — arayüz duman testleri
+        run: |
+          cd frontend
+          npx playwright install --with-deps chromium
+          npx playwright test --project=browser
 
   backend:
     runs-on: windows-latest

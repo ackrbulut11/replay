@@ -218,7 +218,13 @@ TradingResearchPlatform/
 │       ├── test_alerts.py
 │       ├── test_candle_patterns.py
 │       ├── test_pattern_engine.py
-│       └── test_auth_api.py
+│       ├── test_auth_api.py
+│       ├── test_indicator_parity.py  # Backend göstergeleri altın örnekle aynı mı
+│       └── indicator_parity.json     # ALTIN ÖRNEK: backend ile frontend
+│                                     # (src/utils/indicators.ts) aynı seride aynı
+│                                     # sayıyı üretmek zorunda. İki taraf da buna
+│                                     # karşı test edilir; üreteci
+│                                     # scripts/generate_indicator_parity.py
 │
 │
 ├── storage/
@@ -247,7 +253,8 @@ TradingResearchPlatform/
 │   ├── update_market.py
 │   ├── build_sidecar.py
 │   ├── import_strategies_to_db.py    # Eski JSON stratejileri veritabanına aktarır (tek seferlik)
-│   └── import_alerts_to_db.py        # Eski JSON alarmları veritabanına aktarır (tek seferlik)
+│   ├── import_alerts_to_db.py        # Eski JSON alarmları veritabanına aktarır (tek seferlik)
+│   └── generate_indicator_parity.py  # backend/tests/indicator_parity.json altın örneğini üretir
 │
 └── .github/
     └── workflows/

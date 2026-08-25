@@ -334,3 +334,36 @@ class TestDevretme(unittest.TestCase):
             for _ in range(60):
                 response = client.get("/api/market/window")
                 self.assertEqual(response.status_code, 200)
+
+
+class TestTestSuiteDokunmaz(unittest.TestCase):
+    """Test paketi canli kullanicinin perf.jsonl dosyasina YAZMAMALI.
+
+    Bazi testler (test_waitlist_api.py, test_auth_api.py, test_market_api.py,
+    test_analytics_api.py) gercek main.app'i TestClient ile calistiriyor.
+    Olcum middleware'i gelistirme ortaminda varsayilan acik oldugu icin test
+    kosulari da kullanicinin canli izledigi dosyaya yaziyordu -- unittest
+    discover calistirildiginda testlerin urettigi hizli art arda istekler
+    (ornegin waitlist'in hiz siniri testi) canli izleyicide gercek kullanici
+    trafigi gibi gorunup yanlis bir soruşturmaya yol aciyordu.
+
+    tests/__init__.py PERF_LOG'u "false"a ayarliyor; burada gercekten
+    etkisiz oldugu dogrulaniyor.
+    """
+
+    def test_perf_log_test_paketinde_kapali(self):
+        from app.core.config import settings
+
+        self.assertFalse(settings.perf_log_enabled)
+
+    def test_gercek_app_ile_istek_atmak_dosyaya_yazmaz(self):
+        import main
+
+        client = TestClient(main.app)
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        # Ayar kapaliyken middleware zaten takilmamis olmali.
+        self.assertFalse(any(
+            isinstance(getattr(m, "cls", None), type) and m.cls is perf.PerfLoggingMiddleware
+            for m in main.app.user_middleware
+        ))

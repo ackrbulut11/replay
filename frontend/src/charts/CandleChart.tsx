@@ -213,8 +213,28 @@ export default function CandleChart({
   // ─── Kıyaslama (karşılaştırma) serileri ───────────────────────────────────
   // Sağ tık menüsünden eklenen semboller ana grafiğe çizgi olarak biner.
   const compareState = useCompareStore();
-  /** Kıyas sembolünün ham mumları — `${id}|${timeframe}|${ilkZaman}` anahtarıyla. */
-  const compareCandlesRef = useRef<Map<string, MarketCandle[]>>(new Map());
+  /**
+   * Kıyas sembollerinin ham mumları — `item.id` anahtarıyla, KAPSANAN aralıkla
+   * birlikte tutulur.
+   *
+   * Eskiden anahtar `${id}|${timeframe}|${ilkZaman}|${sonZaman}` idi: ana
+   * grafiğin yüklü aralığı BİR PİKSEL bile kayınca (arkaplan geçmiş
+   * derinleştirmesi her ~1,2 sn'de bunu yapıyor) tüm kıyas sembollerinin
+   * önbelleği geçersiz sayılıp SIRAYLA yeniden indiriliyordu. Prod log'unda
+   * bunun izi: aynı sembole birkaç dakika içinde art arda tam geçmiş isteği,
+   * süre her seferinde katlanarak artıyordu (Yahoo'nun IP'yi throttle'a
+   * alması) — kaynağı bu döngüydü.
+   *
+   * Artık her girdi "şu ana kadar hangi aralığı indirdim" bilgisini taşıyor;
+   * ana grafiğin ihtiyacı zaten kapsanıyorsa hiç istek atılmıyor, kapsanmıyorsa
+   * yalnızca eksik kısmı içine alan TEK bir istek atılıp mevcut mumlarla
+   * birleştiriliyor (ana grafiğin `mergeOlderData`/`mergeNewerData` deseniyle
+   * aynı fikir). Zaman dilimi değişirse eski veri çözünürlük olarak
+   * uyuşmadığından sıfırdan indirilir.
+   */
+  const compareCandlesRef = useRef<
+    Map<string, { candles: MarketCandle[]; timeframe: string; coveredStart: number; coveredEnd: number }>
+  >(new Map());
   const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   /** Ham veri geldiğinde çizim efektini tetiklemek için sayaç. */
   const [compareDataVersion, setCompareDataVersion] = useState(0);
@@ -2108,13 +2128,30 @@ export default function CandleChart({
   // subscribeVisibleLogicalRangeChange çağrısı).
 
   const compareIdsKey = compareState.items.map((i) => i.id).join(',');
-  // Kıyas verisinin önbellek anahtarı: sembol + zaman dilimi + yüklü aralık.
+  // Efekti TETİKLEYEN anahtar: ana grafiğin yüklü aralığı değiştiğinde kapsama
+  // yeniden kontrol edilsin diye. Önbelleğin kendisi artık bu anahtara göre
+  // DEĞİL, `item.id` + kapsanan aralığa göre tutuluyor (bkz. compareCandlesRef
+  // yorumu) — burada yalnızca "bir şey değişti, bak" sinyali.
   const compareRangeKey =
     data.length > 0 ? `${timeframe}|${data[0].time}|${data[data.length - 1].time}` : '';
 
-  // 1) Veri çekme — ana grafiğin YÜKLÜ aralığı için bir kez. Replay adımlarında
-  //    (visibleData değiştiğinde) tekrar indirilmez.
+  // 1) Veri çekme — ana grafiğin YÜKLÜ aralığı zaten kapsanmıyorsa tamamlar.
+  //
+  // İki değişiklik: (a) kıyas sembolleri PARALEL çekiliyor (eskiden sıralıydı;
+  // N sembolde en yavaşı diğer N-1'i de bekletiyordu), (b) yalnızca EKSİK kısım
+  // istenip mevcut mumlarla birleştiriliyor (eskiden aralık bir piksel kayınca
+  // bile TÜM semboller sıfırdan indiriliyordu — arkaplan geçmiş derinleştirmesi
+  // bunu her ~1,2 sn'de tetikliyordu ve prod'da aynı sembole art arda tam
+  // geçmiş isteği gitmesine, süresinin de Yahoo'nun IP'yi throttle'a almasıyla
+  // katlanarak artmasına yol açıyordu).
   useEffect(() => {
+    // Kaldırılan kıyas sembollerinin önbelleği temizlenir — aksi halde oturum
+    // uzadıkça kullanılmayan mum dizileri bellekte birikir.
+    const activeIds = new Set(compareState.items.map((i) => i.id));
+    for (const id of compareCandlesRef.current.keys()) {
+      if (!activeIds.has(id)) compareCandlesRef.current.delete(id);
+    }
+
     if (data.length === 0 || compareState.items.length === 0) return;
 
     let cancelled = false;
@@ -2125,37 +2162,63 @@ export default function CandleChart({
     const toApiDate = (unixSeconds: number) =>
       new Date(unixSeconds * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
-    const start = toApiDate(data[0].time);
+    const neededStart = data[0].time;
     // Son mum da kapsansın diye bitiş bir gün ileri alınır.
-    const end = toApiDate(data[data.length - 1].time + 86400);
+    const neededEnd = data[data.length - 1].time + 86400;
 
-    (async () => {
-      for (const item of compareState.items) {
-        const cacheKey = `${item.id}|${compareRangeKey}`;
-        if (compareCandlesRef.current.has(cacheKey)) continue;
+    /** İki mum dizisini zaman damgasına göre birleştirir; çakışanlarda yeni veri kazanır. */
+    const mergeCandles = (existing: MarketCandle[], fresh: MarketCandle[]): MarketCandle[] => {
+      const byTime = new Map(existing.map((c) => [c.time, c]));
+      for (const candle of fresh) byTime.set(candle.time, candle);
+      return Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+    };
 
-        setCompareLoadingIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
-        try {
-          const candles = await getRange({
-            provider: item.provider,
-            symbol: item.symbol,
-            timeframe,
-            start,
-            end,
-            signal: controller.signal,
-          });
-          if (cancelled) return;
-          compareCandlesRef.current.set(cacheKey, candles);
-          setCompareDataVersion((v) => v + 1);
-        } catch (e) {
-          // İptal edilen istekler normaldir (sembol/aralık değişti). Kalıcı bir
-          // hata ise seri boş kalır; kullanıcı lejanttan kaldırabilir.
-          if (!cancelled) console.warn('Kıyaslama verisi alınamadı:', item.id, e);
-        } finally {
-          if (!cancelled) setCompareLoadingIds((prev) => prev.filter((id) => id !== item.id));
-        }
+    const fetchOne = async (item: (typeof compareState.items)[number]) => {
+      const entry = compareCandlesRef.current.get(item.id);
+      // Zaman dilimi değiştiyse önceki mumlar yanlış çözünürlükte; kapsama
+      // sayılmaz, sıfırdan indirilir (aşağıda fetchStart/fetchEnd bunu yansıtır).
+      const sameTimeframe = entry?.timeframe === timeframe;
+
+      if (sameTimeframe && entry.coveredStart <= neededStart && entry.coveredEnd >= neededEnd) {
+        return; // Zaten kapsanıyor — hiç istek atılmaz.
       }
-    })();
+
+      // İstenen aralık, varsa mevcut kapsamla BİRLEŞTİRİLİR: tek istekte hem
+      // eksik hem elde olan indirilmez, yalnızca ihtiyaç duyulan birleşim.
+      const fetchStart = sameTimeframe ? Math.min(entry.coveredStart, neededStart) : neededStart;
+      const fetchEnd = sameTimeframe ? Math.max(entry.coveredEnd, neededEnd) : neededEnd;
+
+      setCompareLoadingIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
+      try {
+        const candles = await getRange({
+          provider: item.provider,
+          symbol: item.symbol,
+          timeframe,
+          start: toApiDate(fetchStart),
+          end: toApiDate(fetchEnd),
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+        const merged = sameTimeframe ? mergeCandles(entry.candles, candles) : candles;
+        compareCandlesRef.current.set(item.id, {
+          candles: merged,
+          timeframe,
+          coveredStart: fetchStart,
+          coveredEnd: fetchEnd,
+        });
+        setCompareDataVersion((v) => v + 1);
+      } catch (e) {
+        // İptal edilen istekler normaldir (sembol/aralık değişti). Kalıcı bir
+        // hata ise ÖNBELLEKTEKİ (varsa) veriyle çizim sürer; kullanıcı
+        // lejanttan kaldırabilir. Eski veriyi silmiyoruz — geçici bir hata
+        // yüzünden zaten gösterilen bir çizgiyi kaybettirmek yanlış olurdu.
+        if (!cancelled) console.warn('Kıyaslama verisi alınamadı:', item.id, e);
+      } finally {
+        if (!cancelled) setCompareLoadingIds((prev) => prev.filter((id) => id !== item.id));
+      }
+    };
+
+    void Promise.allSettled(compareState.items.map(fetchOne));
 
     return () => {
       cancelled = true;
@@ -2211,7 +2274,11 @@ export default function CandleChart({
         }
         series.applyOptions({ color: item.color, lineWidth: item.lineWidth as LineWidth, visible: item.visible });
 
-        const raw = compareCandlesRef.current.get(`${item.id}|${compareRangeKey}`);
+        // Zaman dilimi uyuşmuyorsa (henüz yeni dilim için indirilmediyse)
+        // eski çözünürlükteki mumlar çizilmez — kısa bir an boş kalıp yeni
+        // veri gelince dolar, yanlış ölçekte bir çizgi görünmesindense.
+        const cached = compareCandlesRef.current.get(item.id);
+        const raw = cached?.timeframe === timeframe ? cached.candles : undefined;
         if (!raw || raw.length === 0) {
           series.setData([]);
           return;

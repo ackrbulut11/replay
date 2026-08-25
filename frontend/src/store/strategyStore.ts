@@ -25,6 +25,7 @@ export interface StrategyState {
   evaluateResult: EvaluateResponse | null;
   singleEvalHistory: SingleEvaluationLogItem[];
   isLoading: boolean;
+  isEvaluating: boolean;
   error: string | null;
 }
 
@@ -69,6 +70,7 @@ export const INITIAL_STRATEGY_STATE: StrategyState = {
   // Giriş yapıldığında sunucudan yüklenir (fetchEvalHistory).
   singleEvalHistory: [],
   isLoading: false,
+  isEvaluating: false,
   error: null,
 };
 
@@ -201,14 +203,14 @@ export const strategyStore = {
   // ─── Değerlendirme ────────────────────────────────────────────────────
 
   evaluateStrategy: async (id: string, params: EvaluateRequest): Promise<EvaluateResponse | null> => {
-    setState({ isLoading: true, error: null, evaluateResult: null });
+    setState({ isEvaluating: true, error: null, evaluateResult: null });
     try {
       const result = await strategyApi.evaluateStrategy(id, params);
       result.symbol = params.symbol;
       result.provider = params.provider;
       result.timeframe = params.timeframe;
 
-      setState({ evaluateResult: result, isLoading: false });
+      setState({ evaluateResult: result, isEvaluating: false });
 
       // Sunucu değerlendirmeyi kendisi geçmişe yazıyor (aynı strateji/parite/
       // timeframe için eski kaydın üzerine); güncel listeyi oradan tazele.
@@ -216,7 +218,7 @@ export const strategyStore = {
 
       return result;
     } catch (err: unknown) {
-      setState({ isLoading: false, error: errorMessage(err, 'Değerlendirme başarısız') });
+      setState({ isEvaluating: false, error: errorMessage(err, 'Değerlendirme başarısız') });
       return null;
     }
   },
@@ -230,7 +232,7 @@ export const strategyStore = {
       provider: item.result.provider || item.provider,
       timeframe: item.result.timeframe || item.timeframe,
     };
-    setState({ evaluateResult: restored, error: null, isLoading: false });
+    setState({ evaluateResult: restored, error: null, isEvaluating: false });
   },
 
   /**

@@ -99,7 +99,7 @@ export default function StrategyPage({
   currentSymbol,
   currentTimeframe,
 }: StrategyPageProps = {}) {
-  const { strategies, activeStrategy, indicators, evaluateResult, isLoading, error } =
+  const { strategies, activeStrategy, indicators, evaluateResult, isLoading, isEvaluating, error } =
     useStrategyStore();
 
   const [mode, setMode] = useState<'list' | 'edit' | 'new'>('list');
@@ -657,11 +657,15 @@ export default function StrategyPage({
 
                       <button
                         onClick={handleEvaluate}
-                        disabled={isLoading}
+                        disabled={isEvaluating}
                         className="flex items-center gap-1.5 rounded-md bg-accent-400 px-3.5 py-1.5 text-sm font-medium text-ink-950 transition-colors ease-out hover:bg-accent-300 disabled:cursor-not-allowed disabled:bg-ink-650 disabled:text-content-disabled"
                       >
-                        <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
-                        {isLoading ? 'Çalışıyor…' : 'Çalıştır'}
+                        {isEvaluating ? (
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-500 border-t-transparent" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        )}
+                        {isEvaluating ? 'Çalışıyor…' : 'Çalıştır'}
                       </button>
 
                       {showEvalPanel && evaluateResult && (
@@ -687,8 +691,19 @@ export default function StrategyPage({
                       </div>
                     )}
 
+                    {/* Çalışıyor durumu.
+                        Önceden burada sonuç gelene kadar hiçbir şey
+                        render edilmiyordu; boş panel siyah bir ekran gibi
+                        duruyordu. */}
+                    {isEvaluating && !evaluateResult && (
+                      <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 px-4 py-6 text-content-faint">
+                        <span className="h-6 w-6 animate-spin rounded-full border-2 border-line-strong border-t-accent-400" />
+                        <p className="text-xs">Strateji test ediliyor…</p>
+                      </div>
+                    )}
+
                     {/* Sonuçlar */}
-                    {showEvalPanel && evaluateResult && (
+                    {!isEvaluating && showEvalPanel && evaluateResult && (
                       <div className="flex-1 min-h-0 flex flex-col px-4 py-2 overflow-hidden">
                         {/* Özet metrikler.
                             Önceden dokuz ayrı kart vardı (5 + 4); her biri bir

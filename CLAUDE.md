@@ -49,6 +49,19 @@ saniyeler sonra" denen şey bu iki faz. Her satır ayrıca süreyi neyin harcad�
 söyler (sağlayıcı çağrısı mı, RAM mi, parquet mi); cevap genelde tek bir sağlayıcı
 isteğidir.
 
+Test paketi bu dosyaya YAZMAZ: `tests/__init__.py` herhangi bir `app.*` modülü import
+edilmeden önce `PERF_LOG=false` ayarlar. Bazı testler (`test_waitlist_api.py`,
+`test_auth_api.py`, `test_market_api.py`, `test_analytics_api.py`) gerçek `main.app`'i
+`TestClient` ile çalıştırıyor; bu koruma olmadan `unittest discover` çalıştırmak,
+kullanıcının canlı izlediği dosyaya test trafiği karıştırıyordu.
+
+**Render'da (üretim) izleme:** `scripts/perf_log.py` yerel bir dosyayı takip eder,
+Render'ın kendi (geçici) diskine erişemez. Render'da görmek için panelden
+`PERF_LOG=true` ortam değişkenini ekleyin (bkz. [render.yaml](render.yaml)) — satırlar
+stdout'a basıldığı için Render'ın "Logs" sekmesinde canlı görünür, terminal gerekmez.
+İş bitince tekrar `false`/silin: sürekli üretim trafiğinde her istekte bir satır
+basmak gürültü ve gereksiz iştir.
+
 ### Tests (`backend/`)
 Tests are `unittest`-based (not pytest, despite the stale `.pytest_cache/`). Run from the `backend/` directory:
 ```bash

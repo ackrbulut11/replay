@@ -72,6 +72,20 @@ services:
       # kalmalı; aksi halde her worker aynı işi çalıştırır.
       - key: ENABLE_SCHEDULER
         value: "true"
+      # İstek başına performans ölçümü (bkz. app/core/perf.py). Üretimde
+      # varsayılan KAPALI — burada `sync: false` bırakılıp panelden elle
+      # `true` yapılmadıkça devreye girmez. Açılırsa her istek satırı stdout'a
+      # basılır ve Render'ın "Logs" sekmesinde canlı görünür (terminal
+      # gerektirmez). Aynı zamanda geçici diske de yazar
+      # (`storage/logs/perf.jsonl`, 5 MB'de devreder) ama bu dosya Render'da
+      # her yeniden dağıtımda zaten siliniyor; `scripts/perf_log.py` yalnızca
+      # LOKAL `python main.py` için anlamlıdır, buradaki dosyaya erişemez.
+      #
+      # İş bitince panelden tekrar `false` yapın: sürekli üretim trafiğinde
+      # her istekte stdout'a bir satır basmak anlamsız gürültü ve (küçük de
+      # olsa) ekstra iştir.
+      - key: PERF_LOG
+        sync: false
 
 databases:
   - name: replay-db

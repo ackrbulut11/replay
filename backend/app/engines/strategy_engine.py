@@ -22,6 +22,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.database.models import Strategy, StrategyEvaluation
+from app.data.loader import calendar_stretch, timeframe_delta
 from app.engines.execution import (
     DEFAULT_MAX_CONCURRENT_POSITIONS,
     ExecutionCosts,
@@ -553,8 +554,8 @@ class StrategyEngine:
 
         return {
             "return_pct": round(net_pnl_percent("long", entry, exit_price, costs), 2),
-            "entry_price": round(entry, 4),
-            "exit_price": round(exit_price, 4),
+            "entry_price": entry,
+            "exit_price": exit_price,
         }
 
     @staticmethod
@@ -647,10 +648,11 @@ class StrategyEngine:
 
         return {
             "side": side.upper(),
-            "entry_price": round(entry_price, 4),
+            "entry_price": entry_price,
             "entry_timestamp": marker.get("timestamp"),
+            "stop_price": marker.get("opening_stop_price"),
             "entry_bar_index": marker.get("bar_index"),
-            "last_price": round(last_close, 4),
+            "last_price": last_close,
             # Maliyetler düşülmüş; kapatılsa elde kalacak yüzde.
             "unrealized_pnl_percent": round(
                 net_pnl_percent(side, entry_price, exit_price, costs), 2
@@ -674,6 +676,7 @@ class StrategyEngine:
                 "side": str(signal.get("position_closed", "LONG")).lower(),
                 "entry_price": signal.get("entry_price"),
                 "exit_price": signal.get("price"),
+                "stop_price": signal.get("stop_price"),
                 # Maliyetler zaten düşülmüş; yeniden hesaplanmasın.
                 "pnl_percent": signal.get("pnl_percent"),
                 "entry_timestamp": signal.get("entry_timestamp"),
@@ -715,6 +718,7 @@ class StrategyEngine:
         loader,
         start_dt,
         end_dt,
+        param_overrides: dict | None = None,
     ) -> dict[str, pd.DataFrame]:
         """Stratejinin referans verdiği ek zaman dilimlerini yükler.
 
@@ -728,24 +732,42 @@ class StrategyEngine:
         `evaluate_symbol` bunu yakalayıp ilgili sembolü hata olarak işaretler,
         tekli testte ise route 502'ye çevirir.
         """
+        effective_params = RuleEngine._resolve_params(strategy, param_overrides)
+        warmup_bars = RuleEngine._get_warmup_period(strategy, effective_params)
         multi_tf_data: dict[str, pd.DataFrame] = {}
         failures: list[str] = []
 
         for tf in StrategyEngine.required_timeframes(strategy):
             try:
+                # Üst zaman dilimi yalnızca ana pencerenin başlangıcından
+                # yüklenirse EMA200@4h gibi göstergeler hiçbir zaman ısınmaz.
+                # Piyasa kapalı saatleri provider'a göre genişletilir; değerlendirme
+                # yine yalnızca ana pencere içinde yapılır, lookahead oluşmaz.
+                padded_bars = warmup_bars + 5
+                tf_start = start_dt - timeframe_delta(tf) * int(
+                    padded_bars * calendar_stretch(provider, tf)
+                )
                 tf_df = loader.load_data(
                     provider_name=provider,
                     symbol=symbol,
                     timeframe=tf,
-                    start_time=start_dt,
+                    start_time=tf_start,
                     end_time=end_dt,
                 )
             except Exception as exc:
-                failures.append(f"{tf} ({exc})")
+                logger.warning(
+                    "Üst zaman dilimi verisi yüklenemedi (%s %s %s): %s",
+                    provider,
+                    symbol,
+                    tf,
+                    exc,
+                    exc_info=True,
+                )
+                failures.append(tf)
                 continue
 
             if tf_df is None or tf_df.empty:
-                failures.append(f"{tf} (veri bulunamadı)")
+                failures.append(tf)
                 continue
 
             multi_tf_data[tf] = tf_df
@@ -798,6 +820,7 @@ class StrategyEngine:
                 loader=loader,
                 start_dt=start_dt,
                 end_dt=end_dt,
+                param_overrides=param_overrides,
             )
 
             res = self.evaluate(
@@ -841,6 +864,7 @@ class StrategyEngine:
                 # tablosuna gitmez (route ayikliyor), yalnizca sermaye
                 # paylastirmali hesabin girdisidir.
                 "closed_positions": self._closed_positions(res["signals"]),
+                "open_position": res.get("open_position"),
                 "error": None,
             }
         except Exception as e:
@@ -922,7 +946,8 @@ def portfolio_from_batch(
     sonucu tekli test sonuçlarıyla aynı metriklerle okunur.
     """
     trades_by_symbol = {
-        item["symbol"]: item.get("closed_positions") or []
+        item["symbol"]: (item.get("closed_positions") or [])
+        + ([item["open_position"]] if item.get("open_position") else [])
         for item in batch_results
         if item.get("error") is None and item.get("symbol")
     }

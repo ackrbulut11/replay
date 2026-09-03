@@ -93,10 +93,10 @@ class TestPositionSizing(unittest.TestCase):
         qty = position_quantity(sizing, equity=10_000, entry_price=100, stop_price=99.999)
         self.assertLessEqual(qty * 100, 10_000 + 1e-6)
 
-    def test_risk_percent_without_stop_falls_back(self):
+    def test_risk_percent_without_stop_is_rejected(self):
         sizing = PositionSizing(SizingMode.RISK_PERCENT, 1)
-        qty = position_quantity(sizing, equity=10_000, entry_price=100, stop_price=None)
-        self.assertAlmostEqual(qty, 100.0)
+        with self.assertRaises(ValueError):
+            position_quantity(sizing, equity=10_000, entry_price=100, stop_price=None)
 
     def test_unknown_mode_is_rejected(self):
         with self.assertRaises(ValueError):

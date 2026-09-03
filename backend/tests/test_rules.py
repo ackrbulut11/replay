@@ -471,6 +471,66 @@ class TestWarmup(unittest.TestCase):
         }
         self.assertEqual(RuleEngine._get_warmup_period(strategy, {}), 35)
 
+    def test_warmup_indicator_offsetini_ve_kesisim_barini_kapsar(self):
+        strategy = {
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "indicator", "name": "EMA", "period": 20, "offset": 5},
+                "operator": "cross_above",
+                "right": {"type": "value", "value": 10},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        self.assertEqual(RuleEngine._get_warmup_period(strategy, {}), 26)
+
+    def test_warmup_fiyat_offsetini_de_kapsar(self):
+        strategy = {
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {"type": "price", "field": "close", "offset": 40},
+                "operator": ">",
+                "right": {"type": "value", "value": 10},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        self.assertEqual(RuleEngine._get_warmup_period(strategy, {}), 40)
+
+    def test_ust_zaman_dilimi_ana_pencereden_once_isitilir(self):
+        calls = []
+
+        class Loader:
+            def load_data(self, **kwargs):
+                calls.append(kwargs)
+                return pd.DataFrame({"timestamp": [kwargs["start_time"]], "close": [1.0]})
+
+        strategy = {
+            "entry_rules": {"logic": "AND", "conditions": [{
+                "left": {
+                    "type": "indicator",
+                    "name": "EMA",
+                    "period": 200,
+                    "timeframe": "4h",
+                },
+                "operator": ">",
+                "right": {"type": "value", "value": 1},
+            }]},
+            "exit_rules": {"logic": "AND", "conditions": []},
+        }
+        start = datetime(2024, 1, 1)
+        result = StrategyEngine.load_multi_tf_data(
+            strategy=strategy,
+            provider="nasdaq",
+            symbol="AAPL",
+            loader=Loader(),
+            start_dt=start,
+            end_dt=datetime(2024, 6, 1),
+        )
+
+        self.assertIn("4h", result)
+        self.assertEqual(len(calls), 1)
+        self.assertLess(calls[0]["start_time"], start)
+        # 200 adet 4 saatlik mum, NASDAQ seans/hafta sonu payıyla yaklaşık
+        # 200 takvim gününden fazla geçmiş ister.
+        self.assertGreater((start - calls[0]["start_time"]).days, 190)
+
 
 class TestStopLossDoesNotReverse(unittest.TestCase):
     """TP/SL risk yonetimi cikisidir; kendiliginden ters pozisyon acmaz."""

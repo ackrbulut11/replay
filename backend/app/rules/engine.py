@@ -25,7 +25,7 @@ from app.engines.execution import (
     net_pnl_percent,
 )
 from app.indicators.registry import IndicatorRegistry
-from app.rules.evaluator import RuleEvaluator, iter_operands
+from app.rules.evaluator import RuleEvaluator, iter_conditions, iter_operands, resolve_parameter
 from app.rules.strategy_models import SignalType
 
 
@@ -229,6 +229,7 @@ class RuleEngine:
         position_state: str = "none"  # "none", "long", "short"
         last_entry_price: float | None = None
         # Açık pozisyonun giriş anı — kapanışta işlem kaydına yazılır.
+        last_entry_stop_price: float | None = None
         last_entry_timestamp: int | None = None
         last_entry_bar_index: int | None = None
         # Kapanışta üretilmiş ama henüz gerçekleşmemiş sinyal (bkz. bar_delay).
@@ -283,7 +284,7 @@ class RuleEngine:
             TP/SL çıkışları böyledir (bkz. çağrı yeri).
             """
             nonlocal position_state, last_entry_price
-            nonlocal last_entry_timestamp, last_entry_bar_index
+            nonlocal last_entry_timestamp, last_entry_bar_index, last_entry_stop_price
 
             # Slipaj gerçekleşme fiyatına gömülür: alış istenenin üstünde,
             # satış altında dolar. Böylece hem kâr/zarar hem grafikte gösterilen
@@ -294,7 +295,7 @@ class RuleEngine:
                 "bar_index": bar_index,
                 "timestamp": timestamp,
                 "signal": signal.value,
-                "price": round(exec_price, 4),
+                "price": exec_price,
                 "conditions_met": conditions_met,
                 "signal_bar_index": signal_bar_index,
                 "signal_timestamp": signal_timestamp,
@@ -309,9 +310,10 @@ class RuleEngine:
                 closed_side = "LONG"
 
             if closed_side:
-                item["entry_price"] = round(last_entry_price, 4)
-                item["pnl_percent"] = round(
-                    net_pnl_percent(closed_side.lower(), last_entry_price, exec_price, costs), 2
+                item["entry_price"] = last_entry_price
+                item["stop_price"] = last_entry_stop_price
+                item["pnl_percent"] = net_pnl_percent(
+                    closed_side.lower(), last_entry_price, exec_price, costs
                 )
                 item["position_closed"] = closed_side
                 # Pozisyonun AÇILDIĞI an. Portföy simülasyonu sermayeyi
@@ -344,6 +346,11 @@ class RuleEngine:
                 last_entry_timestamp = None
                 last_entry_bar_index = None
 
+            last_entry_stop_price = None
+            if last_entry_price is not None and stop_loss_pct:
+                direction = -1 if position_state == "long" else 1
+                last_entry_stop_price = last_entry_price * (1 + direction * stop_loss_pct / 100)
+            item["opening_stop_price"] = last_entry_stop_price
             signals.append(item)
 
         for i in range(start_index, end_index + 1):
@@ -538,7 +545,7 @@ class RuleEngine:
     @staticmethod
     def _resolve_params(
         strategy: dict,
-        overrides: dict[str, Union[int, float]],
+        overrides: dict[str, Union[int, float]] | None,
     ) -> dict[str, Union[int, float]]:
         """Strateji parametrelerinin varsayılan ve override değerlerini birleştirir.
 
@@ -558,7 +565,7 @@ class RuleEngine:
             limits[name] = (param_def.get("min"), param_def.get("max"))
 
         unknown: list[str] = []
-        for name, value in overrides.items():
+        for name, value in (overrides or {}).items():
             if name in ENGINE_OVERRIDE_KEYS:
                 # Motor seviyesi ayarlar: strateji parametresi değiller ama
                 # değerlendirme çağrısıyla geçilebilirler (bkz. StrategyEngine.evaluate).
@@ -598,24 +605,47 @@ class RuleEngine:
         """
         max_period = 0
 
+        def operand_warmup(operand: dict) -> int:
+            offset = int(resolve_parameter(operand.get("offset", 0) or 0, params))
+            required = max(offset, 0)
+            if operand.get("type") == "indicator":
+                raw_period = operand.get("period", 14)
+                if isinstance(raw_period, str) and raw_period.startswith("$"):
+                    period = int(params.get(raw_period[1:], 14))
+                else:
+                    period = int(raw_period)
+                try:
+                    period = IndicatorRegistry.warmup_bars(operand.get("name", ""), period)
+                except ValueError:
+                    pass
+                required += period
+            if operand.get("type") == "expr":
+                required += max(operand_warmup(operand.get("left") or {}),
+                                operand_warmup(operand.get("right") or {}))
+            return required
+
         def scan_conditions(group: dict) -> None:
             nonlocal max_period
             # `iter_operands` alt grupları da gezer; düz döngü iç içe gruplardaki
             # indikatörleri görmez ve warmup olduğundan kısa çıkardı.
             for operand in iter_operands(group):
-                if operand.get("type") == "indicator":
-                    raw_period = operand.get("period", 14)
-                    if isinstance(raw_period, str) and raw_period.startswith("$"):
-                        period = int(params.get(raw_period[1:], 14))
-                    else:
-                        period = int(raw_period)
-                    try:
-                        period = IndicatorRegistry.warmup_bars(operand.get("name", ""), period)
-                    except ValueError:
-                        # Bilinmeyen indikatör: değerlendirme sırasında zaten
-                        # hata verecek; burada ham period'la yetin.
-                        pass
-                    max_period = max(max_period, period)
+                max_period = max(max_period, operand_warmup(operand))
+
+            # Kesişim bir önceki barı; rising/falling ise sağ operandın söylediği
+            # kadar önceki sol değeri okur. Bunlar operandın kendi offset'ine
+            # eklenmeden warmup erken başlıyor ve ilk değerlendirilen bar NaN
+            # olabiliyordu.
+            for condition in iter_conditions(group):
+                operator = condition.get("operator")
+                extra = 1 if operator in ("cross_above", "cross_below") else 0
+                if operator in ("rising", "falling"):
+                    raw = (condition.get("right") or {}).get("value", 0)
+                    extra = max(int(resolve_parameter(raw, params)), 0)
+                if extra:
+                    max_period = max(
+                        max_period,
+                        operand_warmup(condition.get("left") or {}) + extra,
+                    )
 
         # Entry ve exit kurallarını tara
         entry_rules = strategy.get("entry_rules", {})

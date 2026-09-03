@@ -53,13 +53,41 @@ class StrategyValidationError(ValueError):
         super().__init__("; ".join(errors))
 
 
+MAX_RULE_NODES = 512
+MAX_RULE_CONDITIONS = 100
+
+
+def _tree_budget_errors(tree) -> list[str]:
+    """İç içe ve geniş JSON ağaçlarının toplam maliyetini sınırlar."""
+    stack = [(tree, 0)]
+    nodes = conditions = 0
+    while stack:
+        value, depth = stack.pop()
+        nodes += 1
+        if nodes > MAX_RULE_NODES or depth > 32:
+            return ["Kural ağacı boyut veya derinlik sınırını aşıyor"]
+        if isinstance(value, dict):
+            if "operator" in value:
+                conditions += 1
+                if conditions > MAX_RULE_CONDITIONS:
+                    return [f"En fazla {MAX_RULE_CONDITIONS} koşul kullanılabilir"]
+            stack.extend((child, depth + 1) for child in value.values())
+        elif isinstance(value, list):
+            if len(value) > MAX_RULE_CONDITIONS:
+                return [f"Bir listede en fazla {MAX_RULE_CONDITIONS} öğe olabilir"]
+            stack.extend((child, depth + 1) for child in value)
+    return []
+
+
 def validate_strategy(strategy: dict) -> list[str]:
     """Kural ağacını doğrular ve hata listesi döndürür (boşsa geçerli).
 
     Hata fırlatmak yerine liste döndürür: kullanıcıya tek tek "şunu da düzelt"
     demek yerine hepsini birden göstermek gerekiyor.
     """
-    errors: list[str] = []
+    errors = _tree_budget_errors(strategy)
+    if errors:
+        return errors
     param_names = _parameter_names(strategy, errors)
 
     groups: list[tuple[str, Any]] = [
@@ -371,8 +399,16 @@ def validate_condition_group(
     if not isinstance(group, dict):
         return [f"{field_name}: koşul grubu bir nesne olmalı"]
 
-    param_names = _parameter_names({"parameters": parameters or []}, errors)
-    _validate_group(group, param_names, field_name, errors, depth=0)
+    errors.extend(_tree_budget_errors(group))
+    if errors:
+        return errors
+    if parameters and len(parameters) > 64:
+        return ["En fazla 64 parametre kullanılabilir"]
+    try:
+        param_names = _parameter_names({"parameters": parameters or []}, errors)
+        _validate_group(group, param_names, field_name, errors, depth=0)
+    except (TypeError, ValueError, AttributeError, OverflowError):
+        errors.append("Koşul alanlarının türleri veya sayısal değerleri geçersiz")
     return errors
 
 

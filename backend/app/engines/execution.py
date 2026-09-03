@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from math import isfinite
 from typing import Any, Mapping, Optional, Sequence
 
 # Baz puan (basis point): 1 bps = %0,01. Komisyon oranları bu birimde tutulur,
@@ -160,6 +161,10 @@ class PositionSizing:
     # Anlamı moda göre değişir: adet / tutar / yüzde / risk yüzdesi.
     value: float = 100.0
 
+    def __post_init__(self):
+        if not isfinite(self.value) or self.value <= 0:
+            raise ValueError("Pozisyon büyüklüğü sonlu ve pozitif olmalıdır")
+
     @classmethod
     def from_dict(cls, data: Mapping[str, Any] | None):
         if not data:
@@ -185,30 +190,28 @@ def position_quantity(
 
     `RISK_PERCENT` modu stop seviyesi ister: miktar, stop'a kadar düşüldüğünde
     kaybedilecek tutar bakiyenin `value` yüzdesi olacak şekilde seçilir. Stop
-    verilmemişse (stratejide `stop_loss_pct` yok) bu mod uygulanamaz ve
-    bakiyenin tamamına düşülür — sessizce sıfır miktar üretmek işlemi hiç
-    açılmamış gibi gösterirdi.
+    verilmemişse hata döner; başka bir boyutlandırma sessizce uygulanmaz.
     """
     if entry_price <= 0 or equity <= 0:
         return 0.0
 
     if sizing.mode == SizingMode.FIXED_UNITS:
-        return max(sizing.value, 0.0)
+        return min(sizing.value, equity / entry_price)
 
     if sizing.mode == SizingMode.FIXED_CASH:
-        return max(sizing.value, 0.0) / entry_price
+        return min(sizing.value, equity) / entry_price
 
     if sizing.mode == SizingMode.PERCENT_EQUITY:
         cash = equity * max(sizing.value, 0.0) / 100.0
-        return cash / entry_price
+        return min(cash, equity) / entry_price
 
     # RISK_PERCENT
-    if stop_price is None or stop_price <= 0:
-        return equity / entry_price
+    if stop_price is None or not isfinite(stop_price) or stop_price <= 0:
+        raise ValueError("Risk yüzdesiyle boyutlandırma için geçerli stop seviyesi zorunludur")
 
     risk_per_unit = abs(entry_price - stop_price)
     if risk_per_unit <= 0:
-        return equity / entry_price
+        raise ValueError("Stop seviyesi giriş fiyatından farklı olmalıdır")
 
     risk_cash = equity * max(sizing.value, 0.0) / 100.0
     quantity = risk_cash / risk_per_unit
@@ -314,12 +317,11 @@ def simulate_portfolio(
     for symbol, trades in trades_by_symbol.items():
         for trade in trades:
             entry_ts = trade.get("entry_timestamp")
-            exit_ts = trade.get("exit_timestamp")
-            if entry_ts is None or exit_ts is None:
+            if entry_ts is None:
                 continue
             pending.append({**dict(trade), "symbol": symbol})
 
-    pending.sort(key=lambda t: (t["entry_timestamp"], t["exit_timestamp"]))
+    pending.sort(key=lambda t: (t["entry_timestamp"], t["symbol"]))
 
     equity = float(starting_balance)
     # Bağlı sermaye: (çıkış_zamanı, tutar, işlem)
@@ -331,8 +333,8 @@ def simulate_portfolio(
         """`now_ts`'e kadar kapanmış pozisyonların sonucunu bakiyeye işler."""
         nonlocal equity
         still_open = []
-        for position in open_positions:
-            if position["exit_timestamp"] <= now_ts:
+        for position in sorted(open_positions, key=lambda p: (p.get("exit_timestamp") is None, p.get("exit_timestamp") or 0, p["symbol"])):
+            if position.get("exit_timestamp") is not None and position["exit_timestamp"] <= now_ts:
                 equity += position["pnl"]
                 closed.append({**position, "equity_after": equity})
             else:
@@ -371,8 +373,8 @@ def simulate_portfolio(
             "pnl": capital * pnl_pct / 100.0,
         })
 
-    # Kalan açık pozisyonların hepsi kapanır (veri sonu).
-    _close_until(max((p["exit_timestamp"] for p in open_positions), default=0))
+    # Yalnızca veri içinde gerçekten kapananlar gerçekleşir.
+    _close_until(max((p["exit_timestamp"] for p in open_positions if p.get("exit_timestamp") is not None), default=0))
 
     closed.sort(key=lambda t: t["exit_timestamp"])
 
@@ -384,5 +386,8 @@ def simulate_portfolio(
         # Portföy kısıtı yüzünden girilemeyen sinyaller. Yüksekse sınır
         # stratejinin sinyal üretimine göre çok dar demektir.
         "skipped_trades": skipped,
+        "open_positions": open_positions,
+        "committed_capital": sum(p["capital"] for p in open_positions),
+        "available_cash": max(equity - sum(p["capital"] for p in open_positions), 0.0),
         "trades": closed,
     }

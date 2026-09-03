@@ -113,78 +113,49 @@ def resolve_parameter(
     return value
 
 
-def _bar_duration(df: pd.DataFrame, cache: dict | None = None):
-    """Bir serinin mum süresini zaman damgalarından çıkarır.
+def _bar_duration(df: pd.DataFrame, cache: dict | None = None, bar_index: int | None = None):
+    """Metadata yoksa süreyi yalnızca değerlendirilmiş geçmişten çıkarır."""
+    prefix = df if bar_index is None else df.iloc[:bar_index + 1]
+    if "timestamp" not in prefix or len(prefix) < 2:
+        return None
+    differences = pd.to_datetime(prefix["timestamp"]).diff().dropna()
+    differences = differences[differences > pd.Timedelta(0)]
+    return differences.min() if not differences.empty else None
 
-    Medyan kullanılır: hafta sonu/tatil boşlukları (BIST'te 1g serisinde 3
-    günlük atlamalar) ortalamayı bozarken medyanı bozmaz. Süre çıkarılamazsa
-    (tek satırlık seri) None döner.
-    """
-    if cache is not None:
-        key = ("__bar_duration__", id(df))
-        if key in cache:
-            return cache[key]
 
-    duration = None
-    if "timestamp" in df.columns and len(df) >= 2:
-        diffs = pd.to_datetime(df["timestamp"]).diff().dropna()
-        if not diffs.empty:
-            median = diffs.median()
-            if pd.notna(median) and median > pd.Timedelta(0):
-                duration = median
-
-    if cache is not None:
-        cache[key] = duration
-    return duration
+def _close_times(timestamps, timeframe, fallback):
+    """Aylık mum takvim ayıyla, diğer mumlar kendi süreleriyle kapanır."""
+    if timeframe == "1mo":
+        return timestamps + pd.DateOffset(months=1)
+    durations = {"1m": "1min", "5m": "5min", "15m": "15min", "1h": "1h",
+                 "4h": "4h", "1d": "1d", "1w": "7d"}
+    duration = pd.Timedelta(durations[timeframe]) if timeframe in durations else fallback
+    return timestamps + duration if duration is not None else None
 
 
 def _get_multi_tf_bar_index(
-    df: pd.DataFrame,
-    bar_index: int,
-    target_df: pd.DataFrame,
-    cache: dict | None = None,
+    df: pd.DataFrame, bar_index: int, target_df: pd.DataFrame,
+    cache: dict | None = None, target_timeframe: str | None = None,
 ) -> int:
-    """Üst zaman diliminde KULLANILABİLİR (kapanmış) mumun indeksini bulur.
-
-    Lookahead koruması (RULES.md #19-21): `timestamp` mumun AÇILIŞ zamanıdır.
-    Yalnızca "açılışı geçilmiş" mumu seçmek geleceğe bakmaktır — 15dk grafikte
-    saat 10:15'teyken 08:00'de başlayan 4S mumu henüz 12:00'de kapanacaktır ve
-    kapanışı/yükseği/düşüğü o an bilinemez.
-
-    Ölçüt: değerlendirme, grafik mumunun KAPANIŞINDA yapılır. Üst dilim mumu
-    ancak kendi kapanışı bu ana kadar gerçekleşmişse kullanılabilir:
-
-        hedef_açılış + hedef_süre <= mevcut_açılış + grafik_süresi
-
-    Aynı zaman dilimi verildiğinde eşitlik sağlanır ve mumun kendisi seçilir
-    (doğru: o mum kapanmıştır). Süreler çıkarılamazsa muhafazakâr davranılır
-    ve açılışı geçilmiş SON mum atlanır — o mum her zaman hâlâ oluşmaktadır.
-    """
+    """Yalnızca ana mum kapanışına kadar kapanmış hedef mumu seçer."""
     if bar_index < 0 or bar_index >= len(df) or target_df.empty:
         return -1
-    if "timestamp" not in df.columns or "timestamp" not in target_df.columns:
-        # Hizalama yapılamıyor: eskiden bar_index doğrudan kullanılıyordu, bu
-        # da tamamen keyfi (ve büyük olasılıkla ileriye bakan) bir eşleme
-        # üretiyordu. Değer yok saymak, yanlış değer üretmekten iyidir.
+    if "timestamp" not in df or "timestamp" not in target_df:
         return -1
-
-    current_ts = df.iloc[bar_index]["timestamp"]
-    valid = target_df[target_df["timestamp"] <= current_ts]
-    if valid.empty:
-        return -1
-
-    target_duration = _bar_duration(target_df, cache)
-    source_duration = _bar_duration(df, cache)
-
-    if target_duration is None or source_duration is None:
-        # Muhafazakâr geri çekilme: açılışı geçilmiş son mum hâlâ oluşuyor.
+    current_ts = pd.Timestamp(df.iloc[bar_index]["timestamp"])
+    evaluated_at = _close_times(current_ts, df.attrs.get("timeframe"),
+                                _bar_duration(df, cache, bar_index))
+    if evaluated_at is None:
+        evaluated_at = current_ts
+    # Gelecekteki zaman damgaları süre hesabına bile katılmaz.
+    valid = target_df[pd.to_datetime(target_df["timestamp"]) <= current_ts]
+    closes = _close_times(pd.to_datetime(valid["timestamp"]),
+                          target_timeframe or target_df.attrs.get("timeframe"),
+                          _bar_duration(valid))
+    if closes is None:
         return len(valid) - 2 if len(valid) >= 2 else -1
-
-    evaluated_at = current_ts + source_duration
-    closed = valid[valid["timestamp"] + target_duration <= evaluated_at]
-    if closed.empty:
-        return -1
-    return len(closed) - 1
+    indices = (closes <= evaluated_at).to_numpy().nonzero()[0]
+    return int(indices[-1]) if len(indices) else -1
 
 
 def resolve_operand(
@@ -203,6 +174,12 @@ def resolve_operand(
     op_type = operand.get("type", "value")
 
     if op_type == "expr":
+        offset = int(resolve_parameter(operand.get("offset", 0) or 0, params))
+        if offset < 0:
+            raise ValueError("Negatif offset yasaktır (lookahead bias)")
+        bar_index -= offset
+        if bar_index < 0:
+            return float("nan")
         # Aritmetik operand: iki operandı bir işlemle birleştirir. Bunsuz
         # "close < giriş − 2×ATR" gibi en yaygın stop kuralı DSL'de hiç
         # yazılamıyordu; kullanıcı sabit yüzdeye mahkûmdu.
@@ -258,7 +235,7 @@ def resolve_operand(
             target_df = (multi_tf_data or {}).get(timeframe)
             if target_df is None:
                 return float("nan")
-            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache) - offset
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache, timeframe) - offset
             if idx < 0:
                 return float("nan")
             return float(target_df[field].iloc[idx])
@@ -283,7 +260,7 @@ def resolve_operand(
             target_df = (multi_tf_data or {}).get(timeframe)
             if target_df is None:
                 return float("nan")
-            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache) - offset
+            idx = _get_multi_tf_bar_index(df, bar_index, target_df, cache, timeframe) - offset
             if idx < 0:
                 return float("nan")
             return IndicatorRegistry.get_value(name, target_df, period, idx, field, cache=cache)
@@ -342,7 +319,7 @@ class RuleEvaluator:
             # çözülür ve karşılaştırma iki değer arasında yapılır.
             lookback = max(int(right_val), 1)
             prev = resolve_operand(
-                {**left_def, "offset": int(left_def.get("offset", 0) or 0) + lookback},
+                {**left_def, "offset": int(resolve_parameter(left_def.get("offset", 0) or 0, params)) + lookback},
                 df, bar_index, params, multi_tf_data, current_pnl, cache,
             )
             if math.isnan(prev):

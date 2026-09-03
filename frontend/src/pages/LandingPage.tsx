@@ -44,9 +44,9 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
   onSubmitted,
 }) => {
   const [email, setEmail] = React.useState('');
+  const emailId = React.useId();
   const [status, setStatus] = React.useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const [message, setMessage] = React.useState('');
-  const [alreadyRegistered, setAlreadyRegistered] = React.useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -64,7 +64,6 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
       const result = await joinWaitlist(trimmed, source);
       setStatus('done');
       setMessage(result.message);
-      setAlreadyRegistered(result.already_registered);
       onSubmitted?.();
     } catch (err: unknown) {
       setStatus('error');
@@ -75,13 +74,10 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
   if (status === 'done') {
     return (
       <div
-        className={`flex items-center gap-2.5 rounded-md border px-4 py-3 text-sm ${
-          alreadyRegistered
-            ? 'border-line-strong bg-white/[0.03] text-content-muted'
-            : 'border-accent-500/20 bg-accent-500/[0.06] text-accent-400'
-        }`}
+        className="flex items-center gap-2.5 rounded-md border border-accent-500/20 bg-accent-500/[0.06] px-4 py-3 text-sm text-accent-400"
+        role="status"
       >
-        <Check size={16} className={`shrink-0 ${alreadyRegistered ? 'text-content-faint' : 'text-accent-400'}`} />
+        <Check size={16} className="shrink-0 text-accent-400" />
         <span>{message}</span>
       </div>
     );
@@ -94,7 +90,9 @@ const WaitlistForm: React.FC<{ source: WaitlistSource; note?: string; onSubmitte
           handleSubmit'teki EMAIL_PATTERN kontrolünde — tek, İngilizce ve
           yalnızca gönderildiğinde görünen bir mesaj. */}
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label htmlFor={emailId} className="sr-only">Email address</label>
         <input
+          id={emailId}
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -164,8 +162,6 @@ const SHIPPED = [
 ];
 
 const PLANNED = [
-  'Backtest reports — equity curve, drawdown',
-  'Trade journal and statistics',
   'Parameter optimization',
   'Live data over WebSocket',
   'Saved workspaces',
@@ -195,7 +191,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
           kaybolur, boş yere ekranda yer kaplamaz. */}
       <header className="border-b border-line">
         <Container className="flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
+          <Link to="/" className="flex min-h-11 items-center gap-2.5 hover:opacity-90 transition-opacity">
             <img
               src={logoImg}
               alt=""
@@ -214,7 +210,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               {emailSubmitted ? (
                 <button
                   onClick={handleSignInClick}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent-500/20 border border-accent-500/40 px-4 py-1.5 text-xs font-medium text-accent-400 transition-colors hover:bg-accent-300/30"
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md bg-accent-500/20 border border-accent-500/40 px-4 text-xs font-medium text-accent-400 transition-colors hover:bg-accent-300/30"
                 >
                   Go to App
                   <ArrowRight size={14} />
@@ -222,7 +218,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               ) : (
                 <button
                   onClick={handleSignInClick}
-                  className="text-xs font-medium text-content-muted transition-colors hover:text-content-strong"
+                  className="inline-flex min-h-11 items-center px-3 text-xs font-medium text-content-muted transition-colors hover:text-content-strong"
                 >
                   Sign in
                 </button>
@@ -453,7 +449,7 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
       <section className="border-b border-line py-20 lg:py-28">
         <Container>
           <h2 className="mt-5 max-w-[560px] text-[26px] font-semibold leading-[1.2] tracking-[-0.025em] sm:text-[30px]">
-            Half of it is built. Here is exactly which half.
+            The core research loop is built. Here is what works today.
           </h2>
 
           <div className="mt-14 grid grid-cols-1 gap-12 md:grid-cols-2 md:gap-16">
@@ -501,8 +497,8 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
             Early access list
           </h2>
           <p className="mx-auto mt-4 max-w-[420px] text-base leading-[1.75] text-content-muted">
-            The engine, replay and batch scans are already available. We&rsquo;ll
-            email you when the rest is ready.
+            The engine, reports, journal, replay and batch scans are available.
+            We&rsquo;ll email you as the research toolkit expands.
           </p>
           <div className="mt-8 flex justify-center">
             <WaitlistForm source="footer" onSubmitted={() => setEmailSubmitted(true)} />
@@ -538,14 +534,14 @@ export const LandingPage: React.FC<{ onLogin?: () => void }> = ({ onLogin }) => 
               // sayfada bırakırdı.
               <button
                 onClick={handleSignInClick}
-                className="shrink-0 text-accent-400 font-medium underline decoration-accent-500/30 underline-offset-4 transition-colors hover:text-accent-300 cursor-pointer"
+                className="inline-flex min-h-11 shrink-0 items-center px-2 text-accent-400 font-medium underline decoration-accent-500/30 underline-offset-4 transition-colors hover:text-accent-300 cursor-pointer"
               >
                 Go to App →
               </button>
             ) : (
               <button
                 onClick={handleSignInClick}
-                className="shrink-0 text-content-faint underline decoration-line-strong underline-offset-4 transition-colors hover:text-content-muted cursor-pointer"
+                className="inline-flex min-h-11 shrink-0 items-center px-2 text-content-faint underline decoration-line-strong underline-offset-4 transition-colors hover:text-content-muted cursor-pointer"
               >
                 Sign in
               </button>

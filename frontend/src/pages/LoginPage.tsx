@@ -14,11 +14,6 @@ import { errorMessage } from '../utils/errors';
  * animasyonu — eski tasarımın görsel formatı (cam efekti, gölge, döndürülmüş
  * rozetler) korunuyor, indigo/amber tonları emerald'a çevrildi.
  *
- * Rozetlerdeki "+68.4% Win Rate" ve "10.000+ Bar/Saniye" metinleri
- * ölçülmüş/doğrulanmış rakamlar değildir — kullanıcı, bunları kaldırmayı
- * önerdiğim uyarıdan sonra bilerek ve açıkça eski hâliyle geri istedi
- * (bkz. sohbet geçmişi). Bilinçli bir ürün kararı olarak burada duruyor.
- *
  * Ekran metni bilinçli olarak İngilizcedir (kullanıcı onayıyla) — landing
  * page İngilizce, giriş akışı ondan sonra geldiği için dil tutarlılığı
  * korunuyor. CLAUDE.md'nin "UI metni Türkçedir" kuralına bilerek istisna.
@@ -166,10 +161,12 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
               radial mask ile kenarlarda sayfaya doğru soluyor (daha doğal
               bir geçiş için); rozetler bu maskenin dışında, tam opak kalıyor. */}
           <div className="lg:pl-2">
-            <div
+            <button
+              type="button"
               onClick={() => setAnimKey((k) => k + 1)}
-              className="relative w-full cursor-pointer"
+              className="relative w-full cursor-pointer text-left"
               title="Click to replay the drawing animation"
+              aria-label="Replay the chart drawing animation"
             >
               <style>{`
                 @keyframes loginDrawLine {
@@ -187,8 +184,8 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                   <TrendingUp size={16} />
                 </div>
                 <div>
-                  <div className="text-2xs font-medium text-content-muted">Backtest Performance</div>
-                  <div className="text-xs font-medium text-profit-400">+68.4% Win Rate</div>
+                  <div className="text-2xs font-medium text-content-muted">Signal integrity</div>
+                  <div className="text-xs font-medium text-profit-400">Closed bars only</div>
                 </div>
               </div>
 
@@ -197,8 +194,8 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                   <CheckCircle2 size={16} />
                 </div>
                 <div>
-                  <div className="text-2xs font-medium text-content-muted">Data Processed</div>
-                  <div className="text-xs font-medium text-accent-300">10,000+ Bars / Second</div>
+                  <div className="text-2xs font-medium text-content-muted">Execution model</div>
+                  <div className="text-xs font-medium text-accent-300">Next-bar open</div>
                 </div>
               </div>
 
@@ -217,12 +214,14 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                   </defs>
 
                   <path
+                    className="login-illustration-motion"
                     key={`fill-${animKey}`}
                     d="M30 180 Q80 140 120 160 T210 110 T290 80 T370 45 L370 200 L30 200 Z"
                     fill="url(#loginChartFill)"
                     style={{ animation: 'loginFadeInFill 2.2s ease-in-out forwards' }}
                   />
                   <path
+                    className="login-illustration-motion"
                     key={`line-${animKey}`}
                     d="M30 180 Q80 140 120 160 T210 110 T290 80 T370 45"
                     stroke="url(#loginChartLine)"
@@ -253,7 +252,7 @@ export const LoginPage: React.FC<{ onBack?: () => void }> = () => {
                   <circle cx="370" cy="45" r="5" fill={UP} />
                 </svg>
               </div>
-            </div>
+            </button>
           </div>
         </Container>
       </section>

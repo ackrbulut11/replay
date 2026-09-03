@@ -228,10 +228,20 @@
     *,
     *::before,
     *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+
+    /* Dekoratif çizim ve giriş koreografisi tamamen kapanır. Durum değişimini
+       anlatan hover/focus/panel geçişleri ise kısa kalır; hiyerarşi yok olmaz. */
+    .login-illustration-motion,
+    .animate-fadeIn,
+    .animate-scaleUp,
+    .animate-pulse {
+      animation: none !important;
+    }
+
+    [class*='transition'] {
+      transition-duration: 50ms !important;
     }
   }
 }

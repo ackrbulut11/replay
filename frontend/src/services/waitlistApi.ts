@@ -6,13 +6,10 @@
  * gerekmiyor — uç nokta herkese açık.
  */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.PROD ? 'https://replay-xj3e.onrender.com/api' : '/api');
+const API_BASE_URL = '/api';
 
 export interface WaitlistResponse {
   ok: boolean;
-  already_registered: boolean;
   message: string;
 }
 

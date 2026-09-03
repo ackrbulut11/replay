@@ -12,6 +12,7 @@ Testler aga cikmaz: sahte saglayici ve gecici bir storage dizini kullanilir.
 from __future__ import annotations
 
 import shutil
+import os
 import tempfile
 import unittest
 import unittest.mock
@@ -368,3 +369,29 @@ class TestPerTimeframeRetention(unittest.TestCase):
 
     def test_bilinmeyen_dilim_limitsizdir(self):
         self.assertIsNone(self.loader._retention_limit("3h"))
+
+
+class TestCachePathSecurity(unittest.TestCase):
+    """Sembol girdisi önbellek kökünden çıkamamalı ve Forex'i bozmamalı."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp()
+        self.loader = DataLoader()
+        self.loader.project_root = self.tmp
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_forex_ayraci_dosya_adinda_kodlanir(self):
+        path = self.loader._get_cache_path("forex", "EUR/USD", "1h")
+        self.assertEqual(os.path.basename(path), "EUR%2FUSD_1h.parquet")
+        self.assertEqual(
+            os.path.commonpath(
+                [os.path.realpath(path), os.path.realpath(os.path.join(self.tmp, "storage"))]
+            ),
+            os.path.realpath(os.path.join(self.tmp, "storage")),
+        )
+
+    def test_yol_gecisi_sembol_olarak_reddedilir(self):
+        with self.assertRaises(ValueError):
+            self.loader._get_cache_path("forex", "../../secret", "1h")

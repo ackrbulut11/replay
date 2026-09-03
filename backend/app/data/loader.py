@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import pandas as pd
 import threading
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timedelta
+from urllib.parse import quote
 from ..core.config import settings
 from ..core.perf import note_cache_hit, timed_provider_call
 from app.utils.time import utc_now
@@ -237,13 +239,35 @@ class DataLoader:
         return provider
 
     def _get_cache_path(self, provider_name: str, symbol: str, timeframe: str) -> str:
-        return os.path.join(
-            self.project_root, 
-            "storage", 
-            "market_data", 
-            provider_name.lower(), 
-            f"{symbol.upper()}_{timeframe}.parquet"
+        provider_key = provider_name.lower()
+        symbol_key = symbol.upper()
+        if provider_key not in self.providers:
+            raise ValueError(f"Bilinmeyen veri sağlayıcı: {provider_name}")
+        if timeframe not in TIMEFRAME_DELTAS:
+            raise ValueError(f"Bilinmeyen zaman dilimi: {timeframe}")
+        if (
+            not re.fullmatch(r"[A-Z0-9./^=_-]{1,32}", symbol_key)
+            or ".." in symbol_key
+            or symbol_key.count("/") > 1
+            or symbol_key.startswith("/")
+            or symbol_key.endswith("/")
+        ):
+            raise ValueError("Sembol yalnızca piyasa kodu karakterleri içerebilir")
+
+        # Forex çiftlerindeki "/" bir dosya yolu ayıracı olmamalı. URL
+        # kodlaması sembolü tek bir dosya adına dönüştürür ve EUR/USD ile
+        # EUR_USD gibi farklı sembollerin aynı önbelleğe çarpışmasını önler.
+        cache_symbol = quote(symbol_key, safe="._=-")
+
+        cache_root = os.path.realpath(
+            os.path.join(self.project_root, "storage", "market_data")
         )
+        cache_path = os.path.realpath(
+            os.path.join(cache_root, provider_key, f"{cache_symbol}_{timeframe}.parquet")
+        )
+        if os.path.commonpath([cache_root, cache_path]) != cache_root:
+            raise ValueError("Önbellek yolu izin verilen dizinin dışına çıkamaz")
+        return cache_path
 
     def _get_file_lock(self, key_path: str) -> threading.Lock:
         with self._global_lock:
@@ -981,21 +1005,30 @@ class DataLoader:
         "değişmesi" bundan geliyordu.
         """
         df = df.copy()
+        df.attrs["timeframe"] = timeframe
         df["timestamp"] = pd.to_datetime(df["timestamp"])
 
         if timeframe in ["1d", "1w", "1mo"]:
             df["timestamp"] = df["timestamp"].dt.normalize()
-            df.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
+        df.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
 
         df.sort_values("timestamp", inplace=True)
         df.reset_index(drop=True, inplace=True)
 
+        price_columns = ["open", "high", "low", "close"]
+        if not all(column in df.columns for column in price_columns):
+            raise ValueError("Mum verisinde open/high/low/close alanları eksik")
+        prices = df[price_columns].apply(pd.to_numeric, errors="coerce")
+        valid = prices.notna().all(axis=1) & (prices > 0).all(axis=1)
+        valid &= prices.lt(float("inf")).all(axis=1)
+        valid &= prices["high"] >= prices[["open", "close", "low"]].max(axis=1)
+        valid &= prices["low"] <= prices[["open", "close", "high"]].min(axis=1)
+        if not bool(valid.all()):
+            raise ValueError("Sağlayıcı geçersiz veya sonlu olmayan OHLC mumu döndürdü")
+        df[price_columns] = prices
+
         # Forex eski önbellek verilerindeki Open==Close ve 0-Volume sorunları.
         if provider_name.lower() in ["forex", "fx"] and not df.empty:
-            if (df["open"] == df["close"]).mean() > 0.1:
-                shifted_open = df["close"].shift(1)
-                df.loc[df["open"] == df["close"], "open"] = shifted_open
-                df["open"] = df["open"].fillna(df["close"])
             if df["volume"].sum() == 0 or (df["volume"] == 0).all():
                 avg_price = df["close"].mean()
                 pip = 0.01 if avg_price > 20 else 0.0001
@@ -1070,7 +1103,7 @@ class DataLoader:
         # pandas işlemi; yazmanın hiçbir karşılığı yoktu.
         if provider_name in ["nasdaq", "bist", "forex", "fx"] and timeframe == "4h":
             df_1h = self.load_data(provider_name, symbol, "1h", start_time, end_time)
-            return self.resample_ohlcv(df_1h, "4h")
+            return self._normalize_cached_frame(self.resample_ohlcv(df_1h, "4h"), provider_name, timeframe)
 
         # Retention tavanının ötesindeki geçmişi İSTEMEDEN önce kırp: aşağıdaki
         # bütün yollar (soğuk indirme, önek tamamlama, kapsama kontrolü) bu
@@ -1163,7 +1196,13 @@ class DataLoader:
             
             # Bitiş tarihi kapsanıyor mu veya dosya son 5 dakika içinde güncellendi mi?
             cache_age_seconds = time.time() - file_mtime
-            has_end_covered = (needed_end <= cached_end) or (cache_age_seconds < 300)
+            now = pd.Timestamp(utc_now())
+            delta = TIMEFRAME_DELTAS.get(timeframe, timedelta(days=1))
+            current_candle = cached_end + delta > now
+            fresh = cache_age_seconds < min(300, delta.total_seconds())
+            has_end_covered = (
+                needed_end <= cached_end and (not current_candle or fresh)
+            ) or (fresh and cached_end <= needed_end <= cached_end + delta)
             
             # Eğer HEM geçmiş (başlangıç) HEM DE güncel (bitiş) verisi kapsanıyorsa, doğrudan önbellekten dön
             if has_start_covered and has_end_covered:
@@ -1185,11 +1224,16 @@ class DataLoader:
                 except Exception as e:
                     logger.warning("Onek verisi cekilemedi (%s %s): %s", symbol, timeframe, e)
                     
-            if needed_end > cached_end and (needed_end - cached_end) > timedelta(minutes=15):
+            if not has_end_covered:
                 try:
+                    refresh_start = cached_end
+                    refresh_end = needed_end
+                    if current_candle:
+                        refresh_start = max(needed_start, cached_end - delta)
+                        refresh_end = max(needed_end, min(now, cached_end + delta))
                     with timed_provider_call():
                         df_after = provider.fetch_ohlcv(
-                            symbol, timeframe, cached_end, needed_end
+                            symbol, timeframe, refresh_start, refresh_end
                         )
                 except Exception as e:
                     logger.warning("Sonek verisi cekilemedi (%s %s): %s", symbol, timeframe, e)

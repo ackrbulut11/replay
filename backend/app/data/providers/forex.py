@@ -43,8 +43,8 @@ class ForexProvider(IDataProvider):
         interval = tf_map.get(timeframe)
         if not interval:
             raise ValueError(f"Unsupported timeframe: {timeframe} for Forex provider.")
-            
-        # Yahoo Finance zaman dilimi sınırlarını otomatik ayarla (HTTP 422 engellemek için)
+
+        # Sağlayıcının desteklediği geçmiş penceresini aşma.
         now = utc_now()
         requested_start = start_time
         max_start = None
@@ -54,6 +54,7 @@ class ForexProvider(IDataProvider):
             max_start = now - timedelta(days=58)
         elif interval == "1h":
             max_start = now - timedelta(days=700)
+
 
         # İstenen aralığın TAMAMI Yahoo'nun penceresinin gerisindeyse Yahoo'ya
         # hiç gitme: period1 > period2 olur ve 400 döner. Twelve Data'ya bırak.
@@ -148,12 +149,6 @@ class ForexProvider(IDataProvider):
 
         if df.empty:
             return df
-
-        # Yahoo Finance'ın Forex günlük barlarında ürettiği Open == Close anomalisini düzelt (Kırmızı/Yeşil mum dengesi için)
-        if len(df) > 5 and (df['open'] == df['close']).mean() > 0.3:
-            shifted_open = df['close'].shift(1)
-            df.loc[df['open'] == df['close'], 'open'] = shifted_open
-            df['open'] = df['open'].fillna(df['close'])
 
         # Forex paritelerinde sıfır gelen hacim verisi yerine TradingView/MetaTrader standartlarında
         # mum oynaklığına (High - Low) dayalı gerçekçi Tick Hacmi (Tick Volume Proxy) üret

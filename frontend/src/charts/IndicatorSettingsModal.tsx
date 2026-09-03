@@ -11,6 +11,7 @@ import type {
   IndicatorSettingsMap,
   MacdSettings,
 } from '../store/chartSettingsStore';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 interface IndicatorSettingsModalProps {
   isOpen: boolean;
@@ -59,6 +60,7 @@ export default function IndicatorSettingsModal({
   onClose,
 }: IndicatorSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'inputs' | 'style'>('inputs');
+  const dialogRef = useDialogFocus(Boolean(isOpen && indicatorKey), onClose);
   const [settingsState] = useChartSettingsStore();
 
   if (!isOpen || !indicatorKey) return null;
@@ -152,6 +154,11 @@ export default function IndicatorSettingsModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="indicator-settings-title"
+        tabIndex={-1}
         className="w-full max-w-md bg-canvas border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-scaleUp text-content-strong"
         onClick={(e) => e.stopPropagation()}
       >
@@ -159,12 +166,13 @@ export default function IndicatorSettingsModal({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-line bg-canvas">
           <div className="flex items-center gap-2">
             <Sliders className="w-4 h-4 text-accent-400" />
-            <h3 className="text-sm font-medium text-content-strong truncate">
+            <h3 id="indicator-settings-title" className="text-sm font-medium text-content-strong truncate">
               {INDICATOR_NAMES[indicatorKey]}
             </h3>
           </div>
           <button
             onClick={onClose}
+            aria-label="İndikatör ayarlarını kapat"
             className="p-1 rounded-lg text-content-muted hover:text-content-strong hover:bg-white/[0.06] transition-colors"
           >
             <X className="w-4 h-4" />

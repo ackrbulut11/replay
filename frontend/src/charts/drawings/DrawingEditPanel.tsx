@@ -55,8 +55,8 @@ export default function DrawingEditPanel({ options, onChange, onDelete, title = 
           </div>
         ) : isRuler ? (
           <div className="flex items-center gap-2">
-            <span className="text-2xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              Kar: Mavi
+            <span className="text-2xs font-medium px-2 py-0.5 rounded bg-accent-500/20 text-accent-400 border border-accent-500/30">
+              Kar: Vurgu
             </span>
             <span className="text-2xs font-medium px-2 py-0.5 rounded bg-loss-950/40 text-loss-400 border border-loss-700/40">
               Zarar: Koyu Kırmızı (Şeffaf)

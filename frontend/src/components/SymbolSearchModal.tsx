@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, X, Building2, Globe2, Coins, TrendingUp, Sparkles, Bookmark, Banknote, LineChart, Gem } from 'lucide-react';
 import { useWatchlistStore, watchlistStore } from '../store/watchlistStore';
 import { searchSymbols } from '../services/marketApi';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 export interface SymbolItem {
   symbol: string;
@@ -43,6 +44,7 @@ export default function SymbolSearchModal({
   const [results, setResults] = useState<SymbolItem[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useDialogFocus(isOpen, onClose, inputRef);
 
   useEffect(() => {
     if (isOpen) {
@@ -97,12 +99,21 @@ export default function SymbolSearchModal({
   return (
     /* `px-4`: paneller `w-full` olduğu için yatay boşluk olmadan telefonda
        ekranın iki kenarına yapışıyordu. */
-    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16 bg-black/70 backdrop-blur-xs animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16 bg-black/70 backdrop-blur-xs animate-fadeIn"
+      onClick={onClose}
+    >
       {/* Modal Card */}
       <div 
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="symbol-search-title"
+        tabIndex={-1}
         className="w-full max-w-2xl bg-canvas border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] text-content-strong"
         onClick={(e) => e.stopPropagation()}
       >
+        <h2 id="symbol-search-title" className="sr-only">Sembol ara</h2>
         {/* Search Header Input */}
         <div className="p-4 border-b border-line flex items-center gap-3 bg-canvas">
           <Search className="w-5 h-5 text-accent-400 shrink-0" />
@@ -112,11 +123,13 @@ export default function SymbolSearchModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Hisse kodu, parite veya şirket adı girin (ör: EUR/USD, THYAO, AAPL)..."
+            aria-label="Sembol veya şirket ara"
             className="w-full bg-transparent text-sm text-content-strong placeholder-content-faint outline-none font-medium"
           />
           {query && (
             <button 
               onClick={() => setQuery('')}
+              aria-label="Aramayı temizle"
               className="p-1 text-content-faint hover:text-content rounded-lg"
             >
               <X className="w-4 h-4" />
@@ -124,6 +137,7 @@ export default function SymbolSearchModal({
           )}
           <button
             onClick={onClose}
+            aria-label="Sembol aramayı kapat"
             className="px-2.5 py-1 text-xs font-medium text-content-muted hover:text-content bg-white/[0.04] rounded-lg border border-line"
           >
             ESC

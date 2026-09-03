@@ -1,5 +1,6 @@
 import { X, Check, Palette } from 'lucide-react';
 import { compareStore, useCompareStore } from '../store/compareStore';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 interface CompareSettingsModalProps {
   isOpen: boolean;
@@ -26,10 +27,10 @@ export default function CompareSettingsModal({
   onClose,
 }: CompareSettingsModalProps) {
   const compareState = useCompareStore();
+  const item = compareState.items.find((i) => i.id === compareId);
+  const dialogRef = useDialogFocus(Boolean(isOpen && compareId && item), onClose);
 
   if (!isOpen || !compareId) return null;
-
-  const item = compareState.items.find((i) => i.id === compareId);
   if (!item) return null;
 
   const updateStyle = (style: Partial<{ color: string; lineWidth: number }>) => {
@@ -42,6 +43,11 @@ export default function CompareSettingsModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="compare-settings-title"
+        tabIndex={-1}
         className="w-full max-w-sm bg-canvas border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-scaleUp text-content-strong"
         onClick={(e) => e.stopPropagation()}
       >
@@ -49,12 +55,13 @@ export default function CompareSettingsModal({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-line bg-canvas">
           <div className="flex items-center gap-2">
             <Palette className="w-4 h-4 text-accent-400" />
-            <h3 className="text-sm font-medium text-content-strong truncate">
+            <h3 id="compare-settings-title" className="text-sm font-medium text-content-strong truncate">
               {item.symbol} Kıyaslama Ayarları
             </h3>
           </div>
           <button
             onClick={onClose}
+            aria-label="Kıyaslama ayarlarını kapat"
             className="p-1 rounded-lg text-content-muted hover:text-content-strong hover:bg-white/[0.06] transition-colors"
           >
             <X className="w-4 h-4" />
@@ -73,6 +80,7 @@ export default function CompareSettingsModal({
                 />
                 <input
                   type="color"
+                  aria-label="Çizgi rengi"
                   value={item.color}
                   onChange={(e) => updateStyle({ color: e.target.value })}
                   className="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0"

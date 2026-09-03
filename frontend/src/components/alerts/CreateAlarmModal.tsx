@@ -3,6 +3,7 @@ import { X, Bell, AlertTriangle, TrendingUp, TrendingDown, Check } from 'lucide-
 import { alertStore } from '../../store/alertStore';
 import { logEvent, logError } from '../../services/eventLog';
 import { errorMessage } from '../../utils/errors';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 
 /** Alarmın neyi izlediği. Backend `AlertTargetType` ile aynı küme. */
 type AlertTargetType =
@@ -40,6 +41,7 @@ export default function CreateAlarmModal({
   const [note, setNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const dialogRef = useDialogFocus(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {
@@ -103,8 +105,19 @@ export default function CreateAlarmModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-surface-raised border border-line rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-alarm-title"
+        tabIndex={-1}
+        className="bg-surface-raised border border-line rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col"
+        onClick={(event) => event.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-line bg-canvas">
           <div className="flex items-center gap-2.5">
@@ -112,7 +125,7 @@ export default function CreateAlarmModal({
               <Bell className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-medium text-content-strong flex items-center gap-2">
+              <h3 id="create-alarm-title" className="text-sm font-medium text-content-strong flex items-center gap-2">
                 Fiyat & İndikatör Alarmı Ekle
               </h3>
               <p className="text-2xs text-content-muted font-mono">
@@ -122,6 +135,7 @@ export default function CreateAlarmModal({
           </div>
           <button
             onClick={onClose}
+            aria-label="Alarm penceresini kapat"
             className="p-1.5 text-content-muted hover:text-content hover:bg-surface-hover rounded-xl transition"
           >
             <X className="w-4 h-4" />
@@ -143,6 +157,7 @@ export default function CreateAlarmModal({
               Alarm Hedefi (Target)
             </label>
             <select
+              aria-label="Alarm hedefi"
               value={targetType}
               onChange={e => setTargetType(e.target.value as AlertTargetType)}
               className="w-full bg-canvas border border-line rounded-xl px-3 py-2 text-xs text-content font-medium focus:outline-none focus:border-warn-500/60 transition"
@@ -167,6 +182,7 @@ export default function CreateAlarmModal({
                   Hızlı EMA (Fast)
                 </label>
                 <input
+                  aria-label="Hızlı EMA periyodu"
                   type="number"
                   min="1"
                   max="500"
@@ -180,6 +196,7 @@ export default function CreateAlarmModal({
                   Yavaş EMA (Slow)
                 </label>
                 <input
+                  aria-label="Yavaş EMA periyodu"
                   type="number"
                   min="1"
                   max="500"
@@ -198,6 +215,7 @@ export default function CreateAlarmModal({
                 İndikatör Periyodu (Period)
               </label>
               <input
+                aria-label="İndikatör periyodu"
                 type="number"
                 min="1"
                 max="500"
@@ -260,6 +278,7 @@ export default function CreateAlarmModal({
                 )}
               </div>
               <input
+                aria-label="Hedef seviye"
                 type="number"
                 step="any"
                 required
@@ -277,6 +296,7 @@ export default function CreateAlarmModal({
               Not / Açıklama (İsteğe Bağlı)
             </label>
             <input
+              aria-label="Alarm notu"
               type="text"
               value={note}
               onChange={e => setNote(e.target.value)}

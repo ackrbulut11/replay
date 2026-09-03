@@ -89,3 +89,8 @@ frontend/.playwright/
 
 # Performans logu (geliştirme aracı — bkz. scripts/perf_log.py)
 **/storage/logs/
+
+# Codex yerel çalışma dosyaları
+.agents/
+.codex/
+AGENTS.md

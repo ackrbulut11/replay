@@ -47,7 +47,7 @@ REPLAY, finansal piyasalarda (Kripto, BIST, NASDAQ, Forex) teknik analiz ve stra
 - **Dağıtım (Deployment):** Vercel
 
 ### **Backend**
-- **Framework & Dili:** Python 3.10+ / FastAPI
+- **Framework & Dili:** Python 3.11+ / FastAPI
 - **Veritabanı & ORM:** PostgreSQL / SQLite, SQLAlchemy 2.0, Alembic
 - **Veri İşleme & Önbellekleme:** Pandas, NumPy, PyArrow (3 Katmanlı Parquet veri depolama)
 - **Veri Kaynakları:** Binance API, Yahoo Finance (NASDAQ, BIST, Forex)

@@ -20,7 +20,11 @@ jobs:
       - name: Install dependencies (frontend)
         run: |
           cd frontend
-          npm install
+          npm ci
+      - name: Dependency audit
+        run: |
+          cd frontend
+          npm audit
       # Artık gerçekten çalışıyor: eslint kuruldu ve eslint.config.js eklendi.
       # Eskiden script vardı ama bağımlılık ve yapılandırma yoktu, yani komut
       # anında patlıyordu — frontend'de hiçbir statik denetim koşmuyordu.
@@ -50,31 +54,18 @@ jobs:
 
   backend:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # İKİ sürümde de koşulur ve ikisi de gereklidir:
-        #
-        #   3.9  — `backend/.venv`in sürümü. Geliştirici burada çalışıyor ve
-        #          3.9'da annotation'lar hevesle değerlendirildiği için yalnızca
-        #          orada patlayan import hataları var (bkz. CLAUDE.md
-        #          "Annotation evaluation").
-        #   3.11 — Render'ın çalıştırdığı modern sürüm. Yalnızca 3.9 test
-        #          edilirken üretim, HİÇ test edilmemiş bir yorumlayıcıda
-        #          koşuyordu; `pyproject.toml` da ^3.10 diyerek üçüncü bir
-        #          şey iddia ediyordu.
-        python-version: ["3.9", "3.11"]
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
       - name: Install dependencies (backend)
         run: |
           cd backend
-          pip install -r requirements.txt
-          pip install ruff
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+          pip-audit -r requirements.txt
       - name: Lint (ruff)
         run: |
           cd backend

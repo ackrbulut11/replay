@@ -10,7 +10,11 @@ Burada olması ayrıca doğru yer: "test suite'in çalışması için şema gere
 ifadesi bir kurulum adımıdır, uygulamanın import edilmesinin yan etkisi değil.
 """
 
+from __future__ import annotations
+
+import atexit
 import os
+from tempfile import TemporaryDirectory
 
 # Bazı testler (test_waitlist_api.py, test_auth_api.py, test_market_api.py,
 # test_analytics_api.py) gerçek `main.app`'i `TestClient` ile çalıştırıyor.
@@ -30,6 +34,16 @@ import os
 # edilmeden ÖNCE ayarlanmalı; bu satır dosyadaki ilk import'tan önce duruyor.
 os.environ.setdefault("PERF_LOG", "false")
 
-from app.database.migrate import run_migrations
+# Testler geliştiricinin gerçek veritabanına hiçbir zaman bağlanmaz.
+_test_storage = TemporaryDirectory(prefix="replay-tests-", ignore_cleanup_errors=True)
+os.environ["DATABASE_URL"] = "sqlite:///" + _test_storage.name.replace("\\", "/") + "/test.db"
+os.environ["JWT_SECRET_KEY"] = "replay-isolated-test-secret-key-at-least-32-bytes"
+os.environ["ENVIRONMENT"] = "test"
+
+from app.database.migrate import run_migrations  # noqa: E402
 
 run_migrations()
+
+from app.database.postgres import engine  # noqa: E402
+
+atexit.register(engine.dispose)

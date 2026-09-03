@@ -1,0 +1,4 @@
+-r requirements.txt
+httpx2==2.12.0
+ruff==0.15.22
+pip-audit==2.9.0

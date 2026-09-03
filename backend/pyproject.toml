@@ -5,15 +5,10 @@ description = "FastAPI Backend for Trading Research Platform"
 authors = ["Antigravity"]
 
 [tool.poetry.dependencies]
-# Gerçek durumu bildirir: `backend/.venv` 3.9, Render modern bir sürüm
-# çalıştırıyor ve CI ikisini de test ediyor (bkz. .github/workflows/build.yml).
-# Eskiden burada "^3.10" yazıyordu — ne yerelde ne CI'da doğru olan üçüncü bir
-# iddia; 3.9'a özgü annotation hataları bu yüzden "olmaması gereken" sayılıp
-# gözden kaçıyordu.
-#
-# 3.11'e tam geçiş AYRI bir iştir: .venv yeniden kurulmalı ve tüm suite orada
-# doğrulanmalı. O gün gelene kadar taban 3.9'dur.
-python = ">=3.9,<4.0"
+# Python 3.9 2025-10-31'de EOL oldu. Yerel ortam, CI ve Render aynı desteklenen
+# tabanda buluşur; yeni backend modüllerindeki future annotations kuralı yine
+# korunur çünkü import güvenliği yalnızca sürüm yükseltmeye bırakılmaz.
+python = ">=3.11,<4.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

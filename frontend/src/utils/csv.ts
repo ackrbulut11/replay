@@ -15,10 +15,17 @@ const DELIMITER = ';';
 const BOM = '﻿';
 
 /** Bir hücreyi CSV'ye güvenli biçimde yazar. */
-function escapeCell(value: unknown): string {
+export function escapeCsvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
 
-  const text = String(value);
+  let text = String(value);
+  const trimmedStart = text.trimStart();
+  const isPlainNumber = /^-?\d+(?:[.,]\d+)?$/.test(trimmedStart);
+  if (/^[=+@]/.test(trimmedStart) || (trimmedStart.startsWith('-') && !isPlainNumber)) {
+    // Excel/LibreOffice bu önekleri formül olarak yorumlar. Kullanıcı notu
+    // paylaşılan bir CSV'de komut/bağlantı çalıştıramasın diye metin zorlanır.
+    text = `'${text}`;
+  }
   // Ayırıcı, tırnak veya satır sonu içeren hücreler tırnaklanır; içerideki
   // tırnaklar ikilenir (RFC 4180).
   if (text.includes(DELIMITER) || text.includes('"') || text.includes('\n') || text.includes('\r')) {
@@ -39,7 +46,7 @@ export function csvNumber(value: number | null | undefined, digits = 2): string 
  * `headers` sütun başlıklarıdır; `rows` aynı sıradaki hücre dizileridir.
  */
 export function downloadCsv(filename: string, headers: string[], rows: unknown[][]): void {
-  const lines = [headers, ...rows].map((row) => row.map(escapeCell).join(DELIMITER));
+  const lines = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(DELIMITER));
   const blob = new Blob([BOM + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
 
   const url = URL.createObjectURL(blob);

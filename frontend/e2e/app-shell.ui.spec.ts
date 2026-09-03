@@ -13,8 +13,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-const TOKEN_KEY = 'replay_access_token';
-const USER_KEY = 'replay_user';
+const E2E_SESSION_KEY = 'replay_e2e_session';
 
 const FAKE_USER = {
   id: 'user-e2e',
@@ -56,7 +55,7 @@ async function stubApi(page: Page): Promise<void> {
     // koruyor mu" testini anlamsız kılardı.
     const authed = await page.evaluate(
       (key) => Boolean(window.localStorage.getItem(key)),
-      TOKEN_KEY
+      E2E_SESSION_KEY
     );
     if (url.includes('/auth/me')) {
       return authed
@@ -92,14 +91,13 @@ async function stubApi(page: Page): Promise<void> {
   });
 }
 
-/** Giriş yapmış bir oturumu localStorage'a yazar (AuthContext oradan okuyor). */
+/** Refresh cookie varmış gibi davranan yalnızca teste ait oturum işaretçisi. */
 async function seedSession(page: Page): Promise<void> {
   await page.addInitScript(
-    ([tokenKey, userKey, user]) => {
-      window.localStorage.setItem(tokenKey as string, 'sahte-token');
-      window.localStorage.setItem(userKey as string, JSON.stringify(user));
+    (sessionKey) => {
+      window.localStorage.setItem(sessionKey, '1');
     },
-    [TOKEN_KEY, USER_KEY, FAKE_USER] as const
+    E2E_SESSION_KEY
   );
 }
 

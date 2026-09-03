@@ -179,6 +179,28 @@ class TestAuthenticatedFlow(unittest.TestCase):
         )
         self.assertEqual(after.status_code, 401)
 
+        # Aynı sürümü taşıyan access token da artık kullanılamaz. Aksi halde
+        # çıkıştan sonra token süresi dolana dek korumalı API açık kalırdı.
+        me_after = client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {self.access_token}"},
+        )
+        self.assertEqual(me_after.status_code, 401)
+
+    def test_cikis_yalniz_refresh_cookie_ile_de_oturumu_iptal_eder(self):
+        """Sayfa yenilenirken access token yoksa cookie yine iptal edilebilmeli."""
+        client.cookies.clear()
+        response = client.post(
+            "/api/auth/logout", cookies={"refresh_token": self.refresh_token}
+        )
+        self.assertEqual(response.status_code, 200)
+
+        client.cookies.clear()
+        after = client.post(
+            "/api/auth/refresh", cookies={"refresh_token": self.refresh_token}
+        )
+        self.assertEqual(after.status_code, 401)
+
     def test_cikis_token_olmadan_da_calisir(self):
         # Token'i coktan dusmus bir istemci de cikis yapabilmeli.
         client.cookies.clear()

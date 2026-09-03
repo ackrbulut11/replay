@@ -85,8 +85,8 @@ class TestWaitlistApi(unittest.TestCase):
 
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
-        self.assertFalse(first.json()["already_registered"])
-        self.assertTrue(second.json()["already_registered"])
+        self.assertEqual(first.json(), second.json())
+        self.assertNotIn("already_registered", first.json())
         self.assertEqual(_count("waitlist.test@example.com"), 1)
 
     def test_email_is_normalized(self):

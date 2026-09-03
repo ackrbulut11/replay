@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Union, Optional, List, Dict
+from typing import Annotated, Any, Union, Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
@@ -151,7 +151,9 @@ class ConditionGroupModel(BaseModel):
 
     logic: LogicType = Field(LogicType.AND, description="Koşullar arası mantık operatörü")
     conditions: List[Union[ConditionModel, "ConditionGroupModel"]] = Field(
-        default_factory=list, description="Koşullar ve/veya alt gruplar"
+        default_factory=list,
+        max_length=100,
+        description="Koşullar ve/veya alt gruplar (grup başına azami 100)",
     )
 
 
@@ -178,7 +180,9 @@ class TimeframeFilterModel(BaseModel):
     timeframe: str = Field(..., description="Filtre zaman dilimi (ör. 4h, 1d)")
     logic: LogicType = Field(LogicType.AND, description="Filtre koşulları arası mantık")
     conditions: List[Union[ConditionModel, ConditionGroupModel]] = Field(
-        default_factory=list, description="Filtre koşulları ve/veya alt gruplar"
+        default_factory=list,
+        max_length=100,
+        description="Filtre koşulları ve/veya alt gruplar",
     )
 
 
@@ -255,14 +259,14 @@ class StrategyCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Strateji adı")
     description: str = Field("", max_length=500, description="Strateji açıklaması")
     user_id: Optional[str] = Field(None, description="Kullanıcı ID (opsiyonel)")
-    parameters: List[StrategyParameterModel] = Field(default_factory=list)
+    parameters: List[StrategyParameterModel] = Field(default_factory=list, max_length=64)
     entry_rules: ConditionGroupModel = Field(
         default_factory=lambda: ConditionGroupModel(logic=LogicType.AND, conditions=[])
     )
     exit_rules: ConditionGroupModel = Field(
         default_factory=lambda: ConditionGroupModel(logic=LogicType.AND, conditions=[])
     )
-    timeframe_filters: List[TimeframeFilterModel] = Field(default_factory=list)
+    timeframe_filters: List[TimeframeFilterModel] = Field(default_factory=list, max_length=16)
     allow_short: bool = Field(False, description="Short pozisyon açılsın mı?")
     take_profit_pct: Optional[float] = Field(None, description="Yüzde Kar Al (Take Profit %)")
     stop_loss_pct: Optional[float] = Field(None, description="Yüzde Zarar Durdur (Stop Loss %)")
@@ -284,10 +288,10 @@ class StrategyUpdateRequest(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
-    parameters: Optional[List[StrategyParameterModel]] = None
+    parameters: Optional[List[StrategyParameterModel]] = Field(None, max_length=64)
     entry_rules: Optional[ConditionGroupModel] = None
     exit_rules: Optional[ConditionGroupModel] = None
-    timeframe_filters: Optional[List[TimeframeFilterModel]] = None
+    timeframe_filters: Optional[List[TimeframeFilterModel]] = Field(None, max_length=16)
     allow_short: Optional[bool] = None
     take_profit_pct: Optional[float] = None
     stop_loss_pct: Optional[float] = None
@@ -300,15 +304,18 @@ class StrategyUpdateRequest(BaseModel):
 class EvaluateRequest(BaseModel):
     """Strateji değerlendirme isteği."""
 
-    symbol: str = Field(..., description="Sembol (ör. BTCUSDT, AAPL, THYAO)")
-    provider: str = Field(..., description="Veri sağlayıcı (binance, nasdaq, bist)")
-    timeframe: str = Field(..., description="Ana zaman dilimi (ör. 15m, 1h, 1d)")
+    symbol: str = Field(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9./^=_-]+$")
+    provider: str = Field(..., min_length=1, max_length=16, pattern=r"^[a-z]+$")
+    timeframe: str = Field(..., pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$")
     start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
     end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
-    limit_bars: Optional[int] = Field(1000, description="Değerlendirilecek maksimum mum sayısı (varsayılan: 1000, azami: 10000)")
+    limit_bars: Optional[int] = Field(
+        1000, ge=0, le=10000,
+        description="Değerlendirilecek maksimum mum sayısı; 0 tüm saklanan veri",
+    )
     allow_short: Optional[bool] = Field(None, description="Short pozisyon açılsın mı?")
     param_overrides: Dict[str, Union[int, float]] = Field(
-        default_factory=dict, description="Parametre override'ları"
+        default_factory=dict, max_length=64, description="Parametre override'ları"
     )
     starting_balance: float = Field(
         10000.0, gt=0, description="Nakit simulasyonu icin baslangic bakiyesi"
@@ -379,17 +386,34 @@ class IndicatorInfo(BaseModel):
     fields: List[str] = Field(default_factory=list, description="Alt alanlar (ör. MACD -> MACD, signal, hist)")
 
 
+MarketSymbol = Annotated[
+    str,
+    Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9./^=_-]+$"),
+]
+
+
 class BatchEvaluateRequest(BaseModel):
     """Çoklu sembol strateji tarama isteği."""
 
-    symbols: List[str] = Field(..., description="Taranacak sembol listesi (ör. ['BTCUSDT', 'ETHUSDT'])")
-    provider: str = Field("binance", description="Veri sağlayıcı (binance, bist, nasdaq)")
-    timeframe: str = Field("1d", description="Zaman dilimi (15m, 1h, 1d)")
+    symbols: List[MarketSymbol] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Taranacak sembol listesi (azami 500)",
+    )
+    provider: str = Field(
+        "binance", min_length=1, max_length=16, pattern=r"^[a-z]+$",
+        description="Veri sağlayıcı (binance, bist, nasdaq, forex)",
+    )
+    timeframe: str = Field(
+        "1d", min_length=2, max_length=3, pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$",
+        description="Zaman dilimi",
+    )
     start: Optional[str] = Field(None, description="Başlangıç tarihi (YYYY-MM-DD)")
     end: Optional[str] = Field(None, description="Bitiş tarihi (YYYY-MM-DD)")
-    limit_bars: Optional[int] = Field(1000, description="Maksimum mum sayısı (azami: 10000)")
+    limit_bars: Optional[int] = Field(1000, ge=1, le=10000, description="Maksimum mum sayısı")
     allow_short: Optional[bool] = Field(None, description="Short pozisyon izni")
-    param_overrides: Dict[str, Union[int, float]] = Field(default_factory=dict)
+    param_overrides: Dict[str, Union[int, float]] = Field(default_factory=dict, max_length=64)
     max_concurrent_positions: int = Field(
         5, ge=1, le=100,
         description=(
@@ -463,9 +487,9 @@ class ScanHistoryItem(BaseModel):
 class SaveScanRequest(BaseModel):
     """Tarama sonucunu kaydetme isteği."""
 
-    provider: str
-    timeframe: str
-    results: List[BatchEvaluateResultItem]
+    provider: str = Field(..., min_length=1, max_length=16, pattern=r"^[a-z]+$")
+    timeframe: str = Field(..., min_length=2, max_length=3, pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$")
+    results: List[BatchEvaluateResultItem] = Field(..., max_length=500)
     # Sermaye paylastirmali portfoy sonucu (tarama bitince dolar).
     portfolio: Optional[Dict[str, Any]] = None
 

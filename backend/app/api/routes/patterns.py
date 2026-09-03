@@ -11,13 +11,15 @@ arama `engines/pattern_engine.py`'a, veri yükleme `data/loader.py`'a aittir.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Any, Optional
+from datetime import datetime
+from typing import Any, Optional, Literal
+from threading import BoundedSemaphore
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth.dependencies import get_current_user
+from app.core.security import RateLimiter
 from app.utils.time import utc_now
 from app.data.loader import loader as shared_loader, lookback_start_for_bars
 from app.database.models import User
@@ -36,12 +38,12 @@ DEFAULT_LIMIT_BARS = 2000
 
 
 class PatternSearchRequest(BaseModel):
-    provider: str
-    symbol: str
-    timeframe: str
+    provider: Literal["binance", "bist", "nasdaq", "forex"]
+    symbol: str = Field(min_length=1, max_length=30, pattern=r"^[A-Za-z0-9.^=_/-]+$")
+    timeframe: Literal["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1mo"]
     # Strateji kuralıyla birebir aynı DSL: {logic, conditions}
     condition_group: dict[str, Any]
-    parameters: Optional[list[dict[str, Any]]] = None
+    parameters: Optional[list[dict[str, Any]]] = Field(default=None, max_length=64)
     start: Optional[str] = None
     end: Optional[str] = None
     limit_bars: int = Field(default=DEFAULT_LIMIT_BARS, ge=0, le=MAX_LIMIT_BARS)
@@ -69,19 +71,18 @@ def _resolve_range(request: "PatternSearchRequest") -> tuple[datetime, datetime]
     """
     end_dt = _parse_date(request.end) or utc_now()
     start_dt = _parse_date(request.start)
+    bounded_start = lookback_start_for_bars(end_dt, request.timeframe, MAX_LIMIT_BARS)
 
     if start_dt is None:
-        if request.limit_bars == 0:
-            # "Tüm veri": mum sayısına göre ölçeklemek anlamsız, sabit geniş pencere.
-            if request.timeframe in ("1m", "5m", "15m"):
-                start_dt = end_dt - timedelta(days=90)
-            elif request.timeframe in ("1h", "4h"):
-                start_dt = end_dt - timedelta(days=365 * 3)
-            else:
-                start_dt = datetime(2010, 1, 1)
-        else:
-            start_dt = lookback_start_for_bars(end_dt, request.timeframe, request.limit_bars)
+        start_dt = lookback_start_for_bars(
+            end_dt, request.timeframe, request.limit_bars or MAX_LIMIT_BARS
+        )
+    else:
+        # Sağlayıcıdan indirilen veri de hesaplanan veri kadar sınırlı kalır.
+        start_dt = max(start_dt, bounded_start)
 
+    if start_dt >= end_dt:
+        raise HTTPException(status_code=422, detail="Başlangıç bitişten önce olmalı")
     return start_dt, end_dt
 
 
@@ -99,10 +100,25 @@ def _params_from_list(parameters: Optional[list[dict[str, Any]]]) -> dict[str, A
     return result
 
 
+_search_rate = RateLimiter(10, 60)
+_search_slots = BoundedSemaphore(2)
+
+
+def _search_user(current_user: User = Depends(get_current_user)):
+    """Pahalı taramalar için kullanıcı ve süreç düzeyinde sınır uygular."""
+    _search_rate.check(current_user.id)
+    if not _search_slots.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="Tarama kapasitesi dolu; biraz sonra deneyin")
+    try:
+        yield current_user
+    finally:
+        _search_slots.release()
+
+
 @router.post("/search")
 def search_patterns(
     request: PatternSearchRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_search_user),
 ) -> dict:
     """
     Koşulun doğru olduğu geçmiş bar aralıklarını bulur.
@@ -136,8 +152,9 @@ def search_patterns(
             detail=f"{request.symbol} için {request.timeframe} verisi bulunamadı.",
         )
 
-    if request.limit_bars > 0 and len(df) > request.limit_bars:
-        df = df.tail(request.limit_bars).reset_index(drop=True)
+    limit = request.limit_bars or MAX_LIMIT_BARS
+    if len(df) > limit:
+        df = df.tail(limit).reset_index(drop=True)
 
     result = pattern_engine.search(
         df=df,

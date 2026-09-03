@@ -7,7 +7,7 @@
  * ve kalıcı saklanmasını sağlar.
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Play,
   RotateCw,
@@ -165,6 +165,8 @@ const PRESET_GROUPS: ScanGroup[] = [
 
 // Strateji testinde izin verilen azami mum sayısı (backend ile aynı sınır)
 const MAX_LIMIT_BARS = 10000;
+const POLL_INTERVAL_MS = 1500;
+const MAX_POLL_FAILURES = 5;
 
 // Tabloda gösterilen her satıra, hangi sağlayıcıdan geldiğini de taşıyan biçim
 // (Favoriler taraması birden fazla sağlayıcının sonucunu tek listede birleştirir).
@@ -215,6 +217,8 @@ export default function BatchScannerTab({
   const [latestScanTime, setLatestScanTime] = useState<string | null>(null);
   const [historyList, setHistoryList] = useState<ScanHistoryItem[]>([]);
   const [selectedScanId, setSelectedScanId] = useState<string>('');
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeScanIdRef = useRef<string | null>(null);
 
   // Filtreleme & Arama
   const [searchQuery, setSearchQuery] = useState('');
@@ -282,6 +286,49 @@ export default function BatchScannerTab({
     setSelectedGroup(groupId);
   };
 
+  // Tarama backend'de arka planda çalışır; frontend yalnızca kalıcı scan_id
+  // üzerinden ilerlemeyi izler. useCallback, sayfa yenileme effect'inin eski
+  // bir polling fonksiyonu yakalamasını engeller.
+  const pollScanStatus = useCallback((scanId: string, failureCount = 0) => {
+    const tick = async (currentFailureCount: number) => {
+      if (activeScanIdRef.current !== scanId) return;
+
+      try {
+        const scan = await strategyApi.getScanStatus(strategy.id, scanId);
+        setResults(withProvider(scan.results, scan.provider));
+        setScanProgress({ done: scan.scanned_count, total: scan.total_symbols ?? scan.scanned_count });
+
+        if (scan.status === 'running') {
+          pollTimeoutRef.current = setTimeout(() => void tick(0), POLL_INTERVAL_MS);
+          return;
+        }
+
+        setLatestScanTime(scan.created_at);
+        if (scan.status === 'error') {
+          setScanError(scan.error || 'Tarama sırasında bir hata oluştu');
+        }
+        setScanProgress(null);
+        setIsScanning(false);
+
+        const historyData = await strategyApi.getScanHistory(strategy.id);
+        if (historyData.scans) setHistoryList(historyData.scans);
+      } catch (err: unknown) {
+        if (currentFailureCount + 1 >= MAX_POLL_FAILURES) {
+          setScanError(errorMessage(err, 'Tarama durumu sorgulanırken bağlantı hatası oluştu'));
+          setScanProgress(null);
+          setIsScanning(false);
+          return;
+        }
+        pollTimeoutRef.current = setTimeout(
+          () => void tick(currentFailureCount + 1),
+          POLL_INTERVAL_MS
+        );
+      }
+    };
+
+    void tick(failureCount);
+  }, [strategy.id]);
+
   // Sayfa yüklendiğinde stratejinin kayıtlı son tarama sonuçlarını getir
   useEffect(() => {
     let isMounted = true;
@@ -313,63 +360,13 @@ export default function BatchScannerTab({
     return () => {
       isMounted = false;
     };
-  }, [strategy.id]);
-
-  // Tarama artık backend'de arka planda (background job) çalışır: bir HTTP
-  // isteği hiçbir zaman uzun sürmediği için Vercel'in harici proxy zaman
-  // aşımına (ROUTER_EXTERNAL_TARGET_ERROR) takılmaz. Frontend sadece
-  // ilerlemeyi belirli aralıklarla sorgular (polling).
-  const POLL_INTERVAL_MS = 1500;
-  const MAX_POLL_FAILURES = 5;
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeScanIdRef = useRef<string | null>(null);
+  }, [strategy.id, pollScanStatus]);
 
   useEffect(() => {
     return () => {
       if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
     };
   }, []);
-
-  const pollScanStatus = (scanId: string, failureCount = 0) => {
-    const tick = async () => {
-      // Kullanıcı bu arada yeni bir tarama başlattıysa eski döngüyü sonlandır
-      if (activeScanIdRef.current !== scanId) return;
-
-      try {
-        const scan = await strategyApi.getScanStatus(strategy.id, scanId);
-        setResults(withProvider(scan.results, scan.provider));
-        setScanProgress({ done: scan.scanned_count, total: scan.total_symbols ?? scan.scanned_count });
-
-        if (scan.status === 'running') {
-          pollTimeoutRef.current = setTimeout(() => pollScanStatus(scanId, 0), POLL_INTERVAL_MS);
-          return;
-        }
-
-        setLatestScanTime(scan.created_at);
-        if (scan.status === 'error') {
-          setScanError(scan.error || 'Tarama sırasında bir hata oluştu');
-        }
-        setScanProgress(null);
-        setIsScanning(false);
-
-        const historyData = await strategyApi.getScanHistory(strategy.id);
-        if (historyData.scans) {
-          setHistoryList(historyData.scans);
-        }
-      } catch (err: unknown) {
-        // Geçici ağ hatası olabilir; birkaç kez daha dene, sonra pes et
-        if (failureCount + 1 >= MAX_POLL_FAILURES) {
-          setScanError(errorMessage(err, 'Tarama durumu sorgulanırken bağlantı hatası oluştu'));
-          setScanProgress(null);
-          setIsScanning(false);
-          return;
-        }
-        pollTimeoutRef.current = setTimeout(() => pollScanStatus(scanId, failureCount + 1), POLL_INTERVAL_MS);
-      }
-    };
-
-    tick();
-  };
 
   // Favoriler grubu birden fazla sağlayıcı içerebilir: her sağlayıcı için ayrı bir
   // arka plan taraması başlatılır, sırayla tamamlanması beklenir ve sonuçlar tek
@@ -840,26 +837,44 @@ export default function BatchScannerTab({
               <tr className="text-2xs text-content-muted font-medium">
                 <th className="py-3 px-4">SEMBOL</th>
                 <th
-                  onClick={() => handleHeaderSort('trades')}
-                  className="py-3 px-4 text-center cursor-pointer select-none hover:text-content transition-colors"
-                  title="Tamamlanan işlem sayısına göre sırala"
+                  className="p-0 text-center"
+                  aria-sort={sortBy === 'trades' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
                 >
-                  TAMAMLANA İŞLEM{sortBy === 'trades' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                  <button
+                    type="button"
+                    onClick={() => handleHeaderSort('trades')}
+                    className="min-h-11 w-full select-none px-4 py-3 transition-colors hover:text-content"
+                    title="Tamamlanan işlem sayısına göre sırala"
+                  >
+                    TAMAMLANAN İŞLEM{sortBy === 'trades' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                  </button>
                 </th>
                 <th
-                  onClick={() => handleHeaderSort('win_rate')}
-                  className="py-3 px-4 text-center cursor-pointer select-none hover:text-content transition-colors"
-                  title="Başarı oranına (Win Rate) göre sırala"
+                  className="p-0 text-center"
+                  aria-sort={sortBy === 'win_rate' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
                 >
-                  BAŞARI ORANI (WIN RATE){sortBy === 'win_rate' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                  <button
+                    type="button"
+                    onClick={() => handleHeaderSort('win_rate')}
+                    className="min-h-11 w-full select-none px-4 py-3 transition-colors hover:text-content"
+                    title="Başarı oranına göre sırala"
+                  >
+                    BAŞARI ORANI{sortBy === 'win_rate' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                  </button>
                 </th>
                 <th className="py-3 px-4 text-center">KAZANAN / KAYBEDEN</th>
                 <th
-                  onClick={() => handleHeaderSort('pnl')}
-                  className="py-3 px-4 text-center cursor-pointer select-none hover:text-content transition-colors"
-                  title="Toplam net kar/zarara göre sırala"
+                  className="p-0 text-center"
+                  aria-sort={sortBy === 'pnl' ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none'}
                 >
-                  TOPLAM NET KAR/ZARAR{sortBy === 'pnl' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                  <button
+                    type="button"
+                    onClick={() => handleHeaderSort('pnl')}
+                    className="min-h-11 w-full select-none px-4 py-3 transition-colors hover:text-content"
+                    title="Toplam net kâr/zarara göre sırala"
+                  >
+                    TOPLAM NET KÂR/ZARAR{sortBy === 'pnl' ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
+                  </button>
                 </th>
                 <th className="py-3 px-4 text-right">AKSİYON</th>
               </tr>

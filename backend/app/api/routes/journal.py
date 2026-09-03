@@ -8,6 +8,7 @@ işlemlerine erişir. İş mantığı `journal/trade_journal.py` içindedir
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -38,12 +39,13 @@ from app.journal.models import (
     TradeCloseRequest,
     TradeOpenRequest,
     TradeResponse,
-    TradeStatus,
     TradeUpdateRequest,
 )
+
 from app.journal.trade_journal import TradeJournal
 from app.reports.performance_report import calculate_performance
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/journal", tags=["journal"])
 _journal = TradeJournal()
 # Karşılaştırma, stratejiyi aynı pencerede çalıştırmak için bunlara ihtiyaç
@@ -288,8 +290,8 @@ def compare_session_with_strategy(
         # Strateji sahiplik kapısı: 403 değil 404 (varlık sızmasın).
         raise HTTPException(status_code=404, detail=f"Strateji bulunamadı: {request.strategy_id}")
 
-    trades = _journal.list_trades(
-        db, current_user.id, session_id=session_id, status=TradeStatus.CLOSED.value, limit=1000
+    trades = _journal.report_trades(
+        db, current_user.id, session_id=session_id
     )
     if not trades:
         raise HTTPException(
@@ -330,8 +332,14 @@ def compare_session_with_strategy(
             start_time=lookback_start_for_bars(window[0], timeframe, 300),
             end_time=window[1],
         )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Piyasa verisi yüklenemedi: {e}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Günlük karşılaştırma verisi yüklenemedi")
+        raise HTTPException(
+            status_code=502,
+            detail="Piyasa verisi yüklenemedi. Lütfen biraz sonra tekrar deneyin.",
+        ) from exc
 
     if df.empty:
         raise HTTPException(

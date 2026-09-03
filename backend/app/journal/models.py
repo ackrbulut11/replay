@@ -37,9 +37,9 @@ class ExitReason(str, Enum):
 class TradeOpenRequest(BaseModel):
     """Replay sırasında yeni pozisyon açma isteği."""
 
-    symbol: str
-    provider: str = "binance"
-    timeframe: str = "1h"
+    symbol: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9./^=_-]+$")
+    provider: str = Field(default="binance", min_length=1, max_length=16, pattern=r"^[a-z]+$")
+    timeframe: str = Field(default="1h", pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$")
     side: TradeSide
     entry_price: float = Field(gt=0)
     quantity: float = Field(default=1.0, gt=0)
@@ -52,9 +52,9 @@ class TradeOpenRequest(BaseModel):
     take_profit_pct: Optional[float] = Field(default=None, gt=0)
     entry_bar_index: Optional[int] = None
     entry_time: Optional[datetime] = None
-    session_id: Optional[str] = None
-    reason: Optional[str] = None
-    notes: Optional[str] = None
+    session_id: Optional[str] = Field(default=None, max_length=64)
+    reason: Optional[str] = Field(default=None, max_length=500)
+    notes: Optional[str] = Field(default=None, max_length=5000)
     screenshot: Optional[str] = None
 
     @field_validator("screenshot")
@@ -68,8 +68,8 @@ class TradeOpenRequest(BaseModel):
 class ReplaySessionCreateRequest(BaseModel):
     """Yeni bir replay oturumu başlatma isteği."""
 
-    symbol: str
-    timeframe: str = "1h"
+    symbol: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9./^=_-]+$")
+    timeframe: str = Field(default="1h", pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$")
     starting_balance: float = Field(default=10000.0, gt=0, description="Oturum başlangıç bakiyesi")
 
 
@@ -139,8 +139,8 @@ class TradeUpdateRequest(BaseModel):
     düzeltilemez — aksi halde günlük güvenilirliğini yitirir.
     """
 
-    reason: Optional[str] = None
-    notes: Optional[str] = None
+    reason: Optional[str] = Field(default=None, max_length=500)
+    notes: Optional[str] = Field(default=None, max_length=5000)
     screenshot: Optional[str] = None
     stop_loss: Optional[float] = Field(default=None, gt=0)
     take_profit: Optional[float] = Field(default=None, gt=0)

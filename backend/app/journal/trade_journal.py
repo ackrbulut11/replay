@@ -12,10 +12,10 @@ kontrolü `engines/replay_engine.py`, performans metrikleri
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import or_
+from sqlalchemy import or_, func, delete
 from sqlalchemy.orm import Session
 
 from app.database.models import JournalTrade, ReplaySession, generate_uuid
@@ -158,7 +158,7 @@ class TradeJournal:
         status: Optional[str] = None,
         session_id: Optional[str] = None,
         include_saved: bool = False,
-        limit: int = 200,
+        limit: int | None = 200,
     ) -> list[JournalTrade]:
         """
         Kullanıcının işlemlerini en yeniden eskiye listeler.
@@ -187,7 +187,27 @@ class TradeJournal:
         elif include_saved:
             query = query.filter(JournalTrade.is_saved.is_(True))
 
-        return query.order_by(JournalTrade.created_at.desc()).limit(min(limit, 1000)).all()
+        query = query.order_by(JournalTrade.created_at.desc())
+        return query.limit(min(limit, 1000)).all() if limit is not None else query.all()
+
+    @staticmethod
+    def report_trades(db: Session, user_id: str, **filters) -> list[JournalTrade]:
+        """Rapor için tüm kapanışları piyasa zamanına göre sıralar."""
+        trades = TradeJournal.list_trades(db, user_id, status=TradeStatus.CLOSED.value,
+                                         limit=None, **filters)
+        return sorted(trades, key=lambda t: (
+            TradeJournal._utc(t.exit_time or t.closed_at or t.created_at or datetime.min), t.id))
+
+    @staticmethod
+    def _utc(value: datetime) -> datetime:
+        return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
+
+    @staticmethod
+    def _adjust_balance(db: Session, session_id: str, pnl: float) -> None:
+        db.query(ReplaySession).filter(ReplaySession.id == session_id).update({
+            ReplaySession.current_balance: func.coalesce(
+                ReplaySession.current_balance, ReplaySession.starting_balance, 0.0) + pnl
+        }, synchronize_session=False)
 
     @staticmethod
     def save_session(db: Session, session_id: str, user_id: str) -> int:
@@ -232,6 +252,9 @@ class TradeJournal:
         if trade.status == TradeStatus.CLOSED.value:
             raise ValueError("İşlem zaten kapatılmış")
 
+        if trade.entry_time and request.exit_time and TradeJournal._utc(request.exit_time) < TradeJournal._utc(trade.entry_time):
+            raise ValueError("Çıkış zamanı girişten önce olamaz")
+
         closed = replay_engine.close_position(
             position={
                 "side": trade.side,
@@ -248,26 +271,23 @@ class TradeJournal:
             exit_time=request.exit_time,
         )
 
-        trade.status = TradeStatus.CLOSED.value
-        trade.exit_price = closed["exit_price"]
-        trade.pnl = closed["pnl"]
-        trade.pnl_percent = closed["pnl_percent"]
-        trade.exit_reason = closed["exit_reason"]
-        trade.exit_bar_index = request.exit_bar_index
-        trade.exit_time = request.exit_time
-        trade.closed_at = datetime.utcnow()
-
-        # Oturum bakiyesini işle. `replay_sessions.current_balance` migration'da
-        # ve modelde vardı ama hiçbir yerde okunmuyor/yazılmıyordu — ölü bir
-        # kolondu. Artık replay bir "işaret koyma" alıştırması değil, bakiyesi
-        # olan bir hesap simülasyonu.
+        # Tek atomik durum geçişi: iki eşzamanlı istek aynı kârı yazamaz.
+        updated = db.query(JournalTrade).filter(
+            JournalTrade.id == trade.id, JournalTrade.user_id == trade.user_id,
+            JournalTrade.status == TradeStatus.OPEN.value,
+        ).update({
+            JournalTrade.status: TradeStatus.CLOSED.value,
+            JournalTrade.exit_price: closed["exit_price"],
+            JournalTrade.pnl: closed["pnl"], JournalTrade.pnl_percent: closed["pnl_percent"],
+            JournalTrade.exit_reason: closed["exit_reason"],
+            JournalTrade.exit_bar_index: request.exit_bar_index,
+            JournalTrade.exit_time: request.exit_time, JournalTrade.closed_at: datetime.utcnow(),
+        }, synchronize_session=False)
+        if updated != 1:
+            db.rollback()
+            raise ValueError("İşlem zaten kapatılmış veya silinmiş")
         if trade.session_id:
-            session = db.query(ReplaySession).filter(ReplaySession.id == trade.session_id).first()
-            if session is not None:
-                base = session.current_balance
-                if base is None:
-                    base = session.starting_balance or 0.0
-                session.current_balance = base + (trade.pnl or 0.0)
+            TradeJournal._adjust_balance(db, trade.session_id, closed["pnl"] or 0.0)
 
         db.commit()
         db.refresh(trade)
@@ -313,8 +333,12 @@ class TradeJournal:
         }
         entry_bar = trade.entry_bar_index
 
+        bars = sorted(bars, key=lambda b: TradeJournal._utc(b.timestamp) if b.timestamp else datetime.min)
         for bar in bars:
-            if (
+            if trade.entry_time:
+                if bar.timestamp is None or TradeJournal._utc(bar.timestamp) <= TradeJournal._utc(trade.entry_time):
+                    continue
+            elif (
                 entry_bar is not None
                 and bar.bar_index is not None
                 and bar.bar_index <= entry_bar
@@ -385,7 +409,13 @@ class TradeJournal:
     @staticmethod
     def delete_trade(db: Session, trade: JournalTrade) -> None:
         """İşlemi siler."""
-        db.delete(trade)
+        # RETURNING gerçek satırı silip okur; eski ORM kopyası bakiye hesabına girmez.
+        removed = db.execute(delete(JournalTrade).where(
+            JournalTrade.id == trade.id, JournalTrade.user_id == trade.user_id,
+        ).returning(JournalTrade.session_id, JournalTrade.pnl, JournalTrade.status),
+            execution_options={"synchronize_session": False}).first()
+        if removed and removed.session_id and removed.status == TradeStatus.CLOSED.value:
+            TradeJournal._adjust_balance(db, removed.session_id, -(removed.pnl or 0.0))
         db.commit()
 
     @staticmethod
@@ -417,17 +447,15 @@ class TradeJournal:
             if session is not None and session.starting_balance:
                 starting_balance = session.starting_balance
 
-        trades = TradeJournal.list_trades(
+        trades = TradeJournal.report_trades(
             db,
             user_id,
             symbol=symbol,
-            status=TradeStatus.CLOSED.value,
             session_id=session_id,
             include_saved=include_saved,
-            limit=1000,
         )
         # En eskiden yeniye: equity curve ve drawdown kronolojik sırayla anlamlı.
-        ordered = sorted(trades, key=lambda t: t.closed_at or t.created_at or datetime.min)
+        ordered = trades
         # Ağırlıklı getiri için fiyat ve miktar da gerekli (bkz. weighted_return_pct).
         return calculate_performance(
             [

@@ -42,6 +42,7 @@ interface StrategyPageProps {
   setTimeframe?: (tf: string) => void;
   onEnableIndicators?: (keys: (keyof IndicatorsState)[]) => void;
   currentSymbol?: string;
+  currentProvider?: string;
   currentTimeframe?: string;
 }
 
@@ -69,8 +70,8 @@ function exportSignalsCsv(result: EvaluateResponse): void {
     new Date(signal.timestamp * 1000).toISOString(),
     signal.signal_timestamp ? new Date(signal.signal_timestamp * 1000).toISOString() : '',
     signal.signal,
-    csvNumber(signal.price, 4),
-    csvNumber(signal.entry_price, 4),
+    csvNumber(signal.price, 10),
+    csvNumber(signal.entry_price, 10),
     csvNumber(signal.pnl_percent),
     signal.conditions_met.join(' | '),
   ]);
@@ -97,6 +98,7 @@ export default function StrategyPage({
   setTimeframe,
   onEnableIndicators,
   currentSymbol,
+  currentProvider,
   currentTimeframe,
 }: StrategyPageProps = {}) {
   const { strategies, activeStrategy, indicators, evaluateResult, isLoading, isEvaluating, error } =
@@ -107,6 +109,7 @@ export default function StrategyPage({
 
 
   // Evaluate form state — varsayılan olarak grafikte seçili sembolden başlar
+  const [evalProvider, setEvalProvider] = useState(currentProvider || 'binance');
   const [evalSymbol, setEvalSymbol] = useState(currentSymbol || 'BTCUSDT');
   const [evalTimeframe, setEvalTimeframe] = useState(currentTimeframe || '1d');
   const [evalStart, setEvalStart] = useState('');
@@ -150,7 +153,8 @@ export default function StrategyPage({
   // Grafik ekranında seçilen sembol değiştikçe strateji alanındaki sembolü güncele
   useEffect(() => {
     if (currentSymbol) setEvalSymbol(currentSymbol);
-  }, [currentSymbol]);
+    if (currentProvider) setEvalProvider(currentProvider);
+  }, [currentSymbol, currentProvider]);
 
   useEffect(() => {
     if (currentTimeframe) setEvalTimeframe(currentTimeframe);
@@ -197,6 +201,7 @@ export default function StrategyPage({
   const handleHistorySelect = (item: SingleEvaluationLogItem) => {
     const req = item.request;
     setEvalSymbol(req?.symbol ?? item.symbol);
+    setEvalProvider(req?.provider ?? item.provider);
     setEvalTimeframe(req?.timeframe ?? item.timeframe);
     setEvalStart(req?.start ?? '');
     setEvalEnd(req?.end ?? '');
@@ -205,17 +210,10 @@ export default function StrategyPage({
     setShowEvalPanel(true);
   };
 
-  const autoDetectProvider = (sym: string): string => {
-    const s = sym.trim().toUpperCase();
-    if (['THYAO', 'GARAN', 'AKBNK', 'EREGL', 'ASELS', 'SISE', 'KCHOL', 'BIMAS', 'TUPRS', 'SAHOL'].includes(s)) return 'bist';
-    if (['AAPL', 'NVDA', 'TSLA', 'AMZN', 'MSFT', 'GOOGL', 'META', 'NFLX', 'INTC', 'AMD'].includes(s)) return 'nasdaq';
-    return 'binance';
-  };
-
   const handleEvaluate = async () => {
     if (!activeStrategy) return;
 
-    const provider = autoDetectProvider(evalSymbol);
+    const provider = evalProvider;
 
     const request: EvaluateRequest = {
       symbol: evalSymbol,
@@ -237,7 +235,7 @@ export default function StrategyPage({
     targetTimeframe?: string,
     overrides?: { limitBars?: number; allowShort?: boolean; start?: string; end?: string }
   ) => {
-    const prov = targetProvider || autoDetectProvider(targetSymbol);
+    const prov = targetProvider || evalProvider;
     const tf = targetTimeframe || evalTimeframe;
 
     if (setSymbol) setSymbol(targetSymbol);
@@ -319,7 +317,7 @@ export default function StrategyPage({
    * cutoffIndex'i oraya hizalıyor.
    */
   const handleJumpToRegion = (region: PatternRegion) => {
-    const provider = autoDetectProvider(evalSymbol);
+    const provider = evalProvider;
 
     if (setSymbol) setSymbol(evalSymbol);
     if (setProvider) setProvider(provider);
@@ -337,7 +335,7 @@ export default function StrategyPage({
   };
 
   const handleNavigateToChart = () => {
-    handleNavigateToChartWithSymbol(evalSymbol, autoDetectProvider(evalSymbol), evalTimeframe, {
+    handleNavigateToChartWithSymbol(evalSymbol, evalProvider, evalTimeframe, {
       limitBars: evalLimitBars,
       allowShort: evalAllowShort,
       start: evalStart,
@@ -506,7 +504,7 @@ export default function StrategyPage({
                       onHistorySelect={handleHistorySelect}
                       patternSearchContext={{
                         symbol: evalSymbol,
-                        provider: autoDetectProvider(evalSymbol),
+                        provider: evalProvider,
                         timeframe: evalTimeframe,
                         onJumpToRegion: handleJumpToRegion,
                       }}
@@ -524,7 +522,7 @@ export default function StrategyPage({
                     onCancel={handleCancel}
                     patternSearchContext={{
                       symbol: evalSymbol,
-                      provider: autoDetectProvider(evalSymbol),
+                      provider: evalProvider,
                       timeframe: evalTimeframe,
                       onJumpToRegion: handleJumpToRegion,
                     }}
@@ -578,11 +576,23 @@ export default function StrategyPage({
                             const newSym = e.target.value.toUpperCase();
                             setEvalSymbol(newSym);
                             if (setSymbol && newSym.trim().length >= 2) setSymbol(newSym);
-                            if (setProvider && newSym.trim().length >= 2) setProvider(autoDetectProvider(newSym));
                           }}
                           placeholder="BTCUSDT"
                           className="w-28 rounded-md border border-line-strong bg-surface-raised px-2.5 py-1.5 font-mono text-sm text-content-strong outline-none transition-colors ease-out placeholder:text-content-faint hover:border-ink-500 focus:border-accent-500"
                         />
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="text-2xs text-content-faint">Piyasa</span>
+                        <select value={evalProvider} onChange={(e) => {
+                          setEvalProvider(e.target.value);
+                          setProvider?.(e.target.value);
+                        }} className="rounded-md border border-line-strong bg-surface-raised px-2 py-1.5 text-sm text-content">
+                          <option value="binance">Kripto</option>
+                          <option value="bist">BIST</option>
+                          <option value="nasdaq">NASDAQ</option>
+                          <option value="forex">Forex</option>
+                        </select>
                       </label>
 
                       <label className="flex flex-col gap-1">

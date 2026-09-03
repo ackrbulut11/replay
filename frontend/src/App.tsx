@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicOnlyRoute from './components/PublicOnlyRoute';
 import DashboardLayout from './layouts/DashboardLayout';
-import CandleChart from './charts/CandleChart';
 import { IndicatorsState } from './charts/IndicatorToolbar';
 import { BarChart3, ChevronUp, ChevronDown, Bell } from 'lucide-react';
 import { useReplayStore, replayStore } from './store/replayStore';
@@ -14,18 +13,24 @@ import { useChartSettingsStore, chartSettingsStore, DEFAULT_ACTIVE_INDICATORS } 
 import { strategyStore } from './store/strategyStore';
 import RightActionBar from './components/watchlist/RightActionBar';
 import SymbolSearchModal from './components/SymbolSearchModal';
-import StrategyPage from './pages/StrategyPage';
-import AdminPage from './pages/AdminPage';
-import JournalPage from './pages/JournalPage';
 import AlertsPanel from './components/alerts/AlertsPanel';
 import CreateAlarmModal from './components/alerts/CreateAlarmModal';
 import { useAlertStore, alertStore } from './store/alertStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import type { NavigationTab } from './components/Sidebar';
 import { useAuth } from './context/AuthContext';
-import { LoginPage } from './pages/LoginPage';
-import { LandingPage } from './pages/LandingPage';
 import { errorMessage, isAbortError } from './utils/errors';
+
+const CandleChart = lazy(() => import('./charts/CandleChart'));
+const StrategyPage = lazy(() => import('./pages/StrategyPage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const JournalPage = lazy(() => import('./pages/JournalPage'));
+const LoginPage = lazy(() =>
+  import('./pages/LoginPage').then((module) => ({ default: module.LoginPage }))
+);
+const LandingPage = lazy(() =>
+  import('./pages/LandingPage').then((module) => ({ default: module.LandingPage }))
+);
 
 
 interface CandleData {
@@ -591,13 +596,6 @@ function MainApp() {
   // (çapa son mum), pencereye ihtiyaç yok; pencere asıl olarak replay
   // sürerken zaman dilimi değişince devreye giriyor.
   const wasReplayActiveRef = useRef(replayState.isReplayActive);
-  const replayExitCount = useRef(0);
-  if (wasReplayActiveRef.current !== replayState.isReplayActive) {
-    if (wasReplayActiveRef.current && !replayState.isReplayActive) {
-      replayExitCount.current += 1;
-    }
-    wasReplayActiveRef.current = replayState.isReplayActive;
-  }
 
   useEffect(() => {
     if (!isAuthenticated || !symbol || symbol.trim().length < 2) return;
@@ -615,7 +613,21 @@ function MainApp() {
       cancelBackgroundLoad();
       forwardControllerRef.current?.abort();
     };
-  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, cancelBackgroundLoad, replayExitCount.current]);
+  }, [provider, symbol, timeframe, start, end, handleLoadChart, isAuthenticated, cancelBackgroundLoad]);
+
+  // Replay'den çıkış, normal input değişikliğinden bağımsız bir geçiştir.
+  // Ref render sırasında değiştirilmez; effect önceki durumu okuyup yalnızca
+  // aktif -> pasif geçişinde güncel piyasa penceresini yeniden yükler.
+  useEffect(() => {
+    const wasReplayActive = wasReplayActiveRef.current;
+    wasReplayActiveRef.current = replayState.isReplayActive;
+    if (!wasReplayActive || replayState.isReplayActive) return;
+    if (!isAuthenticated || !symbol || symbol.trim().length < 2) return;
+
+    const controller = new AbortController();
+    void handleLoadChart(controller.signal);
+    return () => controller.abort();
+  }, [replayState.isReplayActive, isAuthenticated, symbol, handleLoadChart]);
 
   // İmleç yüklü verinin sonuna yaklaştıysa ileri yönü uzat.
   //
@@ -706,6 +718,7 @@ function MainApp() {
             setTimeframe={setTimeframe}
             onEnableIndicators={handleEnableIndicators}
             currentSymbol={symbol}
+            currentProvider={provider}
             currentTimeframe={timeframe}
           />
         </ErrorBoundary>
@@ -973,33 +986,41 @@ function MainApp() {
 
 export function App() {
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <PublicOnlyRoute>
-            <LandingPage />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/login"
-        element={
-          <PublicOnlyRoute>
-            <LoginPage />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/app/*"
-        element={
-          <ProtectedRoute>
-            <MainApp />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-canvas text-sm text-content-muted" role="status">
+          REPLAY yükleniyor…
+        </div>
+      }
+    >
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <PublicOnlyRoute>
+              <LandingPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <PublicOnlyRoute>
+              <LoginPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/app/*"
+          element={
+            <ProtectedRoute>
+              <MainApp />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
 

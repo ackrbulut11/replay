@@ -29,11 +29,11 @@ class ChartSettingsPayload(BaseModel):
     gerektirmesin diye.
     """
 
-    rsi: Dict[str, Any] = Field(default_factory=dict)
-    drawing_defaults: Dict[str, Any] = Field(default_factory=dict)
+    rsi: Dict[str, Any] = Field(default_factory=dict, max_length=32)
+    drawing_defaults: Dict[str, Any] = Field(default_factory=dict, max_length=32)
     log_scale: bool = False
     # "PROVIDER:SYMBOL" -> çizim listesi.
-    drawings: Dict[str, Any] = Field(default_factory=dict)
+    drawings: Dict[str, Any] = Field(default_factory=dict, max_length=500)
 
 
 @router.get("", response_model=ChartSettingsPayload)

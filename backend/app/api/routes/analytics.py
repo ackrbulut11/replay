@@ -15,9 +15,8 @@ from pydantic import BaseModel, Field, field_validator
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.api.routes.waitlist import client_ip
 from app.auth.dependencies import get_current_user, get_current_user_optional
-from app.core.security import RateLimiter
+from app.core.security import RateLimiter, client_ip
 from app.database.models import DrawingUsageEvent, User, UserEvent, generate_uuid
 from app.database.postgres import get_db
 

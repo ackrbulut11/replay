@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -19,6 +19,10 @@ from app.database.models import User, Watchlist
 from app.database.postgres import get_db
 
 router = APIRouter(prefix="/watchlist", tags=["watchlist"])
+
+MAX_USER_LISTS = 20
+MAX_ITEMS_PER_LIST = 500
+MAX_TOTAL_ITEMS = 1000
 
 
 class WatchlistPayload(BaseModel):
@@ -31,7 +35,24 @@ class WatchlistPayload(BaseModel):
     için gönderilmez.
     """
 
-    lists: List[Dict[str, Any]] = Field(default_factory=list)
+    lists: List[Dict[str, Any]] = Field(default_factory=list, max_length=MAX_USER_LISTS)
+
+    @field_validator("lists")
+    @classmethod
+    def _limit_list_items(cls, value: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        total = 0
+        for group in value:
+            items = group.get("items", [])
+            if not isinstance(items, list):
+                raise ValueError("İzleme listesi öğeleri bir liste olmalıdır")
+            if len(items) > MAX_ITEMS_PER_LIST:
+                raise ValueError(
+                    f"Bir izleme listesinde en fazla {MAX_ITEMS_PER_LIST} öğe olabilir"
+                )
+            total += len(items)
+        if total > MAX_TOTAL_ITEMS:
+            raise ValueError(f"Toplam izleme listesi öğesi {MAX_TOTAL_ITEMS} değerini aşamaz")
+        return value
 
 
 @router.get("", response_model=WatchlistPayload)

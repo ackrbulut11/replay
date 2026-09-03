@@ -7,6 +7,7 @@ alarmlarına erişir. İş mantığı alerts/engine.py içindedir (RULES.md #9).
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,6 +25,7 @@ from app.data.loader import loader as shared_loader
 from app.database.models import User
 from app.database.postgres import get_db
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 _engine = AlertEngine()
 # Alarm değerlendirmesi gösterge hesabı için piyasa verisine ihtiyaç duyar;
@@ -79,9 +81,16 @@ def create_alert(
     """Yeni fiyat veya gösterge alarmı oluşturur."""
     try:
         alert = _engine.create_alert(db, request, user_id=current_user.id)
-    except Exception as e:
+    except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Alarm oluşturulamadı")
+        raise HTTPException(
+            status_code=500,
+            detail="Alarm oluşturulamadı. Lütfen tekrar deneyin.",
+        ) from exc
     return {"message": "Alarm oluşturuldu", "alert": alert}
 
 
@@ -131,9 +140,13 @@ def check_alerts(
             user_id=current_user.id,
             loader=_loader,
         )
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Alarmlar değerlendirilemedi")
+        raise HTTPException(
+            status_code=502,
+            detail="Alarm verisi alınamadı. Lütfen biraz sonra tekrar deneyin.",
+        ) from exc
 
     return AlertCheckResponse(
         checked_count=len(triggered),

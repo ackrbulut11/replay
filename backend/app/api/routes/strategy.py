@@ -8,6 +8,7 @@ CRUD endpointleri ve strateji değerlendirme.
 from __future__ import annotations
 
 import logging
+import threading
 
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -29,6 +30,7 @@ from app.engines.strategy_engine import (
     portfolio_from_batch,
 )
 from app.indicators.registry import IndicatorRegistry
+from app.core.security import RateLimiter
 from app.rules.templates import list_templates
 from app.rules.validation import StrategyValidationError
 from app.rules.strategy_models import (
@@ -43,13 +45,13 @@ from app.rules.strategy_models import (
 
 MAX_LIMIT_BARS = 10000
 logger = logging.getLogger(__name__)
-  # Strateji testinde (tekli/toplu) izin verilen azami mum sayısı
+# Strateji testinde (tekli/toplu) izin verilen azami mum sayısı.
 
 
 class ImportEvaluationsRequest(BaseModel):
     """Tarayıcıda kalmış eski test geçmişinin tek seferlik aktarımı."""
 
-    items: List[Dict[str, Any]] = Field(default_factory=list)
+    items: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
 
 
 router = APIRouter(prefix="/strategy", tags=["strategy"])
@@ -61,6 +63,20 @@ _scanner = ScannerEngine()
 # onbellegi kopyalaniyor ve parquet kilitleri ayri ayri calisip ise
 # yaramiyordu (bkz. data/loader.py sonundaki not).
 _loader = shared_loader
+_evaluate_rate_limiter = RateLimiter(
+    max_requests=30,
+    window_seconds=60,
+    detail="Çok fazla strateji değerlendirmesi. Lütfen biraz sonra tekrar deneyin.",
+)
+_batch_rate_limiter = RateLimiter(
+    max_requests=12,
+    window_seconds=60,
+    detail="Çok fazla toplu tarama başlatıldı. Lütfen biraz sonra tekrar deneyin.",
+)
+# DNS/sağlayıcı katmanında çalışan bir Python thread'i zorla sonlandırılamaz.
+# En fazla dört tarama sağlayıcı işi aynı anda çalışabilir; zaman aşımına uğrayan
+# iş gerçekten dönene kadar slotu bırakmaz ve süreçte sınırsız thread birikmez.
+_provider_job_slots = threading.BoundedSemaphore(4)
 
 
 def get_owned_strategy(
@@ -212,9 +228,16 @@ def create_strategy(
         raise HTTPException(
             status_code=422, detail={"message": "Strateji geçersiz", "errors": e.errors}
         )
-    except Exception as e:
+    except ValueError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Strateji oluşturulamadı")
+        raise HTTPException(
+            status_code=500,
+            detail="Strateji oluşturulamadı. Lütfen tekrar deneyin.",
+        ) from exc
     return {"message": "Strateji oluşturuldu", "strategy": strategy}
 
 
@@ -263,6 +286,8 @@ def evaluate_strategy(
 
     Sinyalleri döndürür (BUY/SELL noktaları).
     """
+    _evaluate_rate_limiter.check(current_user.id)
+
     # Tarih aralığını hazırla
     if request.end:
         try:
@@ -302,8 +327,14 @@ def evaluate_strategy(
             start_time=start_dt,
             end_time=end_dt,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Veri yükleme hatası: {e}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Strateji değerlendirme verisi yüklenemedi")
+        raise HTTPException(
+            status_code=502,
+            detail="Piyasa verisi yüklenemedi. Lütfen biraz sonra tekrar deneyin.",
+        ) from exc
 
     if df.empty:
         raise HTTPException(status_code=404, detail="Belirtilen aralıkta veri bulunamadı")
@@ -322,6 +353,7 @@ def evaluate_strategy(
             loader=_loader,
             start_dt=start_dt,
             end_dt=end_dt,
+            param_overrides=request.param_overrides,
         )
     except MultiTimeframeDataError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -344,8 +376,12 @@ def evaluate_strategy(
         # Geçersiz parametre override'ı gibi istemci hataları (bkz.
         # RuleEngine._resolve_params) sunucu hatası değildir.
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Değerlendirme hatası: {e}")
+    except Exception as exc:
+        logger.exception("Strateji değerlendirmesi başarısız")
+        raise HTTPException(
+            status_code=500,
+            detail="Strateji değerlendirilemedi. Lütfen tekrar deneyin.",
+        ) from exc
 
     # Sonucu tekli test geçmişine kaydet (toplu tarama da aynı şekilde davranır).
     # Geçmiş kaydı başarısız olsa bile değerlendirme sonucu döndürülmeli.
@@ -425,18 +461,29 @@ def _run_batch_scan_job(
     içinde HİÇBİR görev bitmezse elde kalanları zaman aşımı hatası olarak
     işaretleyip taramayı yine de sonlandırıyoruz.
     """
-    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+    from concurrent.futures import ThreadPoolExecutor, wait
 
     ROUND_TIMEOUT_SECONDS = 30
 
     db = SessionLocal()
+    if not _provider_job_slots.acquire(blocking=False):
+        _scanner.fail_scan(
+            db,
+            scan_id=scan_id,
+            error="Veri sağlayıcı işleri dolu. Lütfen biraz sonra tekrar deneyin.",
+        )
+        db.close()
+        return
+
+    release_provider_slot = True
     # Sıralı (tek işçi): sağlayıcılar (özellikle Yahoo Finance) çok sayıda eşzamanlı
     # isteği kısıtlayıp yavaşlatabiliyor/donmaya sebep olabiliyor; tek tek taramak
     # toplamda daha güvenilir ve sonuçlar zaten bitiği anda aşağıya düşüyor.
     executor = ThreadPoolExecutor(max_workers=1)
     try:
-        futures = {
-            executor.submit(
+        raw_results: list[dict] = []
+        for index, sym in enumerate(symbols):
+            future = executor.submit(
                 _engine.evaluate_symbol,
                 strategy=strategy,
                 symbol=sym,
@@ -450,36 +497,33 @@ def _run_batch_scan_job(
                 allow_short=allow_short,
                 starting_balance=starting_balance,
                 sizing=PositionSizing.from_dict(sizing),
-            ): sym
-            for sym in symbols
-        }
-        pending = set(futures)
-        # Portfoy simulasyonu icin ham sonuclar (kapanmis pozisyonlar dahil).
-        # Veritabanina yazilan surumde bunlar pydantic tarafindan ayiklaniyor.
-        raw_results: list[dict] = []
-        while pending:
-            done, pending = wait(pending, timeout=ROUND_TIMEOUT_SECONDS, return_when=FIRST_COMPLETED)
+            )
+            done, _ = wait({future}, timeout=ROUND_TIMEOUT_SECONDS)
             if not done:
-                # Bu turda hiçbir sembol bitmedi (muhtemelen ağ/DNS donması):
-                # kalanları hata olarak işaretleyip taramayı bitir, sonsuza
-                # kadar "running" kalmasını engelle.
-                for fut in pending:
-                    sym = futures[fut]
+                # Çalışan thread iptal edilemez. Slot, future gerçekten dönene
+                # kadar callback tarafından tutulur; sıradaki semboller hiç
+                # submit edilmez, böylece yüzlerce bekleyen Future oluşmaz.
+                release_provider_slot = False
+                future.add_done_callback(lambda _future: _provider_job_slots.release())
+                remaining = symbols[index:]
+                for remaining_symbol in remaining:
                     _scanner.append_scan_result(
                         db,
                         scan_id=scan_id,
-                        result={"symbol": sym, "error": "Zaman aşımı: veri sağlayıcıdan yanıt alınamadı"},
+                        result={
+                            "symbol": remaining_symbol,
+                            "error": "Zaman aşımı: veri sağlayıcıdan yanıt alınamadı",
+                        },
                     )
-                pending = set()
                 break
-            for fut in done:
-                sym = futures[fut]
-                try:
-                    result = fut.result()
-                except Exception as e:
-                    result = {"symbol": sym, "error": str(e)}
-                raw_results.append(result)
-                _scanner.append_scan_result(db, scan_id=scan_id, result=result)
+
+            try:
+                result = future.result()
+            except Exception:
+                logger.exception("Toplu taramada sembol değerlendirilemedi: %s", sym)
+                result = {"symbol": sym, "error": "Sembol değerlendirilemedi"}
+            raw_results.append(result)
+            _scanner.append_scan_result(db, scan_id=scan_id, result=result)
 
         # Sermaye paylastirmali portfoy sonucu. Tekli sonuclarin toplami
         # DEGILDIR: o pozisyonlar ayni parayi paylasir ve bir kismina hic
@@ -498,13 +542,20 @@ def _run_batch_scan_job(
             logger.warning("Portfoy simulasyonu basarisiz (%s): %s", scan_id, e, exc_info=True)
 
         _scanner.finish_scan(db, scan_id=scan_id, portfolio=portfolio)
-    except Exception as e:
-        _scanner.fail_scan(db, scan_id=scan_id, error=str(e))
+    except Exception:
+        logger.exception("Toplu tarama tamamlanamadı: %s", scan_id)
+        _scanner.fail_scan(
+            db,
+            scan_id=scan_id,
+            error="Tarama tamamlanamadı. Lütfen tekrar deneyin.",
+        )
     finally:
         db.close()
         # Hâlâ asılı duran (donmuş) thread'leri beklemeden çık; response zaten
         # gönderildi ve tarama kaydı yukarıda sonuçlandırıldı.
         executor.shutdown(wait=False, cancel_futures=True)
+        if release_provider_slot:
+            _provider_job_slots.release()
 
 
 @router.post("/{strategy_id}/batch-evaluate")
@@ -523,6 +574,8 @@ def batch_evaluate_strategy(
     isteği hiçbir zaman uzun sürmez ve Vercel'in harici proxy zaman aşımına
     (ROUTER_EXTERNAL_TARGET_ERROR) takılmaz.
     """
+    _batch_rate_limiter.check(current_user.id)
+
     if request.end:
         try:
             end_dt = datetime.strptime(request.end, "%Y-%m-%d")

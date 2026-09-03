@@ -6,9 +6,8 @@ olduğu için **kimlik doğrulaması yoktur** — bu yüzden uç nokta bilinçli
 mümkün olduğunca küçük tutulmuştur: tek yazılabilir alan, katı doğrulama,
 IP başına basit hız sınırı ve varlık bilgisi sızdırmayan tek tip yanıt.
 
-Aynı adresin ikinci gönderimi yeni satır açmaz ve hata da döndürmez; fikir
-olarak idempotenttir. Kullanıcı deneyimi için "already_registered" bayrağı
-döner, böylece frontend zaten kayıtlı olduğunu küçük bir notla bildirebilir.
+Aynı adresin ikinci gönderimi yeni satır açmaz ve hata da döndürmez; yanıt yeni
+ve mevcut adres için aynıdır, böylece liste üyeliği sorgulanamaz.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.security import RateLimiter
+from app.core.security import RateLimiter, client_ip
 from app.database.models import WaitlistSignup
 from app.database.postgres import get_db
 
@@ -45,17 +44,6 @@ _rate_limiter = RateLimiter(
 )
 
 
-def client_ip(request: Request) -> str:
-    """
-    İstemci IP'si. Render arkasında olduğumuz için X-Forwarded-For'un ilk
-    değeri gerçek istemcidir; başlık yoksa doğrudan bağlantıya düşer.
-    """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
 class WaitlistRequest(BaseModel):
     email: str = Field(..., max_length=MAX_EMAIL_LENGTH)
     # Formun bulunduğu bölüm; beklenmeyen bir değer gelirse yok sayılır.
@@ -76,14 +64,8 @@ class WaitlistRequest(BaseModel):
 
 
 class WaitlistResponse(BaseModel):
-    """`already_registered`, frontend'in "zaten kayıtlısınız" notunu göstermesi içindir."""
-
     ok: bool = True
-    already_registered: bool = False
     message: str = "You are on the list. We will email you when it is ready."
-
-
-_ALREADY_REGISTERED_MESSAGE = "You are already on the list."
 
 
 @router.post("", response_model=WaitlistResponse)
@@ -99,7 +81,7 @@ def join_waitlist(
         db.query(WaitlistSignup).filter(WaitlistSignup.email == payload.email).first()
     )
     if existing is not None:
-        return WaitlistResponse(already_registered=True, message=_ALREADY_REGISTERED_MESSAGE)
+        return WaitlistResponse()
 
     db.add(WaitlistSignup(email=payload.email, source=payload.source))
     try:
@@ -108,6 +90,6 @@ def join_waitlist(
         # İki istek aynı anda geldiğinde benzersiz kısıt devreye girer;
         # kullanıcı açısından sonuç yine "listedesiniz".
         db.rollback()
-        return WaitlistResponse(already_registered=True, message=_ALREADY_REGISTERED_MESSAGE)
+        return WaitlistResponse()
 
     return WaitlistResponse()

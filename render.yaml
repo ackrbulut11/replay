@@ -37,6 +37,8 @@ services:
       # ─── Zorunlu ────────────────────────────────────────────────────────
       - key: ENVIRONMENT
         value: production
+      - key: PYTHON_VERSION
+        value: 3.11.11
       - key: JWT_SECRET_KEY
         # Render üretir ve panelde saklar; koda hiç girmez (RULES.md #17).
         generateValue: true

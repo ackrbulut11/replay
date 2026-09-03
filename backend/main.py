@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from app.core.config import settings
 from app.core import perf
+from app.core.security import RequestBodyLimitMiddleware, SecurityHeadersMiddleware
 from app.database import models  # noqa: F401  (model metadata'sının yüklenmesi için)
 from app.database.migrate import run_migrations
 from app.auth.router import router as auth_router
@@ -168,6 +169,11 @@ if settings.FRONTEND_URL and settings.FRONTEND_URL not in origins:
 # önbellek tamamen sıcakken bile "veri yükleniyor" süresinin büyük kısmıydı.
 #
 # `minimum_size`: küçük JSON yanıtlarını sıkıştırmak kazandırmaz, CPU harcar.
+app.add_middleware(RequestBodyLimitMiddleware, max_bytes=5 * 1024 * 1024)
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    production=settings.ENVIRONMENT == "production",
+)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # Performans ölçümü (geliştirme aracı, üretimde kendiliğinden kapalı).

@@ -11,6 +11,7 @@ Frontend'deki `isAuthenticated` kontrolleri yalnızca istemci tarafı süslemeyd
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import logging
 from typing import Optional, List, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,6 +29,8 @@ from app.data.loader import (
 from app.data.symbols import get_symbols, search_symbols
 from app.utils.time import utc_now
 from app.database.models import User
+
+logger = logging.getLogger(__name__)
 
 # Kullanıcı başına dakikalık istek sınırı. Gerçek kullanımın belirgin şekilde
 # üstünde: izleme listesi 15 sn'de bir tek `/quotes` isteği atıyor, grafik
@@ -53,6 +56,7 @@ router = APIRouter(
 )
 # Paylasilan tek ornek (bkz. data/loader.py sonundaki not).
 loader = shared_loader
+MAX_QUOTES_PER_REQUEST = 200
 
 @router.get("/symbols")
 def list_symbols(
@@ -72,7 +76,12 @@ def search_market_symbols(
 
 @router.get("/quotes")
 def get_market_quotes(
-    items: str = Query(..., description="Comma-separated provider:symbol pairs, e.g. bist:THYAO,nasdaq:AAPL,binance:BTCUSDT")
+    items: str = Query(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="Comma-separated provider:symbol pairs, e.g. bist:THYAO,nasdaq:AAPL,binance:BTCUSDT",
+    )
 ) -> List[Dict]:
     """Returns latest price and daily change percentage for a list of symbols concurrently."""
     from datetime import timedelta
@@ -80,6 +89,11 @@ def get_market_quotes(
     start_dt = end_dt - timedelta(days=14)
 
     item_pairs = [i.strip() for i in items.split(",") if i.strip()]
+    if len(item_pairs) > MAX_QUOTES_PER_REQUEST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tek istekte en fazla {MAX_QUOTES_PER_REQUEST} sembol sorgulanabilir.",
+        )
 
     def fetch_single_quote(item: str) -> Dict:
         parts = item.split(":")
@@ -138,9 +152,9 @@ def get_market_quotes(
 
 @router.get("/coverage")
 def get_market_coverage(
-    provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),
-    symbol: str = Query(..., description="Market symbol (e.g. BTCUSDT, AAPL, THYAO)"),
-    timeframe: str = Query(..., description="Timeframe (1m, 5m, 15m, 1h, 4h, 1d)"),
+    provider: str = Query(..., min_length=1, max_length=16, pattern=r"^[a-z]+$"),
+    symbol: str = Query(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9./^=_-]+$"),
+    timeframe: str = Query(..., pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$"),
 ):
     """
     Bir zaman dilimi için önbellekteki tarih aralığını döndürür.
@@ -150,7 +164,10 @@ def get_market_coverage(
     kullanılır. Önbellek yoksa `available: false` döner — bu "veri yok"
     değil "bilinmiyor" demektir, istemci buna dayanarak engelleme yapmaz.
     """
-    coverage = loader.get_coverage(provider, symbol, timeframe)
+    try:
+        coverage = loader.get_coverage(provider, symbol, timeframe)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if coverage is None:
         return {"available": False, "provider": provider, "symbol": symbol.upper(), "timeframe": timeframe}
     return {"available": True, "provider": provider, "symbol": symbol.upper(), "timeframe": timeframe, **coverage}
@@ -206,9 +223,9 @@ def _to_chart_candles(df) -> list[dict]:
 
 @router.get("/window")
 def get_market_window(
-    provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),
-    symbol: str = Query(..., description="Market symbol (e.g. BTCUSDT, AAPL, THYAO)"),
-    timeframe: str = Query(..., description="Timeframe (1m, 5m, 15m, 1h, 4h, 1d)"),
+    provider: str = Query(..., min_length=1, max_length=16, pattern=r"^[a-z]+$"),
+    symbol: str = Query(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9./^=_-]+$"),
+    timeframe: str = Query(..., pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$"),
     anchor: int = Query(..., description="Pencerenin merkezi — saniye cinsinden unix zaman damgası"),
     bars_before: int = Query(WINDOW_BARS_BEFORE, gt=0, le=5000, description="Çapanın gerisindeki mum sayısı"),
     bars_after: int = Query(WINDOW_BARS_AFTER, gt=0, le=5000, description="Çapanın ilerisindeki mum sayısı"),
@@ -244,16 +261,20 @@ def get_market_window(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.exception("Piyasa penceresi yüklenemedi")
+        raise HTTPException(
+            status_code=502,
+            detail="Piyasa verisi yüklenemedi. Lütfen biraz sonra tekrar deneyin.",
+        ) from exc
 
     return _to_chart_candles(df)
 
 
 @router.get("/data")
 def get_market_data(
-    provider: str = Query(..., description="Data provider (binance, nasdaq, bist)"),
-    symbol: str = Query(..., description="Market symbol (e.g. BTCUSDT, AAPL, THYAO)"),
-    timeframe: str = Query(..., description="Timeframe (1m, 5m, 15m, 1h, 4h, 1d)"),
+    provider: str = Query(..., min_length=1, max_length=16, pattern=r"^[a-z]+$"),
+    symbol: str = Query(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9./^=_-]+$"),
+    timeframe: str = Query(..., pattern=r"^(1m|5m|15m|1h|4h|1d|1w|1mo)$"),
     start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS)"),
     end: Optional[str] = Query(None, description="End date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS). Defaults to now.")
 ):
@@ -312,5 +333,11 @@ def get_market_data(
         )
         return _to_chart_candles(df)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Piyasa verisi yüklenemedi")
+        raise HTTPException(
+            status_code=502,
+            detail="Piyasa verisi yüklenemedi. Lütfen biraz sonra tekrar deneyin.",
+        ) from exc

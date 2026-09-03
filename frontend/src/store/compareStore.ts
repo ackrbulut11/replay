@@ -104,3 +104,5 @@ export function useCompareStore(): CompareState {
 
   return state;
 }
+
+window.addEventListener('replay:session-cleared', () => applyState({ items: [] }));

@@ -37,6 +37,8 @@ def get_current_user(
         # Token geçerli ama kullanıcı silinmiş olabilir; None döndürmek
         # çağıran tarafta AttributeError'a yol açar.
         raise credentials_exception
+    if int(payload.get("ver", 0)) != int(user.token_version or 0):
+        raise credentials_exception
     return user
 
 
@@ -54,7 +56,12 @@ def get_current_user_optional(
         user_id = payload.get("sub")
         if not user_id:
             return None
-        return db.query(User).filter(User.id == user_id).first()
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None:
+            return None
+        if int(payload.get("ver", 0)) != int(user.token_version or 0):
+            return None
+        return user
     except Exception:
         return None
 

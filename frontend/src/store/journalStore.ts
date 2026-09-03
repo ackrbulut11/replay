@@ -103,3 +103,5 @@ export function useJournalStore(): JournalState {
 
   return state;
 }
+
+window.addEventListener('replay:session-cleared', journalStore.reset);

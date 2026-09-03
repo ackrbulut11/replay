@@ -1,6 +1,7 @@
+import { getSessionGeneration, SessionChangedError } from '../auth/authSession';
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
-import { TOKEN_STORAGE_KEY } from '../context/AuthContext';
+import { hasAccessToken } from '../auth/authSession';
 import {
   DEFAULT_DRAWING_COLOR, DEFAULT_LINE_WIDTH, DEFAULT_OPACITY, DEFAULT_LINE_STYLE,
   DEFAULT_BRUSH_COLOR, DEFAULT_FIB_RETRACEMENT_LEVELS, DEFAULT_FIB_EXTENSION_LEVELS,
@@ -279,6 +280,7 @@ function scheduleServerSave(delayMs = 800) {
       await apiRequest('/api/chart-settings', { method: 'PUT', body: payload });
       lastPersistedJson = payload;
     } catch (e) {
+      if (e instanceof SessionChangedError) return;
       console.warn('Grafik ayarları sunucuya kaydedilemedi:', e);
     }
   }, delayMs);
@@ -378,7 +380,8 @@ export const chartSettingsStore = {
 
   /** Giriş yapıldıktan sonra ayarları sunucudan yükler. */
   syncFromServer: async () => {
-    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) return;
+    const generation = getSessionGeneration();
+    if (!hasAccessToken()) return;
     if (syncInFlight) return;
     syncInFlight = true;
 
@@ -426,9 +429,10 @@ export const chartSettingsStore = {
         syncedOnce = true;
       }
     } catch (e) {
+      if (e instanceof SessionChangedError) return;
       console.warn('Grafik ayarları sunucudan alınamadı:', e);
     } finally {
-      syncInFlight = false;
+      if (generation === getSessionGeneration()) syncInFlight = false;
     }
   },
 
@@ -453,6 +457,7 @@ export const chartSettingsStore = {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
     } catch (e) {
+      if (e instanceof SessionChangedError) return;
       console.error('Failed to clear chart settings localStorage on logout', e);
     }
     listeners.forEach((listener) => listener(currentState));

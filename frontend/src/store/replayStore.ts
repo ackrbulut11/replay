@@ -1,3 +1,4 @@
+import { SessionChangedError } from '../auth/authSession';
 import { useState, useEffect } from 'react';
 
 import { startReplaySession } from '../services/journalApi';
@@ -49,6 +50,7 @@ let currentState: ReplayState = { ...INITIAL_REPLAY_STATE };
 const listeners: Set<Listener> = new Set();
 
 /** Uçuştaki oturum açma isteği — eşzamanlı çağrılar tek isteği paylaşır. */
+let replayGeneration = 0;
 let pendingSession: Promise<string> | null = null;
 
 export const replayStore = {
@@ -61,6 +63,7 @@ export const replayStore = {
     // Replay kapanınca oturum kimliği düşer — sonraki açılış sunucudan yeni
     // bir oturum ister (bkz. ensureSession).
     if (!next.isReplayActive) {
+      replayGeneration += 1;
       next.sessionId = null;
       pendingSession = null;
     }
@@ -91,8 +94,10 @@ export const replayStore = {
     if (currentState.sessionId) return currentState.sessionId;
     if (pendingSession) return pendingSession;
 
+    const generation = replayGeneration;
     pendingSession = startReplaySession({ symbol, timeframe })
       .then((session) => {
+        if (generation !== replayGeneration) throw new SessionChangedError();
         // Bu arada replay kapandıysa kimliği geri yazma.
         if (currentState.isReplayActive) {
           replayStore.setState({ sessionId: session.id });
@@ -100,13 +105,14 @@ export const replayStore = {
         return session.id;
       })
       .finally(() => {
-        pendingSession = null;
+        if (generation === replayGeneration) pendingSession = null;
       });
 
     return pendingSession;
   },
 
   reset: () => {
+    replayGeneration += 1;
     // Kör mod tercihi replay oturumları arasında korunur: kullanıcı bunu bir
     // kez açıp öyle çalışmayı seçiyor, her çıkışta kapanması can sıkıcı olurdu.
     const { isBlindMode } = currentState;
@@ -133,3 +139,7 @@ export function useReplayStore(): [ReplayState, (partial: Partial<ReplayState> |
 
   return [state, replayStore.setState];
 }
+window.addEventListener('replay:session-cleared', () => {
+  replayStore.reset();
+  replayStore.setState({ isBlindMode: false });
+});

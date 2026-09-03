@@ -1,7 +1,7 @@
-import { TOKEN_STORAGE_KEY, notifyUnauthorized, refreshAccessToken } from '../context/AuthContext';
+import { getAccessToken, notifyUnauthorized, refreshAccessToken, getSessionGeneration, assertSessionGeneration } from '../auth/authSession';
 import { logEvent } from './eventLog';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://replay-xj3e.onrender.com/api' : '/api');
+const API_BASE_URL = '/api';
 
 export const fetchWithAuth = async (url: string, options: RequestInit = {}, token: string | null): Promise<Response> => {
   const headers = new Headers(options.headers || {});
@@ -104,12 +104,13 @@ async function fetchOrThrow(url: string, init: RequestInit): Promise<Response> {
 /**
  * Kimlik doğrulamalı JSON isteği — backend'e giden tüm çağrıların ortak yolu.
  *
- * Token'ı localStorage'dan okur, 401'de oturumu düşürür ve hata gövdesini
+ * Token'ı sekme belleğinden okur, 401'de oturumu düşürür ve hata gövdesini
  * güvenilir biçimde çözer. Doğrudan `fetch` kullanmak yerine bunu tercih edin:
  * aksi halde istek token'sız gider ve 401 alır.
  */
 export async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  const generation = getSessionGeneration();
+  const token = getAccessToken();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -120,14 +121,17 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   }
 
   let response = await fetchOrThrow(url, { ...options, headers });
+  assertSessionGeneration(generation);
 
   // Access token 30 dakikada doluyor: doğrudan oturumu düşürmeden önce
   // refresh_token cookie'siyle bir kez yeni token almayı dene.
   if (response.status === 401) {
     const newToken = await refreshAccessToken();
+    assertSessionGeneration(generation);
     if (newToken) {
       headers['Authorization'] = `Bearer ${newToken}`;
       response = await fetchOrThrow(url, { ...options, headers });
+      assertSessionGeneration(generation);
     }
   }
 
@@ -141,6 +145,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
     // Yakalanmamış sunucu hataları düz metin döner; doğrudan response.json()
     // çağırmak burada patlar ve gerçek hata mesajı kaybolur.
     const raw = await response.text().catch(() => '');
+    assertSessionGeneration(generation);
     const { message: errorMessage, transient } = describeError(raw, response.status);
 
     void logEvent('api_error', {
@@ -156,5 +161,7 @@ export async function apiRequest<T>(url: string, options: RequestInit = {}): Pro
   if (response.status === 204) {
     return undefined as T;
   }
-  return response.json();
+  const data = await response.json();
+  assertSessionGeneration(generation);
+  return data;
 }

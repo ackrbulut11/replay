@@ -4,9 +4,121 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Callable, Dict, Tuple
+from typing import Any, Awaitable, Callable, Dict, Tuple
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from starlette.responses import JSONResponse
+
+
+def client_ip(request: Request) -> str:
+    """Güvenilir ters vekilin eklediği son X-Forwarded-For adresini döndürür.
+
+    İlk değeri almak istemcinin kendi eklediği sahte adresi kabul ediyordu.
+    Vercel/Render zinciri gerçek istemci adresini listenin sonuna ekler; doğrudan
+    bağlantıda ise ASGI sunucusunun gördüğü adres kullanılır.
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    addresses = [part.strip() for part in forwarded.split(",") if part.strip()]
+    if addresses:
+        return addresses[-1][:128]
+    return (request.client.host if request.client else "unknown")[:128]
+
+
+class _RequestBodyTooLarge(Exception):
+    pass
+
+
+class RequestBodyLimitMiddleware:
+    """Content-Length ve chunked gövdeleri süreç belleğine girmeden sınırlar."""
+
+    def __init__(self, app: Any, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: Callable[[], Awaitable[dict[str, Any]]],
+        send: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        raw_length = headers.get(b"content-length")
+        try:
+            content_length = int(raw_length) if raw_length else None
+        except ValueError:
+            content_length = None
+
+        if content_length is not None and content_length > self.max_bytes:
+            await self._reject(scope, receive, send)
+            return
+
+        received = 0
+
+        async def limited_receive() -> dict[str, Any]:
+            nonlocal received
+            message = await receive()
+            if message.get("type") == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    raise _RequestBodyTooLarge
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _RequestBodyTooLarge:
+            await self._reject(scope, receive, send)
+
+    @staticmethod
+    async def _reject(
+        scope: dict[str, Any],
+        receive: Callable[[], Awaitable[dict[str, Any]]],
+        send: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
+        response = JSONResponse(
+            status_code=413,
+            content={"detail": "İstek gövdesi izin verilen boyutu aşıyor."},
+        )
+        await response(scope, receive, send)
+
+
+class SecurityHeadersMiddleware:
+    """API yanıtlarına tarayıcı tarafı savunma başlıklarını ekler."""
+
+    def __init__(self, app: Any, production: bool = False) -> None:
+        self.app = app
+        self.production = production
+
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: Callable[[], Awaitable[dict[str, Any]]],
+        send: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
+        async def send_with_headers(message: dict[str, Any]) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.extend(
+                    [
+                        (b"x-content-type-options", b"nosniff"),
+                        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+                        (
+                            b"permissions-policy",
+                            b"camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+                        ),
+                    ]
+                )
+                if self.production:
+                    headers.append(
+                        (b"strict-transport-security", b"max-age=63072000; includeSubDomains")
+                    )
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 class RateLimiter:

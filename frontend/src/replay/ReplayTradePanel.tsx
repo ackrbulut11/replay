@@ -20,6 +20,8 @@ import { useDraggablePanel } from '../hooks/useDraggablePanel';
 import { logError, logEvent } from '../services/eventLog';
 import type { TradeSide } from '../types/journal';
 import { errorMessage } from '../utils/errors';
+import { getSessionGeneration } from '../auth/authSession';
+import { pendingReplayBars } from '../utils/replayBars';
 
 /** Stop/hedef kontrolü için gereken mum alanları. */
 export interface ReplayBarInput {
@@ -117,70 +119,61 @@ export default function ReplayTradePanel({
   // Karar burada VERİLMEZ (RULES.md: finansal hesap arayüze yazılmaz); geçilen
   // ham mumlar sunucuya gönderilir, tetikleme ve çıkış fiyatı replay_engine'de
   // hesaplanır.
-  const lastCheckedBarRef = useRef<number | null>(null);
-  const advanceInFlightRef = useRef(false);
+  const lastCheckedTimeRef = useRef<number | null>(null);
+  const advanceInFlightRef = useRef<string | null>(null);
+  const activePositionRef = useRef<string | null>(null);
+  const [advanceRevision, setAdvanceRevision] = useState(0);
   const positionId = position?.id ?? null;
+  const positionEntryTime = position?.entry_time ?? null;
   const positionEntryBar = position?.entry_bar_index ?? null;
 
-  // Yeni pozisyon (ya da oturum değişimi): kontrol imleci sıfırlanır.
   useEffect(() => {
-    lastCheckedBarRef.current = null;
+    activePositionRef.current = positionId;
+    lastCheckedTimeRef.current = null;
+    return () => { activePositionRef.current = null; };
   }, [positionId]);
 
   useEffect(() => {
-    if (!positionId || currentBarIndex === null || !bars || bars.length === 0) return;
-    if (advanceInFlightRef.current) return;
-
-    // Girişin yapıldığı bar ve öncesi atlanır: kullanıcı o barın kapanışında
-    // girdi, o barın yükseği/düşüğü girişten ÖNCE oluşmuştu. Sunucu da aynı
-    // kontrolü yapıyor; burada yalnızca boşuna istek atmamak için.
-    const entryBar = positionEntryBar ?? -1;
-    let from = (lastCheckedBarRef.current ?? entryBar) + 1;
-    // Replay geriye sarıldıysa imleç de geri alınır.
-    if (currentBarIndex < from - 1) {
-      lastCheckedBarRef.current = null;
-      from = entryBar + 1;
-    }
-    const to = Math.min(currentBarIndex, bars.length - 1);
-    if (to < from) return;
-
-    const payload: ReplayBarPayload[] = [];
-    for (let i = from; i <= to; i++) {
-      const bar = bars[i];
-      if (!bar) continue;
-      payload.push({
-        bar_index: i,
-        timestamp: new Date(bar.time * 1000).toISOString(),
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
-      });
-    }
-    if (payload.length === 0) return;
-
-    advanceInFlightRef.current = true;
+    if (!positionId || currentBarIndex === null || !bars?.length) return;
+    if (advanceInFlightRef.current === positionId) return;
+    const generation = getSessionGeneration();
+    const pending = pendingReplayBars(bars, currentBarIndex, positionEntryTime,
+      positionEntryBar, lastCheckedTimeRef.current);
+    if (!pending.length) return;
+    const payload: ReplayBarPayload[] = pending.map(({ bar, index }) => ({
+      bar_index: index, timestamp: new Date(bar.time * 1000).toISOString(),
+      open: bar.open, high: bar.high, low: bar.low, close: bar.close,
+    }));
+    const isCurrent = () => activePositionRef.current === positionId
+      && generation === getSessionGeneration();
+    let succeeded = false;
+    advanceInFlightRef.current = positionId;
     advanceTrade(positionId, payload)
       .then((updated) => {
-        lastCheckedBarRef.current = to;
+        if (!isCurrent()) return;
+        lastCheckedTimeRef.current = pending[pending.length - 1].bar.time;
+        succeeded = true;
         if (updated.status === 'CLOSED') {
-          // Pozisyon seviyeden kapandı: oynatmayı durdur ve günlüğü tazele,
-          // aksi halde kullanıcı kapanmış bir pozisyonu taşıyor sanır.
           replayStore.setState({ isPlaying: false });
           void journalStore.reload(symbol, sessionId);
-          logEvent('replay_trade_level_hit', {
+          void logEvent('replay_trade_level_hit', {
             context: { symbol, reason: updated.exit_reason, pnl: updated.pnl },
           });
         }
       })
       .catch((err: unknown) => {
-        // Seviye kontrolü "olsa iyi olur": başarısızlığı replay'i durdurmamalı.
+        if (!isCurrent()) return;
+        replayStore.setState({ isPlaying: false });
+        setError('Stop/hedef kontrolü tamamlanamadı. Devam etmeden önce tekrar deneyin.');
         logError('replay_trade_advance_failed', err, { symbol });
       })
       .finally(() => {
-        advanceInFlightRef.current = false;
+        if (advanceInFlightRef.current === positionId) advanceInFlightRef.current = null;
+        // İstek sürerken ilerleyen mumlar da yeni bir turda işlenir.
+        if (succeeded && isCurrent()) setAdvanceRevision((value) => value + 1);
       });
-  }, [positionId, positionEntryBar, currentBarIndex, bars, symbol, sessionId]);
+  }, [positionId, positionEntryTime, positionEntryBar, currentBarIndex, bars,
+    symbol, sessionId, advanceRevision]);
 
   const barTimeIso = currentBarTime ? new Date(currentBarTime * 1000).toISOString() : null;
 

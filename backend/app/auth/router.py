@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import Optional
 from google.oauth2 import id_token
@@ -17,23 +17,21 @@ from app.auth.dependencies import (
     get_current_user_optional,
     is_user_admin,
 )
-from app.core.security import RateLimiter
+from app.core.security import RateLimiter, client_ip
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# Frontend (Vercel) ve backend (Render) farklı origin'lerde çalışıyor, yani
-# refresh_token cookie'si cross-site gönderiliyor. Tarayıcılar SameSite=Lax
-# cookie'leri cross-site fetch/XHR isteklerinde göndermez; bu yüzden prod'da
-# SameSite=None + Secure=True şart. Dev'de localhost HTTP olduğu için Lax/False
-# kalıyor (Secure cookie'ler HTTP üzerinden hiç set edilemez).
+# Frontend auth isteklerini Vercel'in aynı-origin `/api` rewrite'ı üzerinden
+# gönderir. Böylece refresh cookie üçüncü taraf cookie olmaz; Lax, CSRF'e karşı
+# da `SameSite=None`'dan daha dar bir yüzey bırakır. Üretimde HTTPS zorunludur.
 _IS_PROD = settings.ENVIRONMENT == "production"
 _REFRESH_COOKIE_KWARGS = {
     "httponly": True,
     "secure": _IS_PROD,
-    "samesite": "none" if _IS_PROD else "lax",
+    "samesite": "lax",
 }
 
 # Kimlik uçları herkese açık ve her isteği bir veritabanı sorgusuna (Google
@@ -47,15 +45,12 @@ _auth_rate_limiter = RateLimiter(
 
 
 def _client_ip(request: Request) -> str:
-    """İstemci IP'si — ters vekil arkasında X-Forwarded-For'un ilk adresi."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """Geriye dönük yerel ad; güvenilir ortak IP çözümleyicisini kullanır."""
+    return client_ip(request)
 
 
 class GoogleAuthRequest(BaseModel):
-    credential: str
+    credential: str = Field(..., min_length=1, max_length=8192)
 
 class UserResponse(BaseModel):
     id: str
@@ -179,7 +174,9 @@ def google_auth(
     # Access ve Refresh token üret. Refresh token kullanıcının güncel
     # `token_version`'ını taşır: çıkış bu sayacı artırınca eski token'lar
     # anında geçersizleşir (bkz. /logout).
-    access_token = create_access_token(data={"sub": user.id, "email": user.email})
+    access_token = create_access_token(
+        data={"sub": user.id, "email": user.email, "ver": user.token_version or 0}
+    )
     refresh_token = create_refresh_token(
         data={"sub": user.id, "ver": user.token_version or 0}
     )
@@ -221,7 +218,9 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     if int(payload.get("ver", 0)) != int(user.token_version or 0):
         raise HTTPException(status_code=401, detail="Oturum sonlandırılmış")
 
-    new_access_token = create_access_token(data={"sub": user.id, "email": user.email})
+    new_access_token = create_access_token(
+        data={"sub": user.id, "email": user.email, "ver": user.token_version or 0}
+    )
     return {"access_token": new_access_token, "token_type": "bearer"}
 
 
@@ -232,6 +231,7 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.post("/logout")
 def logout(
+    request: Request,
     response: Response,
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
@@ -246,8 +246,20 @@ def logout(
     Kimlik doğrulaması ZORUNLU DEĞİL: token'ı çoktan düşmüş bir istemci de
     çıkış yapabilmeli, cookie yine silinir.
     """
-    if current_user is not None:
-        current_user.token_version = (current_user.token_version or 0) + 1
+    user_to_revoke = current_user
+    if user_to_revoke is None:
+        # Access token düşmüş/eksik olsa bile eldeki httpOnly refresh cookie'si
+        # oturum sahibini güvenle belirler. Yalnızca hâlâ güncel bir token
+        # sürümü iptal edilir; eski bir cookie sayacı ikinci kez artırmaz.
+        cookie_token = request.cookies.get("refresh_token")
+        payload = decode_token(cookie_token) if cookie_token else None
+        if payload and payload.get("type") == "refresh" and payload.get("sub"):
+            candidate = db.query(User).filter(User.id == payload["sub"]).first()
+            if candidate and int(payload.get("ver", 0)) == int(candidate.token_version or 0):
+                user_to_revoke = candidate
+
+    if user_to_revoke is not None:
+        user_to_revoke.token_version = (user_to_revoke.token_version or 0) + 1
         db.commit()
 
     response.delete_cookie(

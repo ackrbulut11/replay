@@ -1,7 +1,8 @@
+import { getSessionGeneration, SessionChangedError } from '../auth/authSession';
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 import { getQuotes } from '../services/marketApi';
-import { TOKEN_STORAGE_KEY } from '../context/AuthContext';
+import { hasAccessToken } from '../auth/authSession';
 
 export type FlagColor = 'red' | 'blue' | 'green' | 'yellow' | 'purple' | 'cyan' | 'pink';
 
@@ -305,6 +306,7 @@ function scheduleServerSave(delayMs = 800) {
       await apiRequest('/api/watchlist', { method: 'PUT', body: `{"lists":${payload}}` });
       lastPersistedJson = payload;
     } catch (e) {
+      if (e instanceof SessionChangedError) return;
       // Ağ hatasında yerel kopya korunur; bir sonraki değişiklikte tekrar denenir.
       console.warn('İzleme listesi sunucuya kaydedilemedi:', e);
     }
@@ -349,8 +351,9 @@ export const watchlistStore = {
    * bir kez yukarı gönderilir; böylece mevcut favoriler kaybolmaz.
    */
   syncFromServer: async () => {
+    const generation = getSessionGeneration();
     // Token henüz yerleşmediyse istek 401 alır ve oturumu düşürür; bekle.
-    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) return;
+    if (!hasAccessToken()) return;
     // Aynı anda birden fazla senkronizasyon çalışmasın (React StrictMode
     // geliştirmede effect'leri iki kez çağırır).
     if (syncInFlight) return;
@@ -374,10 +377,11 @@ export const watchlistStore = {
       }
       watchlistStore.fetchQuotes();
     } catch (e) {
+      if (e instanceof SessionChangedError) return;
       // Sunucuya ulaşılamazsa yerel kopyayla çalışmaya devam edilir.
       console.warn('İzleme listesi sunucudan alınamadı:', e);
     } finally {
-      syncInFlight = false;
+      if (generation === getSessionGeneration()) syncInFlight = false;
     }
   },
 
@@ -407,6 +411,7 @@ export const watchlistStore = {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
     } catch (e) {
+      if (e instanceof SessionChangedError) return;
       console.error('Failed to clear watchlist localStorage on logout', e);
     }
     listeners.forEach((listener) => listener(currentState));

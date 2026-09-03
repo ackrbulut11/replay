@@ -1,3 +1,4 @@
+import { getSessionGeneration, SessionChangedError } from '../auth/authSession';
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 import { errorMessage } from '../utils/errors';
@@ -34,7 +35,7 @@ export interface AlertStoreState {
 
 const listeners = new Set<() => void>();
 
-let state: AlertStoreState = {
+const INITIAL_STATE: AlertStoreState = {
   alerts: [],
   loading: false,
   error: null,
@@ -44,6 +45,8 @@ let state: AlertStoreState = {
   modalCurrentPrice: undefined,
   latestTriggeredAlert: null,
 };
+
+let state: AlertStoreState = { ...INITIAL_STATE };
 
 function emitChange() {
   listeners.forEach(listener => listener());
@@ -104,6 +107,7 @@ export function playBellSound(durationSec: number = 5) {
       stopBellSound();
     }, durationSec * 1000);
   } catch (e) {
+      if (e instanceof SessionChangedError) return;
     console.warn('AudioContext error:', e);
   }
 }
@@ -189,6 +193,7 @@ export const alertStore = {
 
       if (newlyTriggered.length > 0) playBellSound(5);
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return;
       alertStore.setState(() => ({
         error: errorMessage(err, 'Alert fetch error'),
         loading: false,
@@ -222,6 +227,7 @@ export const alertStore = {
 
       return newAlert;
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return;
       console.error('Create alert error:', err);
       throw err;
     }
@@ -240,6 +246,7 @@ export const alertStore = {
         alerts: prev.alerts.map(a => (a.id === alertId ? updated : a)),
       }));
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return;
       console.error('Toggle alert error:', err);
     }
   },
@@ -254,6 +261,7 @@ export const alertStore = {
         alerts: prev.alerts.filter(a => a.id !== alertId),
       }));
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return;
       console.error('Delete alert error:', err);
     }
   },
@@ -267,6 +275,7 @@ export const alertStore = {
    * tipleri hiç tetiklenmiyordu.
    */
   checkAlerts: async (symbol: string, provider: string) => {
+    const generation = getSessionGeneration();
     // Önceki kontrol hâlâ sürüyorsa bu turu atla; sonuç zaten birazdan gelecek.
     if (alertCheckInFlight) return;
     alertCheckInFlight = true;
@@ -295,9 +304,10 @@ export const alertStore = {
         playBellSound(5);
       }
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return;
       console.error('Check alerts error:', err);
     } finally {
-      alertCheckInFlight = false;
+      if (generation === getSessionGeneration()) alertCheckInFlight = false;
     }
   },
 };
@@ -317,3 +327,10 @@ export function useAlertStore(): [AlertStoreState, typeof alertStore] {
   return [state, alertStore];
 }
 
+
+window.addEventListener('replay:session-cleared', () => {
+  stopBellSound();
+  alertCheckInFlight = false;
+  state = { ...INITIAL_STATE };
+  emitChange();
+});

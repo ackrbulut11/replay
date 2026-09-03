@@ -1,3 +1,4 @@
+import { SessionChangedError } from '../auth/authSession';
 /**
  * Strateji Store.
  *
@@ -120,6 +121,7 @@ export const strategyStore = {
           setState({ strategies: ordered, isLoading: false });
           return;
         } catch (e) {
+      if (e instanceof SessionChangedError) return;
           console.warn('Failed to parse strategy order:', e);
         }
       }
@@ -127,6 +129,7 @@ export const strategyStore = {
       const sorted = [...strategies].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       setState({ strategies: sorted, isLoading: false });
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return;
       setState({ isLoading: false, error: errorMessage(err, 'Stratejiler yüklenemedi') });
     }
   },
@@ -156,6 +159,7 @@ export const strategyStore = {
       });
       return strategy;
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return null;
       setState({ isLoading: false, error: errorMessage(err, 'Strateji oluşturulamadı') });
       return null;
     }
@@ -173,6 +177,7 @@ export const strategyStore = {
       });
       return updated;
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return null;
       setState({ isLoading: false, error: errorMessage(err, 'Strateji güncellenemedi') });
       return null;
     }
@@ -189,6 +194,7 @@ export const strategyStore = {
       });
       return true;
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return false;
       setState({ isLoading: false, error: errorMessage(err, 'Strateji silinemedi') });
       return false;
     }
@@ -218,6 +224,7 @@ export const strategyStore = {
 
       return result;
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return null;
       setState({ isEvaluating: false, error: errorMessage(err, 'Değerlendirme başarısız') });
       return null;
     }
@@ -257,6 +264,7 @@ export const strategyStore = {
       localStorage.removeItem(LEGACY_EVAL_HISTORY_KEY);
       setState({ singleEvalHistory: dedupeEvalHistory(history) });
     } catch (err) {
+      if (err instanceof SessionChangedError) return;
       console.warn('Test geçmişi alınamadı:', err);
     }
   },
@@ -267,6 +275,7 @@ export const strategyStore = {
     try {
       await strategyApi.deleteEvaluation(id);
     } catch (err) {
+      if (err instanceof SessionChangedError) return;
       console.warn('Test kaydı silinemedi:', err);
       strategyStore.fetchEvalHistory();
     }
@@ -282,6 +291,7 @@ export const strategyStore = {
     try {
       await strategyApi.clearEvaluationHistory(strategyId);
     } catch (err) {
+      if (err instanceof SessionChangedError) return;
       console.warn('Test geçmişi temizlenemedi:', err);
       strategyStore.fetchEvalHistory();
     }
@@ -294,6 +304,7 @@ export const strategyStore = {
       const indicators = await strategyApi.getAvailableIndicators();
       setState({ indicators });
     } catch (err: unknown) {
+      if (err instanceof SessionChangedError) return;
       console.error('İndikatör listesi yüklenemedi:', err);
     }
   },
@@ -325,3 +336,8 @@ export function useStrategyStore(): StrategyState {
 
   return state;
 }
+
+window.addEventListener('replay:session-cleared', () => {
+  currentState = { ...INITIAL_STRATEGY_STATE };
+  notify();
+});

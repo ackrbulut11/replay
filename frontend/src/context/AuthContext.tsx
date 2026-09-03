@@ -1,4 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  clearStoredSession,
+  getAccessToken,
+  getSessionGeneration,
+  assertSessionGeneration,
+  refreshAccessToken,
+  setSessionAccessToken,
+  TOKEN_CHANGED_EVENT,
+  UNAUTHORIZED_EVENT,
+} from '../auth/authSession';
 
 export interface User {
   id: string;
@@ -22,87 +32,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'https://replay-xj3e.onrender.com/api' : '/api');
-
-// Oturuma ait tüm localStorage anahtarları tek yerde tanımlı.
-// `replay_auth_token` artık yazılmıyor; eski oturumlardan kalmış olabileceği
-// için temizlik listesinde tutuluyor (aksi halde çıkıştan sonra bile
-// eski kimlikle istek gidebiliyordu).
-// Test geçmişi ve strateji sıralaması da kullanıcıya özeldir: silinmezlerse
-// aynı tarayıcıda giriş yapan bir sonraki kullanıcı öncekinin verisini görür.
-const SESSION_KEYS = [
-  'replay_access_token',
-  'replay_auth_token',
-  'replay_user',
-  'replay_single_eval_history',
-  'replay_strategy_order',
-  'replay_watchlists_v2',
-];
-
-export const TOKEN_STORAGE_KEY = 'replay_access_token';
-
-/** API katmanı 401 aldığında yayınlanır; AuthProvider dinleyip oturumu düşürür. */
-export const UNAUTHORIZED_EVENT = 'replay:unauthorized';
-
-/**
- * Oturum temizlendiğinde yayınlanır. Store'lar kullanıcıya özel durumlarını
- * bununla sıfırlar. Doğrudan import yerine event kullanılıyor: aksi halde
- * AuthContext -> store -> services/api -> AuthContext döngüsü oluşuyor.
- */
-export const SESSION_CLEARED_EVENT = 'replay:session-cleared';
-
-/** Oturum verisini tarayıcıdan tamamen siler. */
-export function clearStoredSession(): void {
-  SESSION_KEYS.forEach((key) => localStorage.removeItem(key));
-  // Store'lar kullanıcıya özel durumlarını sıfırlasın; aksi halde bir sonraki
-  // kullanıcının izleme listesi öncekinin hesabına yazılabilir.
-  window.dispatchEvent(new Event(SESSION_CLEARED_EVENT));
-}
-
-/** Token geçersizse (401) oturumu düşürmek için API katmanından çağrılır. */
-export function notifyUnauthorized(): void {
-  clearStoredSession();
-  window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
-}
-
-/**
- * Süren yenileme isteği. Sayfa açılışında paralel giden N istek aynı anda 401
- * alıyor ve her biri kendi `/auth/refresh` çağrısını başlatıyordu: sunucuya
- * gereksiz N istek, üstelik hepsi aynı cevabı bekliyordu. Artık ilk çağrı
- * sözü tutuluyor, diğerleri ona bağlanıyor (singleflight).
- */
-let refreshInFlight: Promise<string | null> | null = null;
-
-/**
- * httpOnly refresh_token cookie'siyle yeni bir access token almayı dener.
- * Access token 30 dakikada dolduğu için API katmanı 401 aldığında bunu
- * çağırıp isteği bir kez tekrar dener — aksi halde her 30 dakikada bir
- * oturum düşer. Başarısız olursa (cookie yok/expired) null döner.
- */
-export async function refreshAccessToken(): Promise<string | null> {
-  if (refreshInFlight) return refreshInFlight;
-
-  refreshInFlight = (async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) return null;
-
-      const data = await res.json();
-      localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
-      return data.access_token as string;
-    } catch {
-      return null;
-    } finally {
-      // Bir sonraki 401 turu yeni bir istek başlatabilsin.
-      refreshInFlight = null;
-    }
-  })();
-
-  return refreshInFlight;
-}
+const API_BASE_URL = '/api';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -111,7 +41,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearSession = () => {
     clearStoredSession();
-    setAccessToken(null);
     setUser(null);
   };
 
@@ -125,51 +54,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
   }, []);
 
-  // Sayfa açıldığında oturumu kontrol et (localStorage + silent refresh)
+  useEffect(() => {
+    const handleTokenChanged = (event: Event) => {
+      setAccessToken((event as CustomEvent<string | null>).detail);
+    };
+    window.addEventListener(TOKEN_CHANGED_EVENT, handleTokenChanged);
+    return () => window.removeEventListener(TOKEN_CHANGED_EVENT, handleTokenChanged);
+  }, []);
+
+  // Sayfa açıldığında httpOnly cookie ile oturumu yeniden kur.
   useEffect(() => {
     const initAuth = async () => {
-      // 1. Önce localStorage'daki hazır oturum bilgisini yükle (Anında hızlı giriş için)
-      const storedToken = localStorage.getItem('replay_access_token');
-      const storedUserStr = localStorage.getItem('replay_user');
-
-      if (storedToken && storedUserStr) {
-        try {
-          setAccessToken(storedToken);
-          setUser(JSON.parse(storedUserStr));
-          setIsLoading(false);
-          return;
-        } catch (e) {
-          console.warn("Stored user parse error:", e);
-        }
-      }
-
-      // 2. Arka planda silent refresh dene
+      const generation = getSessionGeneration();
+      // Önceki sürümlerden kalan okunabilir token/kullanıcı kopyalarını temizle.
+      localStorage.removeItem('replay_access_token');
+      localStorage.removeItem('replay_auth_token');
+      localStorage.removeItem('replay_user');
       try {
-        const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setAccessToken(data.access_token);
-          localStorage.setItem('replay_access_token', data.access_token);
-
+        const token = await refreshAccessToken();
+        assertSessionGeneration(generation);
+        if (token) {
           const userRes = await fetch(`${API_BASE_URL}/auth/me`, {
-            headers: {
-              'Authorization': `Bearer ${data.access_token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` },
           });
           if (userRes.ok) {
-            const userData = await userRes.json();
-            setUser(userData);
-            localStorage.setItem('replay_user', JSON.stringify(userData));
+            const restoredUser = await userRes.json();
+            assertSessionGeneration(generation);
+            setUser(restoredUser);
+          } else {
+            assertSessionGeneration(generation);
+            setIsLoading(false);
+            clearStoredSession();
           }
         }
       } catch (err) {
         console.error("Auth init silent refresh failed:", err);
       } finally {
-        setIsLoading(false);
+        if (generation === getSessionGeneration()) setIsLoading(false);
       }
     };
 
@@ -177,6 +98,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loginWithGoogle = async (credential: string) => {
+    clearSession();
+    const generation = getSessionGeneration();
     setIsLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/auth/google`, {
@@ -205,25 +128,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const data = await res.json();
-      localStorage.setItem('replay_access_token', data.access_token);
-      localStorage.setItem('replay_user', JSON.stringify(data.user));
-      setAccessToken(data.access_token);
+      assertSessionGeneration(generation);
+      setSessionAccessToken(data.access_token);
       setUser(data.user);
     } finally {
-      setIsLoading(false);
+      if (generation === getSessionGeneration()) setIsLoading(false);
     }
   };
 
   const logout = async () => {
+    const token = getAccessToken();
+    clearSession();
+    setIsLoading(false);
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
+        headers: token
+          ? { 'Authorization': `Bearer ${token}` }
+          : undefined,
       });
     } catch (err) {
       console.error("Logout error:", err);
-    } finally {
-      clearSession();
     }
   };
 
